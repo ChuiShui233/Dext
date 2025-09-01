@@ -1,0 +1,87 @@
+name: dext
+description: "问卷调查应用"
+# 以下行防止包意外发布到 pub.dev 使用 `flutter pub publish`。对于私有包，建议保留此行。
+publish_to: 'none' # 如果您希望发布到 pub.dev，请移除此行
+# 以下定义了您的应用程序的版本和构建号。
+# 版本号由三个数字组成，用点号分隔，例如 1.2.43
+# 后面可以跟一个可选的构建号，用加号分隔。
+# 版本和构建号都可以通过在 flutter build 时使用 --build-name 和 --build-number 参数覆盖。
+# 在 Android 中，版本号用于 versionName 而构建号用于 versionCode。
+# 在 iOS 中，版本号用于 CFBundleShortVersionString 而构建号用于 CFBundleVersion。
+# 在 Windows 中，版本号用于产品和文件版本的主要、次要和修订部分而构建号用于构建后缀。
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.7.2
+
+# 依赖项指定了您的包在工作时需要的其他包。
+# 考虑运行 `flutter pub upgrade --major-versions` 以自动将包依赖项升级到最新版本。
+# 手动更新依赖项可以通过将版本号更改为 pub.dev 上的最新版本。
+# 运行 `flutter pub outdated` 可以查看哪些依赖项有可用的新版本。
+dependencies:
+  basic_utils: ^5.8.2
+  crypto: ^3.0.6
+  fast_rsa: ^3.8.5
+  flutter:
+    sdk: flutter
+  flutter_secure_storage: ^9.2.4
+  forui: ^0.12.0
+  http: ^1.1.0
+  layout: ^1.0.5
+  window_manager: ^0.3.8
+  url_launcher: ^6.2.5
+  flutter_localizations:
+    sdk: flutter
+  # permission_handler: ^10.2.0 
+  # shared_preferences: ^2.0.12
+  # qr_flutter: ^4.0.0
+  file_picker: ^10.1.9 
+  path_provider: ^2.1.1
+  image_picker: ^1.0.4
+  video_player: ^2.10.0
+  radio_player: ^2.1.0
+  pull_to_refresh: ^2.0.0
+
+  # 以下行将 Cupertino 图标字体添加到您的应用程序中。
+  # 使用 CupertinoIcons 类以获取 iOS 样式图标。
+  cupertino_icons: ^1.0.2
+  cached_network_image: ^3.4.1
+  shared_preferences: ^2.5.3
+  flutter_launcher_icons: ^0.13.1
+  provider: ^6.1.5+1
+  http_parser: ^4.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # 以下 "flutter_lints" 包包含一组建议的 lints 以鼓励良好的编码实践。
+  # 在 `analysis_options.yaml` 文件中激活了包提供的 lint 集。
+  # 查看该文件以了解如何停用特定的 lint 规则以及激活其他 lint 规则。
+  flutter_lints: ^5.0.0
+
+# 有关此文件中通用 Dart 部分的信息，可以查看以下页面：https://dart.dev/tools/pub/pubspec
+
+# 以下部分特定于 Flutter 包。
+flutter:
+
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/fonts/
+    - packages/fast_rsa/web/assets/worker.js
+    - packages/fast_rsa/web/assets/wasm_exec.js
+    - packages/fast_rsa/web/assets/rsa.wasm
+    
+  fonts:
+    - family: PingFangSC
+      fonts:
+        - asset: assets/fonts/PingFangSC-Regular.otf
+  
+flutter_launcher_icons:
+  image_path: "assets/images/Dext.png"
+  android: true
+  ios: true
+  adaptive_icon_background: "#FFFFFF"
+
+  
