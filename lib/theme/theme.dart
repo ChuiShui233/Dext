@@ -40,6 +40,9 @@ final ThemeData lightTheme = ThemeData(
   brightness: Brightness.light,
   scaffoldBackgroundColor: const Color.fromARGB(248, 255, 255, 255),
   pageTransitionsTheme: pageTransitionsTheme,
+  splashColor: Colors.transparent,
+  highlightColor: Colors.transparent,
+  hoverColor: Colors.transparent,
   colorScheme: ColorScheme.light(
     surface: const Color.fromARGB(248, 255, 255, 255),
     primary: Colors.black.withOpacity(0.87),
@@ -71,6 +74,9 @@ final ThemeData darkTheme = ThemeData(
   brightness: Brightness.dark,
   scaffoldBackgroundColor: const Color(0xFF121212),
   pageTransitionsTheme: pageTransitionsTheme,
+  splashColor: Colors.transparent,
+  highlightColor: Colors.transparent,
+  hoverColor: Colors.transparent,
   colorScheme: ColorScheme.dark(
     surface: const Color(0xFF121212),
     primary: Colors.white.withOpacity(0.87),

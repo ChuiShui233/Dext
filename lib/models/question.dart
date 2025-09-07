@@ -1,8 +1,8 @@
 enum QuestionType {
   singleChoice,    // 单选题
   multipleChoice,  // 多选题
-  slider,         // 滑块题
-  matrix,         // 矩阵题
+  slider,          // 滑块题
+  matrix,          // 矩阵题
 }
 
 class Question {
@@ -13,7 +13,7 @@ class Question {
   final List<String> mediaUrls;  // 媒体文件URL列表
   final Map<int, int> jumpLogic; // 跳题逻辑，key为选项ID，value为目标问题ID
   final bool required;           // 是否必答
-  final int order;              // 问题顺序
+  final int order;               // 问题顺序
 
   Question({
     required this.id,
@@ -27,21 +27,28 @@ class Question {
   });
 
   factory Question.fromJson(Map<String, dynamic> json) {
+    final title = json['title'] ?? json['questionDescription'] ?? '';
+    final safeTitle = (title is String && title.trim().isEmpty)
+        ? '未命名问题'
+        : title == null
+            ? '未命名问题'
+            : title.toString();
+
     return Question(
       id: json['id'] ?? 0,
-      title: json['title'] ?? json['questionDescription'] ?? '',
+      title: safeTitle,
       type: _parseQuestionType(json['questionType'] ?? json['type'] ?? 1),
       options: (json['options'] as List?)
-          ?.map((o) => QuestionOption.fromJson(o))
-          .toList() ?? [],
-      mediaUrls: List<String>.from(json['mediaURLs'] ?? []),
+              ?.map((o) => QuestionOption.fromJson(o))
+              .toList() ??
+          [],
+      mediaUrls: List<String>.from(json['mediaURLs'] ?? json['mediaUrls'] ?? []),
       jumpLogic: Map<int, int>.from(json['jumpLogic'] ?? {}),
       required: json['required'] ?? true,
       order: json['order'] ?? 0,
     );
   }
 
-  // 解析问题类型
   static QuestionType _parseQuestionType(dynamic type) {
     if (type is int) {
       switch (type) {
@@ -73,13 +80,15 @@ class Question {
     return QuestionType.singleChoice;
   }
 
+  // 修改后的 toJson 与后端字段完全匹配
   Map<String, dynamic> toJson() {
     return {
       'id': id,
       'title': title,
-      'type': type.toString().split('.').last,
+      'questionType': type.index + 1, // 对应后端枚举 (1~4)
+      'questionDescription': title,   // 可选
       'options': options.map((o) => o.toJson()).toList(),
-      'mediaUrls': mediaUrls,
+      'mediaURLs': mediaUrls,
       'jumpLogic': jumpLogic,
       'required': required,
       'order': order,
@@ -112,7 +121,7 @@ class Question {
 class QuestionOption {
   final int id;
   final String text;
-  final String? mediaUrl;  // 选项的媒体文件URL
+  final String? mediaUrl; // 选项的媒体文件URL
 
   QuestionOption({
     required this.id,
@@ -121,18 +130,29 @@ class QuestionOption {
   });
 
   factory QuestionOption.fromJson(Map<String, dynamic> json) {
+    final text = json['text'] ?? json['optionText'] ?? '';
+    final safeText = (text is String && text.trim().isEmpty)
+        ? '未命名选项'
+        : (text == null)
+            ? '未命名选项'
+            : text.toString().trim().isEmpty
+                ? '未命名选项'
+                : text.toString();
+
     return QuestionOption(
       id: json['id'] ?? 0,
-      text: json['text'] ?? json['optionText'] ?? '',
-      mediaUrl: json['mediaURL'] ?? json['mediaUrl'],
+      text: safeText,
+      mediaUrl: json['mediaURL'] ?? json['mediaUrl'] ?? json['mediaURL'],
     );
   }
 
+  // 修改后的 toJson 与后端字段完全匹配
   Map<String, dynamic> toJson() {
     return {
       'id': id,
       'text': text,
-      'mediaUrl': mediaUrl,
+      'optionText': text,       // 后端需要的字段
+      'mediaURL': mediaUrl,
     };
   }
 
@@ -147,4 +167,4 @@ class QuestionOption {
       mediaUrl: mediaUrl ?? this.mediaUrl,
     );
   }
-} 
+}

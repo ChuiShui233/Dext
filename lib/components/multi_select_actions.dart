@@ -176,7 +176,6 @@ class _MultiSelectActionsState extends State<MultiSelectActions> {
                 ],
               ),
             ),
-            // 添加尾部间距，提升滑动体验
             const SizedBox(width: 8),
           ],
         ),

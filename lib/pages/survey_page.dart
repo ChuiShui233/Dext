@@ -754,7 +754,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                   }
 
                                   return Padding(
-                                    padding: const EdgeInsets.all(8.0),
+                                    padding: const EdgeInsets.all(16.0),
                                     child: cardContent,
                                   );
                                 },

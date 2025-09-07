@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:layout/layout.dart';
@@ -78,7 +79,9 @@ class FramePageState extends State<FramePage> {
           });
         }
       } catch (e) {
-        print('获取用户数据失败: $e');
+        if (kDebugMode) {
+          print('获取用户数据失败: $e');
+        }
       }
     }
 

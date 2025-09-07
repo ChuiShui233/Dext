@@ -1345,13 +1345,23 @@ class ApiService {
       
       if (response.statusCode == 200) {
         final dynamic body = json.decode(response.body);
+        print('后端返回的原始数据: $body'); // 调试日志
+        
         if (body == null || body is! List) {
           onStatus?.call(RequestStatus.success, '问卷问题列表为空');
           _updateStatus(RequestStatus.success, '问卷问题列表为空');
           return [];
         }
         prefs.setString(cacheKey, json.encode(body));
-        final questions = body.map<Question>((json) => Question.fromJson(json)).toList();
+        final questions = body.map<Question>((json) {
+          print('解析问题JSON: $json'); // 调试日志
+          return Question.fromJson(json);
+        }).toList();
+        
+        print('解析后的问题数量: ${questions.length}'); // 调试日志
+        for (int i = 0; i < questions.length; i++) {
+          print('问题 $i: 标题=${questions[i].title}, 类型=${questions[i].type}, 选项数量=${questions[i].options.length}');
+        }
         
         onStatus?.call(RequestStatus.success, '问卷问题获取成功');
         _updateStatus(RequestStatus.success, '问卷问题获取成功');
@@ -1364,42 +1374,45 @@ class ApiService {
       throw Exception('请求超时，请检查您的网络连接。');
     }
   }
+Future<Question> addQuestion(
+  int surveyId, 
+  Question question, {
+  StatusCallback? onStatus,
+}) async {
+  try {
+    onStatus?.call(RequestStatus.loading, '正在添加问题...');
+    _updateStatus(RequestStatus.loading, '正在添加问题...');
 
-  Future<Question> addQuestion(
-    int surveyId, 
-    Question question, {
-    StatusCallback? onStatus,
-  }) async {
-    try {
-      onStatus?.call(RequestStatus.loading, '正在添加问题...');
-      _updateStatus(RequestStatus.loading, '正在添加问题...');
-      
+    // 打印漂亮格式的上传数据
+    final prettyJson = const JsonEncoder.withIndent('  ').convert(question.toJson());
+    print('上传的数据:\n$prettyJson');
+
     final response = await _encryptedRequest(
       'POST',
       '$baseUrl/api/survey/$surveyId/question',
       question.toJson(),
-        onStatus: onStatus,
+      onStatus: onStatus,
     );
-    
+
     if (response.statusCode == 201) {
-        final addedQuestion = Question.fromJson(json.decode(response.body));
-        
-        // 添加成功后清除相关缓存
-        await _clearQuestionCache(surveyId);
-        
-        onStatus?.call(RequestStatus.success, '问题添加成功');
-        _updateStatus(RequestStatus.success, '问题添加成功');
-        return addedQuestion;
+      final addedQuestion = Question.fromJson(json.decode(response.body));
+      
+      // 添加成功后清除相关缓存
+      await _clearQuestionCache(surveyId);
+
+      onStatus?.call(RequestStatus.success, '问题添加成功');
+      _updateStatus(RequestStatus.success, '问题添加成功');
+      return addedQuestion;
     } else {
       throw Exception('添加问题失败: ${response.statusCode}');
     }
-    } catch (e) {
-      final errorMsg = '添加问题失败: $e';
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
-    }
+  } catch (e) {
+    final errorMsg = '添加问题失败: $e';
+    onStatus?.call(RequestStatus.error, errorMsg);
+    _updateStatus(RequestStatus.error, errorMsg);
+    throw Exception(errorMsg);
   }
+}
 
   // 清除问题相关缓存
   Future<void> _clearQuestionCache(int surveyId) async {
