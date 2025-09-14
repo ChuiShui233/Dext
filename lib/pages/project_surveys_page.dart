@@ -176,8 +176,7 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
         children: [
           Column(
             children: [
-              if (isDesktop)
-                const SizedBox(height: 40),
+              SizedBox(height: isDesktop ? 40 : 20),
               FHeader.nested(
                 title: Row(
                   children: [

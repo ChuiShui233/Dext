@@ -12,7 +12,7 @@ import '../models/question.dart';
 import '../models/survey.dart';
 import '../services/api_service.dart';
 import '../main.dart' show isDesktop;
-import 'edit_question_page.dart'; // <--- 导入新创建的文件
+import 'edit_question_page.dart';
 
 
 
@@ -200,7 +200,7 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
     return Scaffold(
       body: Column(
         children: [
-          if (isDesktop) const SizedBox(height: 40),
+          SizedBox(height: isDesktop ? 40 : 20),
           FHeader.nested(
             title: const Text('编辑问卷内容'),
             prefixes: [

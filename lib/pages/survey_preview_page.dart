@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/survey.dart';
 import '../models/question.dart';
 import '../services/api_service.dart';
+import '../controllers/survey_runtime.dart';
 
 class SurveyPreviewPage extends StatefulWidget {
   final Survey survey;
@@ -27,12 +28,20 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
   late final ApiService _apiService;
   String? _desktopBackground;
   String? _mobileBackground;
+  // 共享控制器
+  late final SurveyRuntimeController _runtime;
 
   @override
   void initState() {
     super.initState();
     _apiService = ApiService(authToken: widget.token);
     _loadBackground();
+    // 初始化共享控制器（默认 first 策略）并计算可见题
+    _runtime = SurveyRuntimeController(
+      questions: widget.questions,
+      multiJumpStrategy: MultiJumpStrategy.first,
+    );
+    _runtime.recomputeVisible();
   }
 
   Future<void> _loadBackground() async {
@@ -75,7 +84,7 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
               ),
               child: isDark
                   ? Container(
-                      color: Colors.black.withOpacity(0.4),
+                      color: Colors.black.withValues(alpha: 0.4),
                     )
                   : null,
             ),
@@ -115,7 +124,7 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
                               style: TextStyle(
                                 fontSize: 22,
                                 fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white : Colors.black87,
+                                color: isDark ? Colors.white70 : Colors.black54,
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -131,64 +140,73 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
                     ),
                     const SizedBox(height: 16),
 
-                    // 问题列表
-                    ...widget.questions.map((q) => _buildGlassCard(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
+                    // 问题列表（仅渲染可见题，且支持点击模拟）
+                    ...widget.questions
+                        .where((q) => _runtime.visibleQuestionIds.contains(q.id) || _runtime.visibleQuestionIds.isEmpty && q.order == 0)
+                        .map((q) => _buildGlassCard(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Expanded(
-                                      child: Text(
-                                        q.title,
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color:
-                                              isDark ? Colors.white : Colors.black87,
-                                        ),
-                                      ),
-                                    ),
-                                    if (q.required)
-                                      const Text(' *',
-                                          style: TextStyle(color: Colors.red)),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-
-                                // 媒体区域
-                                if (q.mediaUrls.isNotEmpty)
-                                  _buildGlassCard(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(12),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            '媒体文件',
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            q.title,
                                             style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w500,
-                                              color:
-                                                  isDark ? Colors.white70 : Colors.grey[700],
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                              color: isDark ? Colors.white : Colors.black87,
                                             ),
                                           ),
-                                          const SizedBox(height: 8),
-                                          _buildMediaWidgets(q.mediaUrls),
-                                        ],
-                                      ),
+                                        ),
+                                        if (q.required) const Text(' *', style: TextStyle(color: Colors.red)),
+                                      ],
                                     ),
-                                  ),
-                                const SizedBox(height: 12),
+                                    const SizedBox(height: 12),
+                                    if (q.mediaUrls.isNotEmpty)
+                                      _buildGlassCard(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(12),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                '媒体文件',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: isDark ? Colors.white70 : Colors.grey[700],
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              _buildMediaWidgets(q.mediaUrls),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    const SizedBox(height: 12),
+                                    _buildInteractivePreviewWidget(q),
+                                  ],
+                                ),
+                              ),
+                            )),
 
-                                // 选项或预览控件
-                                _buildPreviewWidget(q),
-                              ],
-                            ),
+                    if (_runtime.ended)
+                      _buildGlassCard(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text('问卷已结束', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                              SizedBox(height: 8),
+                              Text('根据当前选择，问卷在此结束。'),
+                            ],
                           ),
-                        )),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -271,9 +289,8 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
       }).toList(),
     );
   }
-
-  // 选项渲染保持原逻辑，只修改背景为透明玻璃效果
-  Widget _buildPreviewWidget(Question q) {
+  // 交互式预览（可点击模拟跳题）
+  Widget _buildInteractivePreviewWidget(Question q) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final borderColor = isDark ? Colors.grey[700]! : Colors.grey.shade300;
@@ -281,37 +298,45 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
 
     switch (q.type) {
       case QuestionType.singleChoice:
+        final selected = (((_runtime.answers[q.id]?.isNotEmpty) ?? false) ? _runtime.answers[q.id]!.first : null);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: q.options.map((opt) {
-            return _buildGlassCard(
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: Row(
-                  children: [
-                    Radio(value: false, groupValue: true, onChanged: null),
-                    Expanded(child: Text(opt.text, style: TextStyle(color: textColor))),
-                    if (opt.mediaUrl != null && opt.mediaUrl!.isNotEmpty)
-                      Container(
-                        width: 40,
-                        height: 40,
-                        margin: const EdgeInsets.only(left: 8),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: borderColor),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: CachedNetworkImage(
-                            imageUrl: opt.mediaUrl!,
-                            fit: BoxFit.cover,
-                            placeholder: (context, url) =>
-                                const Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
-                            errorWidget: (context, url, error) => const Icon(Icons.error, size: 16),
+            final isChecked = selected == opt.text;
+            return InkWell(
+              onTap: () {
+                _runtime.setAnswerSingle(q.id, opt.text);
+                _runtime.recomputeVisible();
+                setState(() {});
+              },
+              child: _buildGlassCard(
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Row(
+                    children: [
+                      Radio<bool>(value: true, groupValue: isChecked, onChanged: (_) {}),
+                      Expanded(child: Text(opt.text, style: TextStyle(color: textColor))),
+                      if (opt.mediaUrl != null && opt.mediaUrl!.isNotEmpty)
+                        Container(
+                          width: 40,
+                          height: 40,
+                          margin: const EdgeInsets.only(left: 8),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: borderColor),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: CachedNetworkImage(
+                              imageUrl: opt.mediaUrl!,
+                              fit: BoxFit.cover,
+                              placeholder: (context, url) => const Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
+                              errorWidget: (context, url, error) => const Icon(Icons.error, size: 16),
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );
@@ -319,37 +344,45 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
         );
 
       case QuestionType.multipleChoice:
+        final current = _runtime.answers[q.id] ?? <String>[];
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: q.options.map((opt) {
-            return _buildGlassCard(
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: Row(
-                  children: [
-                    Checkbox(value: false, onChanged: null),
-                    Expanded(child: Text(opt.text, style: TextStyle(color: textColor))),
-                    if (opt.mediaUrl != null && opt.mediaUrl!.isNotEmpty)
-                      Container(
-                        width: 40,
-                        height: 40,
-                        margin: const EdgeInsets.only(left: 8),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: borderColor),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: CachedNetworkImage(
-                            imageUrl: opt.mediaUrl!,
-                            fit: BoxFit.cover,
-                            placeholder: (context, url) =>
-                                const Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
-                            errorWidget: (context, url, error) => const Icon(Icons.error, size: 16),
+            final isOn = current.contains(opt.text);
+            return InkWell(
+              onTap: () {
+                _runtime.toggleMultiple(q.id, opt.text, !isOn);
+                _runtime.recomputeVisible();
+                setState(() {});
+              },
+              child: _buildGlassCard(
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Row(
+                    children: [
+                      Checkbox(value: isOn, onChanged: (_) {}),
+                      Expanded(child: Text(opt.text, style: TextStyle(color: textColor))),
+                      if (opt.mediaUrl != null && opt.mediaUrl!.isNotEmpty)
+                        Container(
+                          width: 40,
+                          height: 40,
+                          margin: const EdgeInsets.only(left: 8),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: borderColor),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: CachedNetworkImage(
+                              imageUrl: opt.mediaUrl!,
+                              fit: BoxFit.cover,
+                              placeholder: (context, url) => const Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
+                              errorWidget: (context, url, error) => const Icon(Icons.error, size: 16),
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );
@@ -366,16 +399,24 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
           minLabel = q.options[3].text;
           maxLabel = q.options[4].text;
         }
+        final current = ((_runtime.answers[q.id]?.isNotEmpty ?? false)
+            ? double.tryParse(_runtime.answers[q.id]!.first) ?? initial
+            : initial);
+        final value = current.clamp(min, max);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Slider(
-              value: initial,
+              value: value,
               min: min,
               max: max,
-              onChanged: null,
+              onChanged: (v) {
+                _runtime.setAnswerSingle(q.id, v.round().toString());
+                _runtime.recomputeVisible();
+                setState(() {});
+              },
               activeColor: theme.colorScheme.primary,
-              inactiveColor: theme.colorScheme.onSurface.withOpacity(0.3),
+              inactiveColor: theme.colorScheme.onSurface.withValues(alpha: 0.3),
             ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -383,6 +424,13 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
                 Text(minLabel, style: TextStyle(color: textColor)),
                 Text(maxLabel, style: TextStyle(color: textColor)),
               ],
+            ),
+            const SizedBox(height: 8),
+            Center(
+              child: Text(
+                '当前值: ${value.round()}',
+                style: TextStyle(color: textColor, fontWeight: FontWeight.w500),
+              ),
             ),
           ],
         );

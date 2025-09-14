@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:layout/layout.dart';
-import '../widgets/views_chart_card.dart';
+import '../widgets/dashboard_stats_card.dart';
+import '../widgets/dashboard_chart.dart';
+import '../widgets/recent_survey_responses_list.dart';
 
 // 定义不同斷點下的組件間距
 final sectionSpacing = LayoutValue(
@@ -31,94 +33,171 @@ class HomeMainContent extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '问卷调查平台',
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
-          SizedBox(height: sectionSpacing.resolve(context)),
+          // 添加顶部安全区域间距，避免与系统标题栏重叠
+          SizedBox(height: MediaQuery.of(context).padding.top + 16),
+          
+          // Dashboard标题
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(
-                child: _buildCard(
-                  context,
-                  '项目管理',
-                  projectCount.toString(),
-                  FIcons.folderArchive,
-                  Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white.withAlpha(255)
-                      : Colors.black.withAlpha(255),
-                  onProjectTap,
+              const Text(
+                '问卷数据概览',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildCard(
-                  context,
-                  '问卷管理',
-                  surveyCount.toString(),
-                  FIcons.notebookPen,
-                  Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white.withAlpha(255)
-                      : Colors.black.withAlpha(255),
-                  onSurveyTap,
-                ),
+              Row(
+                children: [
+                  FButton(
+                    onPress: onProjectTap,
+                    child: const Text('管理项目'),
+                  ),
+                  const SizedBox(width: 12),
+                  FButton(
+                    onPress: onSurveyTap,
+                    child: const Text('管理问卷'),
+                  ),
+                ],
               ),
             ],
           ),
-          SizedBox(height: sectionSpacing.resolve(context)),
-          // 添加浏览量统计卡片
-          const ViewsChartCard(),
+          const SizedBox(height: 32),
+          
+          // 统计卡片行 - 响应式布局
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 800) {
+                // 移动端：2x2 网格布局
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DashboardStatsCard(
+                            title: '总问卷数',
+                            value: projectCount.toString(),
+                            subtitle: '本月新增 ${(projectCount * 0.15).round()} 个',
+                            icon: FIcons.folderArchive,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: DashboardStatsCard(
+                            title: '活跃问卷',
+                            value: surveyCount.toString(),
+                            subtitle: '正在收集回复',
+                            icon: FIcons.notebookPen,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DashboardStatsCard(
+                            title: '总回复数',
+                            value: '1,234',
+                            subtitle: '本周新增 89 个',
+                            icon: FIcons.messageSquare,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: DashboardStatsCard(
+                            title: '完成率',
+                            value: '87.5%',
+                            subtitle: '较上月提升 5.2%',
+                            icon: FIcons.check,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              } else {
+                // 桌面端：单行布局
+                return Row(
+                  children: [
+                    Expanded(
+                      child: DashboardStatsCard(
+                        title: '总问卷数',
+                        value: projectCount.toString(),
+                        subtitle: '本月新增 ${(projectCount * 0.15).round()} 个',
+                        icon: FIcons.folderArchive,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: DashboardStatsCard(
+                        title: '活跃问卷',
+                        value: surveyCount.toString(),
+                        subtitle: '正在收集回复',
+                        icon: FIcons.notebookPen,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: DashboardStatsCard(
+                        title: '总回复数',
+                        value: '1,234',
+                        subtitle: '本周新增 89 个',
+                        icon: FIcons.messageSquare,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: DashboardStatsCard(
+                        title: '完成率',
+                        value: '87.5%',
+                        subtitle: '较上月提升 5.2%',
+                        icon: FIcons.check,
+                      ),
+                    ),
+                  ],
+                );
+              }
+            },
+          ),
+          const SizedBox(height: 32),
+          
+          // 图表和回复记录 - 响应式布局
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 800) {
+                // 移动端：垂直堆叠
+                return Column(
+                  children: [
+                    const DashboardChart(),
+                    const SizedBox(height: 24),
+                    const RecentSurveyResponsesList(),
+                  ],
+                );
+              } else {
+                // 桌面端：水平排列
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 左侧图表区域
+                    Expanded(
+                      flex: 2,
+                      child: const DashboardChart(),
+                    ),
+                    const SizedBox(width: 24),
+                    // 右侧问卷回复记录
+                    Expanded(
+                      flex: 1,
+                      child: const RecentSurveyResponsesList(),
+                    ),
+                  ],
+                );
+              }
+            },
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildCard(BuildContext context, String title, String count, IconData icon, Color color, VoidCallback onTap) {
-    return Card(
-      elevation: 2,
-      color: Theme.of(context).brightness == Brightness.dark 
-          ? Colors.transparent
-          : Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: Theme.of(context).brightness == Brightness.dark 
-            ? Colors.white.withValues(alpha: 0.1)
-            : Colors.black.withValues(alpha: 0.1),
-          width: 1,
-        ),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 48, color: color),
-              const SizedBox(height: 16),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                count,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 } 

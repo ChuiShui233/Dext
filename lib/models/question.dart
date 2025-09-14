@@ -34,6 +34,21 @@ class Question {
             ? '未命名问题'
             : title.toString();
 
+    // 兼容多种 jumpLogic 结构的解析（字符串或数字作为键）
+    Map<int, int> parsedJumpLogic = {};
+    final jl = json['jumpLogic'];
+    if (jl is Map) {
+      jl.forEach((k, v) {
+        try {
+          final keyInt = k is int ? k : int.parse(k.toString());
+          final valInt = v is int ? v : int.parse(v.toString());
+          parsedJumpLogic[keyInt] = valInt;
+        } catch (_) {
+          // 忽略无法解析的键值对
+        }
+      });
+    }
+
     return Question(
       id: json['id'] ?? 0,
       title: safeTitle,
@@ -43,7 +58,7 @@ class Question {
               .toList() ??
           [],
       mediaUrls: List<String>.from(json['mediaURLs'] ?? json['mediaUrls'] ?? []),
-      jumpLogic: Map<int, int>.from(json['jumpLogic'] ?? {}),
+      jumpLogic: parsedJumpLogic,
       required: json['required'] ?? true,
       order: json['order'] ?? 0,
     );
@@ -89,7 +104,8 @@ class Question {
       'questionDescription': title,   // 可选
       'options': options.map((o) => o.toJson()).toList(),
       'mediaURLs': mediaUrls,
-      'jumpLogic': jumpLogic,
+      // JSON 仅支持字符串键，这里将 int 键转换为字符串
+      'jumpLogic': { for (final e in jumpLogic.entries) e.key.toString(): e.value },
       'required': required,
       'order': order,
     };
@@ -122,11 +138,13 @@ class QuestionOption {
   final int id;
   final String text;
   final String? mediaUrl; // 选项的媒体文件URL
+  final int? destination; // 跳题目标问题ID（可为空）
 
   QuestionOption({
     required this.id,
     required this.text,
     this.mediaUrl,
+    this.destination,
   });
 
   factory QuestionOption.fromJson(Map<String, dynamic> json) {
@@ -143,6 +161,8 @@ class QuestionOption {
       id: json['id'] ?? 0,
       text: safeText,
       mediaUrl: json['mediaURL'] ?? json['mediaUrl'] ?? json['mediaURL'],
+      // 支持多种字段名：destination, destinationQuestionId, destination_question_id
+      destination: (json['destination'] ?? json['destinationQuestionId'] ?? json['destination_question_id']) as int?,
     );
   }
 
@@ -153,6 +173,7 @@ class QuestionOption {
       'text': text,
       'optionText': text,       // 后端需要的字段
       'mediaURL': mediaUrl,
+      if (destination != null) 'destination': destination,
     };
   }
 
@@ -160,11 +181,13 @@ class QuestionOption {
     int? id,
     String? text,
     String? mediaUrl,
+    int? destination,
   }) {
     return QuestionOption(
       id: id ?? this.id,
       text: text ?? this.text,
       mediaUrl: mediaUrl ?? this.mediaUrl,
+      destination: destination ?? this.destination,
     );
   }
 }

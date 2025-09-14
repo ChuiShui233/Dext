@@ -3,10 +3,12 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  clipboard_watcher
   fast_rsa
   file_selector_linux
   flutter_secure_storage_linux
   screen_retriever
+  tray_manager
   url_launcher_linux
   window_manager
 )

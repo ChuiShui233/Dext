@@ -69,6 +69,16 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
       _options.addAll(widget.question!.options);
       _mediaUrls.addAll(widget.question!.mediaUrls);
       _jumpLogic.addAll(widget.question!.jumpLogic);
+      // 将已有的选项目的地同步到跳题表，或将跳题表同步回选项
+      for (int i = 0; i < _options.length; i++) {
+        final opt = _options[i];
+        final jl = _jumpLogic[opt.id];
+        if (opt.destination == null && jl != null) {
+          _options[i] = opt.copyWith(destination: jl);
+        } else if (opt.destination != null && jl == null) {
+          _jumpLogic[opt.id] = opt.destination!;
+        }
+      }
       _required = widget.question!.required;
 
       if (_selectedType == QuestionType.slider && _options.length >= 5) {
@@ -108,6 +118,33 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
       if (!mounted) return;
       _showErrorToast('加载问题列表失败', e.toString());
     }
+  }
+
+  // 批量为当前题的所有选项设置相同的跳转目标
+  Future<void> _batchSetJump() async {
+    if (_options.isEmpty) return;
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => JumpLogicDialog(
+        currentQuestionId: widget.question?.id ?? 0,
+        questions: _allQuestions,
+        currentOptionId: -1,
+        currentJumpTo: null,
+      ),
+    );
+    if (result == null) return;
+    setState(() {
+      final newDest = (result == -1) ? null : result;
+      for (int i = 0; i < _options.length; i++) {
+        final opt = _options[i];
+        _options[i] = opt.copyWith(destination: newDest);
+        if (newDest == null) {
+          _jumpLogic.remove(opt.id);
+        } else {
+          _jumpLogic[opt.id] = newDest;
+        }
+      }
+    });
   }
 
   Future<void> _addOption() async {
@@ -195,10 +232,17 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
 
     if (result != null) {
       setState(() {
-        if (result == -1) { // -1 indicates 'None' or 'End of Survey'
+        // -1 代表无跳转/结束问卷：这里统一视为清空目的地
+        final newDest = (result == -1) ? null : result;
+        final idx = _options.indexWhere((o) => o.id == option.id);
+        if (idx != -1) {
+          _options[idx] = _options[idx].copyWith(destination: newDest);
+        }
+
+        if (newDest == null) {
           _jumpLogic.remove(option.id);
         } else {
-          _jumpLogic[option.id] = result;
+          _jumpLogic[option.id] = newDest;
         }
       });
     }
@@ -294,7 +338,7 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
     return Scaffold(
       body: Column(
         children: [
-          if (isDesktop) const SizedBox(height: 40),
+          SizedBox(height: isDesktop ? 40 : 20),
           FHeader.nested(
             title: Text(widget.question == null ? '添加问题' : '编辑问题'),
             prefixes: [
@@ -428,32 +472,63 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('选项列表'),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('选项列表'),
+            Row(children: [
+              if (_selectedType == QuestionType.singleChoice)
+                FButton(
+                  style: FButtonStyle.outline,
+                  onPress: _batchSetJump,
+                  child: const Text('批量设置跳转'),
+                ),
+            ]),
+          ],
+        ),
         const SizedBox(height: 8),
         ..._options.map((option) => ListTile(
           title: Text(option.text),
-          subtitle: (option.mediaUrl != null && option.mediaUrl!.isNotEmpty)
+          subtitle: ((option.mediaUrl != null && option.mediaUrl!.isNotEmpty) || _jumpLogic.containsKey(option.id))
               ? Padding(
-                padding: const EdgeInsets.only(top: 8.0),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: CachedNetworkImage(
-                      imageUrl: option.mediaUrl!,
-                      height: 100,
-                      // ###################### FIX START ######################
-                      // Fill the available width and align the image to the left.
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      alignment: Alignment.centerLeft,
-                      // ####################### FIX END #######################
-                      errorWidget: (context, url, error) => Container(
-                        color: Colors.grey.shade200,
-                        height: 100,
-                        child: const Icon(Icons.error),
-                      ),
-                    ),
-                ),
-              )
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (option.mediaUrl != null && option.mediaUrl!.isNotEmpty)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: CachedNetworkImage(
+                            imageUrl: option.mediaUrl!,
+                            height: 100,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            alignment: Alignment.centerLeft,
+                            errorWidget: (context, url, error) => Container(
+                              color: Colors.grey.shade200,
+                              height: 100,
+                              child: const Icon(Icons.error),
+                            ),
+                          ),
+                        ),
+                      if (_jumpLogic.containsKey(option.id))
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            () {
+                              final targetId = _jumpLogic[option.id]!;
+                              final target = _allQuestions.firstWhere(
+                                (q) => q.id == targetId,
+                                orElse: () => Question(id: 0, title: '（未知）', type: QuestionType.singleChoice, options: [], required: true, order: 0),
+                              );
+                              return '跳转至：第${target.order + 1}题 ${target.title}';
+                            }(),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                    ],
+                  ),
+                )
               : null,
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
@@ -463,6 +538,20 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
                   tooltip: "设置跳题逻辑",
                   icon: Icon(Icons.call_split, color: _jumpLogic.containsKey(option.id) ? Theme.of(context).primaryColor : null),
                   onPressed: () => _setJumpLogic(option),
+                ),
+              if (_selectedType == QuestionType.singleChoice)
+                IconButton(
+                  tooltip: "清除跳转",
+                  icon: const Icon(Icons.clear_all),
+                  onPressed: () {
+                    setState(() {
+                      final idx = _options.indexWhere((o) => o.id == option.id);
+                      if (idx != -1) {
+                        _options[idx] = _options[idx].copyWith(destination: null);
+                      }
+                      _jumpLogic.remove(option.id);
+                    });
+                  },
                 ),
               IconButton(icon: const Icon(Icons.edit), onPressed: () => _editOption(option)),
               IconButton(icon: const Icon(Icons.delete), onPressed: () => _deleteOption(option)),

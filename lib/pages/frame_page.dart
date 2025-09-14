@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:layout/layout.dart';
-import '../main.dart' show isDesktop;
 import '../services/api_service.dart';
 import '../models/project.dart';
 import '../models/survey.dart';
@@ -44,6 +43,8 @@ class FramePageState extends State<FramePage> {
   int _projectCount = 0;
     int _surveyCount = 0;
     User? _currentUser;
+    // 右侧内容区域的嵌套 Navigator Key（保持跨布局切换的路由栈状态）
+    final GlobalKey<NavigatorState> _contentNavigatorKey = GlobalKey<NavigatorState>();
     
     @override
   void dispose() {
@@ -114,9 +115,14 @@ class FramePageState extends State<FramePage> {
   }
 
   void handleTabChange(int index) {
-    setState(() {
-      _currentTabIndex = index;
-    });
+    // 切换 Tab 时，替换右侧嵌套 Navigator 的根路由，使之进入对应的一级页面
+    if (_contentNavigatorKey.currentState != null) {
+      _contentNavigatorKey.currentState!.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => _buildRootForTab(index)),
+        (route) => false,
+      );
+    }
+    setState(() => _currentTabIndex = index);
     widget.onIndexChanged(index);
   }
 
@@ -155,14 +161,50 @@ class FramePageState extends State<FramePage> {
     );
   }
 
-  Widget _buildContent() {
-    switch (_currentTabIndex) {
+
+  @override
+  Widget build(BuildContext context) {
+    // 依据断点决定是否显示“桌面布局”（侧边栏内联），不再受平台限制（Web 也支持）
+    final bool showDesktopLayout = showSidebarInline.resolve(context);
+
+    // 统一采用嵌套 Navigator 承载右侧内容区域，避免切换桌面/移动布局时丢失栈
+    final contentArea = Navigator(
+      key: _contentNavigatorKey,
+      onGenerateRoute: (settings) {
+        // 用作兜底；首次构建或未显式设置时，加载当前 Tab 的根页面
+        return MaterialPageRoute(builder: (_) => _buildRootForTab(_currentTabIndex));
+      },
+      onGenerateInitialRoutes: (_, __) => [
+        MaterialPageRoute(builder: (_) => _buildRootForTab(_currentTabIndex)),
+      ],
+    );
+
+    if (showDesktopLayout) {
+      return PageStorage(
+        bucket: widget.bucket,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildSidebar(context),
+            Expanded(child: contentArea),
+          ],
+        ),
+      );
+    }
+
+    // 移动端布局：也使用相同的嵌套 Navigator，保证在布局切换期间不丢失右侧路由状态
+    return contentArea;
+  }
+
+  // 根据 Tab 索引构建右侧区域的“根页面”
+  Widget _buildRootForTab(int index) {
+    switch (index) {
       case 0:
       case 1:
       case 2:
         return HomePage(
           apiService: widget.apiService!,
-          currentIndex: _currentTabIndex,
+          currentIndex: index,
           projectCount: _projectCount,
           surveyCount: _surveyCount,
           onProjectTap: _handleProjectTap,
@@ -179,29 +221,6 @@ class FramePageState extends State<FramePage> {
       default:
         return const Center(child: Text('未知页面'));
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bool showDesktopLayout = showSidebarInline.resolve(context) && isDesktop;
-
-    if (showDesktopLayout) {
-      return PageStorage(
-        bucket: widget.bucket,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSidebar(context),
-            Expanded(
-              child: _buildContent(),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // 移动端布局
-    return _buildContent();
   }
 
   Widget _buildSidebar(BuildContext context) {
@@ -697,9 +716,8 @@ Widget _buildSidebarHeader(BuildContext context) {
                 if (!context.mounted) return;
                 
                 Navigator.pop(context); // 关闭对话框
-                
-                // 跳转到项目管理页面
-                Navigator.pushReplacementNamed(context, '/projects');
+                // 切换到“项目管理”页（在桌面端由右侧嵌套 Navigator 承载）
+                handleTabChange(3);
                 
                 showFToast(
                   context: context,
@@ -935,9 +953,8 @@ Widget _buildSidebarHeader(BuildContext context) {
                     if (!context.mounted) return;
                     
                     Navigator.pop(context); // 关闭对话框
-                    
-                    // 跳转到问卷管理页面
-                    Navigator.pushReplacementNamed(context, '/surveys');
+                    // 切换到“问卷管理”页（在桌面端由右侧嵌套 Navigator 承载）
+                    handleTabChange(4);
                     
                     showFToast(
                       context: context,

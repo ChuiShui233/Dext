@@ -2,7 +2,7 @@
 plugins {
     id "com.android.application"
     id "kotlin-android"
-    id "dev.flutter.flutter-gradle-plugin"  // 声明式插件引用
+    id "dev.flutter.flutter-gradle-plugin"
 }
 
 def localProperties = new Properties()

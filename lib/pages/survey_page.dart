@@ -363,8 +363,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
           children: [
             Column(
               children: [
-                if (isDesktop)
-                  const SizedBox(height: 40),
+                SizedBox(height: isDesktop ? 40 : 20),
                 FHeader.nested(
                   title: Row(
                     children: [

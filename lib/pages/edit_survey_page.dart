@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../main.dart' show isDesktop;
 import 'dart:async';
 import 'edit_survey_content_page.dart';
+import 'survey_results_page.dart';
 
 class EditSurveyPage extends StatefulWidget {
   final String token;
@@ -310,6 +311,43 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
       _selectedStatus = widget.survey.surveyStatus;
       _statusSelectController.value = _selectedStatus;
     }
+  }
+
+  Future<bool> _showPublishConfirmDialog() async {
+    if (!mounted) return false;
+    
+    final confirmed = await showAdaptiveDialog<bool>(
+      context: context,
+      builder: (context) => FDialog(
+        direction: Axis.horizontal,
+        title: const Text('确认发布问卷'),
+        body: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('您确定要将问卷切换到发布状态吗？'),
+            SizedBox(height: 8),
+            Text(
+              '发布后，问卷将对外开放，用户可以通过公开链接访问和填写问卷。',
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          FButton(
+            style: FButtonStyle.outline,
+            onPress: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FButton(
+            onPress: () => Navigator.of(context).pop(true),
+            child: const Text('确认发布'),
+          ),
+        ],
+      ),
+    );
+    
+    return confirmed ?? false;
   }
 
   Future<void> _showTimeLimitDialog() async {
@@ -649,8 +687,7 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
         children: [
           Column(
             children: [
-              if (isDesktop)
-                const SizedBox(height: 40),
+              SizedBox(height: isDesktop ? 40 : 20),
               FHeader.nested(
                 title: const Text('编辑问卷'),
                 prefixes: [
@@ -754,7 +791,16 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
                           label: const Text('问卷状态'),
                           hint: '请选择问卷状态',
                           format: (value) => _getSurveyStatusText(value),
-                          onChange: (value) {
+                          onChange: (value) async {
+                            // 如果切换到发布中状态，显示确认对话框
+                            if (value == 1 && _selectedStatus != 1) {
+                              final confirmed = await _showPublishConfirmDialog();
+                              if (!confirmed) {
+                                // 用户取消，回退到之前的状态
+                                _statusSelectController.value = _selectedStatus;
+                                return;
+                              }
+                            }
                             setState(() {
                               _selectedStatus = value;
                             });
@@ -808,6 +854,22 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
                             );
                           },
                           child: const Text('编辑问卷内容'),
+                        ),
+                        const SizedBox(height: 16),
+                        FButton(
+                          style: FButtonStyle.outline,
+                          onPress: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => SurveyResultsPage(
+                                  token: widget.token,
+                                  survey: widget.survey,
+                                ),
+                              ),
+                            );
+                          },
+                          child: const Text('查看作答结果'),
                         ),
                         const SizedBox(height: 16),
                         SizedBox(

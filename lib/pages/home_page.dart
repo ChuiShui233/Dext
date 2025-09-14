@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:layout/layout.dart';
-import '../main.dart' show isDesktop;
 import '../models/user.dart';
 import 'home_main_content.dart';
 import 'home_history_content.dart';
@@ -58,7 +57,8 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isMobileOrTablet = showSidebarInDrawer.resolve(context);
-    final bool showDesktopLayout = showSidebarInline.resolve(context) && isDesktop;
+    // 当达到桌面布局断点（md+）时，隐藏底部导航栏（跨平台统一：含 Web/其他端）
+    final bool showDesktopLayout = showSidebarInline.resolve(context);
     final EdgeInsets padding = contentPadding.resolve(context);
 
     final contents = [

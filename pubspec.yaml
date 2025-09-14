@@ -29,6 +29,7 @@ dependencies:
   http: ^1.1.0
   layout: ^1.0.5
   window_manager: ^0.3.8
+  tray_manager: ^0.2.3
   url_launcher: ^6.2.5
   flutter_localizations:
     sdk: flutter
@@ -41,6 +42,7 @@ dependencies:
   video_player: ^2.10.0
   radio_player: ^2.1.0
   pull_to_refresh: ^2.0.0
+  flutter_staggered_grid_view: ^0.7.0
 
   # 以下行将 Cupertino 图标字体添加到您的应用程序中。
   # 使用 CupertinoIcons 类以获取 iOS 样式图标。
@@ -50,6 +52,8 @@ dependencies:
   flutter_launcher_icons: ^0.13.1
   provider: ^6.1.5+1
   http_parser: ^4.1.2
+  uni_links: ^0.5.1
+  clipboard_watcher: ^0.2.0
 
 dev_dependencies:
   flutter_test:

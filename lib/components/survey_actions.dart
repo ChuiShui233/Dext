@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import '../models/survey.dart';
 import '../services/api_service.dart';
@@ -36,6 +37,99 @@ class SurveyActions extends StatelessWidget {
     if (result == true) {
       onSuccess();
     }
+  }
+
+  Future<void> _showPublicLink(BuildContext context) async {
+    // 构建公开链接 - 使用 wucode.xyz 域名和问卷的 surveyUID
+    final publicLink = 'https://wucode.xyz/?id=${survey.surveyUid}';
+    
+    await showAdaptiveDialog(
+      context: context,
+      builder: (context) => FDialog(
+        direction: Axis.horizontal,
+        title: const Text('问卷公开链接'),
+        body: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('分享以下链接，任何人都可以无需登录直接填写问卷：'),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                ),
+              ),
+              child: SelectableText(
+                publicLink,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    '注意：只有已发布状态的问卷才能被公开访问',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          FButton(
+            style: FButtonStyle.outline,
+            onPress: () async {
+              await Clipboard.setData(ClipboardData(text: publicLink));
+              if (!context.mounted) return;
+              
+              showFToast(
+                context: context,
+                alignment: FToastAlignment.bottomRight,
+                title: const Text('复制成功'),
+                description: const Text('链接已复制到剪贴板'),
+                suffixBuilder: (context, entry, _) => IntrinsicHeight(
+                  child: FButton(
+                    style: context.theme.buttonStyles.primary.copyWith(
+                      contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                        textStyle: FWidgetStateMap.all(
+                          context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
+                        ),
+                      ),
+                    ),
+                    onPress: entry.dismiss,
+                    child: const Text('关闭'),
+                  ),
+                ),
+              );
+            },
+            child: const Text('复制链接'),
+          ),
+          FButton(
+            onPress: () => Navigator.of(context).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _deleteSurvey(BuildContext context) async {
@@ -118,6 +212,26 @@ class SurveyActions extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // 如果问卷已发布，显示公开链接按钮
+        if (survey.surveyStatus == 1) ...[
+          FButton(
+            style: FButtonStyle.outline,
+            onPress: () => _showPublicLink(context),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.link,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 4),
+                const Text('公开链接'),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
         FButton(
           onPress: () => _editSurvey(context),
           child: Row(
@@ -157,4 +271,4 @@ class SurveyActions extends StatelessWidget {
       ],
     );
   }
-} 
+}

@@ -45,5 +45,28 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+
+	<!-- URL Schemes 支持 - 支持 wucode.xyz 和自定义 scheme -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.wucode.dext</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>dext</string>
+				<string>https</string>
+			</array>
+		</dict>
+	</array>
+	
+	<!-- Associated Domains 支持 - 用于 Universal Links -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:wucode.xyz</string>
+	</array>
+
 </dict>
 </plist>

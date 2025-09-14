@@ -2,15 +2,21 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:http/http.dart' as http;
 import '/services/crypto_service.dart';
+import 'core/api_core.dart' as core;
+import 'auth_service.dart';
+import 'project_service.dart';
+import 'survey_service.dart';
 import '../models/project.dart';
 import '../models/survey.dart';
 import '../models/survey_stats.dart';
 import '../models/question.dart';
 import '../models/captcha.dart';
 import '../models/user.dart';
+import '../models/survey_result.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 令牌过期异常类
@@ -22,23 +28,23 @@ class TokenExpiredException implements Exception {
   String toString() => message;
 }
 
-// 请求状态枚举
-enum RequestStatus {
-  idle,
-  loading,
-  success,
-  error,
-}
-
-// 请求进度回调
-typedef ProgressCallback = void Function(int sent, int total);
-typedef StatusCallback = void Function(RequestStatus status, String? message);
+// 统一复用 core 中的类型，避免类型不一致
+typedef RequestStatus = core.RequestStatus;
+typedef StatusCallback = core.StatusCallback;
+typedef ProgressCallback = core.ProgressCallback;
 
 class ApiService {
   static const String baseUrl = 'http://127.0.0.1:11222';  //wucode.xyz:11222
   static const Duration timeoutDuration = Duration(seconds: 15);
   String? authToken;
   final CryptoService _cryptoService = CryptoService();
+  // Facade over modular services
+  late final core.ApiCore _core;
+  late final AuthService _authService;
+  late final ProjectService _projectService;
+  late final SurveyService _surveyService;
+  StreamSubscription<String>? _coreMsgSub;
+  StreamSubscription<Map<String, dynamic>>? _coreDataSub;
   
   // 实时响应相关
   RequestStatus _currentStatus = RequestStatus.idle;
@@ -60,7 +66,17 @@ class ApiService {
   // 数据更新流
   Stream<Map<String, dynamic>> get dataUpdateStream => _dataUpdateController.stream;
 
-  ApiService({this.authToken});
+  ApiService({this.authToken}) {
+    // Initialize core and sub-services for modularization facade
+    _core = core.ApiCore(authToken: authToken);
+    _authService = AuthService(_core);
+    _projectService = ProjectService(_core);
+    _surveyService = SurveyService(_core);
+
+    // Pipe core message/data streams to maintain compatibility with existing listeners
+    _coreMsgSub = _core.messageStream.listen((m) => _messageController.add(m));
+    _coreDataSub = _core.dataUpdateStream.listen((d) => _dataUpdateController.add(d));
+  }
 
   // 更新状态并通知监听者
   void _updateStatus(RequestStatus status, [String? message]) {
@@ -86,6 +102,9 @@ class ApiService {
     _statusController.close();
     _messageController.close();
     _dataUpdateController.close();
+    _coreMsgSub?.cancel();
+    _coreDataSub?.cancel();
+    _core.dispose();
   }
 
   // 登录方法
@@ -398,79 +417,8 @@ class ApiService {
 
   // 项目相关API（带实时响应）
   Future<List<Project>> getProjects({StatusCallback? onStatus}) async {
-    final prefs = await SharedPreferences.getInstance();
-    const cacheKey = 'projects_cache';
-    final cached = prefs.getString(cacheKey);
-    if (cached != null) {
-      try {
-        onStatus?.call(RequestStatus.loading, '正在加载缓存数据...');
-        _updateStatus(RequestStatus.loading, '正在加载缓存数据...');
-        
-        final List<dynamic> jsonList = json.decode(cached);
-        final List<Project> projects = jsonList.map((e) => Project.fromJson(e)).toList();
-        
-        onStatus?.call(RequestStatus.success, '缓存数据加载成功');
-        _updateStatus(RequestStatus.success, '缓存数据加载成功');
-        
-        // 异步刷新网络数据，使用独立的回调避免状态混乱
-        _refreshProjectsSilently(prefs, cacheKey, projects);
-        return projects;
-      } catch (e) {
-        onStatus?.call(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
-        _updateStatus(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
-      }
-    }
-    return await _refreshProjects(prefs, cacheKey, onStatus: onStatus);
-  }
-
-  // 静默刷新项目数据（用于异步更新）
-  Future<void> _refreshProjectsSilently(
-    SharedPreferences prefs, 
-    String cacheKey,
-    List<Project> cachedProjects,
-  ) async {
-    try {
-      final response = await _httpRequest(
-        'GET',
-        '$baseUrl/api/project/list',
-        onStatus: null, // 不使用回调，避免状态混乱
-      );
-      
-      if (response.statusCode == 200) {
-        final dynamic body = json.decode(response.body);
-        if (body == null || body is! List) {
-          return;
-        }
-        
-        final newProjects = body.map<Project>((json) => Project.fromJson(json)).toList();
-        
-        // 检查数据是否有变化
-        if (_hasProjectsChanged(cachedProjects, newProjects)) {
-          prefs.setString(cacheKey, json.encode(body));
-          
-          // 通知UI数据已更新
-          _notifyDataUpdate('projects', newProjects);
-          _updateStatus(RequestStatus.success, '项目数据已更新');
-        }
-      }
-    } catch (e) {
-      // 静默处理错误，不影响主流程
-    }
-  }
-  
-  // 检查项目数据是否有变化
-  bool _hasProjectsChanged(List<Project> oldProjects, List<Project> newProjects) {
-    if (oldProjects.length != newProjects.length) return true;
-    
-    for (int i = 0; i < oldProjects.length; i++) {
-      if (oldProjects[i].id != newProjects[i].id ||
-          oldProjects[i].projectName != newProjects[i].projectName ||
-          oldProjects[i].projectDescription != newProjects[i].projectDescription ||
-          oldProjects[i].updateTime != newProjects[i].updateTime) {
-        return true;
-      }
-    }
-    return false;
+    // Delegate to ProjectService (preserves signature)
+    return await _projectService.getProjects(onStatus: onStatus);
   }
 
   Future<List<Project>> _refreshProjects(
@@ -758,35 +706,8 @@ class ApiService {
     Survey survey, {
     StatusCallback? onStatus,
   }) async {
-    try {
-      onStatus?.call(RequestStatus.loading, '正在更新问卷...');
-      _updateStatus(RequestStatus.loading, '正在更新问卷...');
-      
-    final response = await _encryptedRequest(
-      'PUT',
-      '$baseUrl/api/survey/update',
-      survey.toJson(),
-        onStatus: onStatus,
-    );
-    
-    if (response.statusCode == 200) {
-        final updatedSurvey = Survey.fromJson(json.decode(response.body));
-        
-        // 更新成功后清除相关缓存
-        await _clearSurveyListCache();
-        
-        onStatus?.call(RequestStatus.success, '问卷更新成功');
-        _updateStatus(RequestStatus.success, '问卷更新成功');
-        return updatedSurvey;
-    } else {
-      throw Exception('更新问卷失败: ${response.statusCode}');
-    }
-    } catch (e) {
-      final errorMsg = '更新问卷失败: $e';
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
-    }
+    // Delegate to SurveyService
+    return await _surveyService.updateSurvey(survey, onStatus: onStatus);
   }
 
   Future<void> deleteSurvey(
@@ -1118,46 +1039,8 @@ class ApiService {
 
   // 刷新认证token（带实时响应）
   Future<String> refreshToken({StatusCallback? onStatus}) async {
-    try {
-      onStatus?.call(RequestStatus.loading, '正在刷新认证令牌...');
-      _updateStatus(RequestStatus.loading, '正在刷新认证令牌...');
-      
-      final response = await _encryptedRequest(
-        'POST',
-        '$baseUrl/api/auth/refresh',
-        {'refresh': true},
-        onStatus: onStatus,
-      );
-    
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        final token = data['token'] as String;
-        
-        onStatus?.call(RequestStatus.success, '认证令牌刷新成功');
-        _updateStatus(RequestStatus.success, '认证令牌刷新成功');
-        
-        return token;
-      } else if (response.statusCode == 401) {
-        // 令牌已失效，需要重新登录
-        final errorMsg = '认证令牌已失效，请重新登录';
-        onStatus?.call(RequestStatus.error, errorMsg);
-        _updateStatus(RequestStatus.error, errorMsg);
-        throw TokenExpiredException(errorMsg);
-      } else {
-        final errorMsg = '刷新认证token失败: ${response.statusCode}';
-        onStatus?.call(RequestStatus.error, errorMsg);
-        _updateStatus(RequestStatus.error, errorMsg);
-        throw Exception(errorMsg);
-      }
-    } catch (e) {
-      if (e is TokenExpiredException) {
-        rethrow; // 重新抛出TokenExpiredException
-      }
-      final errorMsg = '刷新认证令牌失败: $e';
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
-    }
+    // Delegate to AuthService
+    return await _authService.refreshToken(onStatus: onStatus);
   }
 
   // 检查令牌是否有效
@@ -1345,7 +1228,6 @@ class ApiService {
       
       if (response.statusCode == 200) {
         final dynamic body = json.decode(response.body);
-        print('后端返回的原始数据: $body'); // 调试日志
         
         if (body == null || body is! List) {
           onStatus?.call(RequestStatus.success, '问卷问题列表为空');
@@ -1353,15 +1235,7 @@ class ApiService {
           return [];
         }
         prefs.setString(cacheKey, json.encode(body));
-        final questions = body.map<Question>((json) {
-          print('解析问题JSON: $json'); // 调试日志
-          return Question.fromJson(json);
-        }).toList();
-        
-        print('解析后的问题数量: ${questions.length}'); // 调试日志
-        for (int i = 0; i < questions.length; i++) {
-          print('问题 $i: 标题=${questions[i].title}, 类型=${questions[i].type}, 选项数量=${questions[i].options.length}');
-        }
+        final questions = body.map<Question>((json) => Question.fromJson(json)).toList();
         
         onStatus?.call(RequestStatus.success, '问卷问题获取成功');
         _updateStatus(RequestStatus.success, '问卷问题获取成功');
@@ -1385,7 +1259,9 @@ Future<Question> addQuestion(
 
     // 打印漂亮格式的上传数据
     final prettyJson = const JsonEncoder.withIndent('  ').convert(question.toJson());
-    print('上传的数据:\n$prettyJson');
+    if (kDebugMode) {
+      print('上传的数据:\n$prettyJson');
+    }
 
     final response = await _encryptedRequest(
       'POST',
@@ -2105,5 +1981,174 @@ Future<Question> addQuestion(
 
     // 注销成功后清除本地存储的令牌
     await prefs.remove('authToken');
+  }
+
+  // 公开访问问卷信息（无需认证）
+  Future<Map<String, dynamic>> getPublicSurvey(
+    String surveyUID, {
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在获取问卷信息...');
+      _updateStatus(RequestStatus.loading, '正在获取问卷信息...');
+      
+      final response = await _httpRequest(
+        'GET',
+        '$baseUrl/api/public/survey/$surveyUID',
+        onStatus: onStatus,
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        onStatus?.call(RequestStatus.success, '问卷信息获取成功');
+        _updateStatus(RequestStatus.success, '问卷信息获取成功');
+        return data;
+      } else if (response.statusCode == 401) {
+        throw TokenExpiredException('未登录或登录已过期');
+      } else {
+        throw Exception('获取问卷信息失败: ${response.statusCode}');
+      }
+    } catch (e) {
+      final errorMsg = '获取问卷信息失败: $e';
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      throw Exception(errorMsg);
+    }
+  }
+
+  // 公开提交问卷答案（无需认证）
+  Future<void> submitPublicAnswer(
+    String surveyUID,
+    Map<String, dynamic> answers, {
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在提交答案...');
+      _updateStatus(RequestStatus.loading, '正在提交答案...');
+      
+      final response = await _encryptedRequest(
+        'POST',
+        '$baseUrl/api/public/survey/$surveyUID/submit',
+        answers,
+        onStatus: onStatus,
+      );
+      
+      if (response.statusCode == 200) {
+        onStatus?.call(RequestStatus.success, '答案提交成功');
+        _updateStatus(RequestStatus.success, '答案提交成功');
+      } else if (response.statusCode == 401) {
+        throw TokenExpiredException('未登录或登录已过期');
+      } else {
+        throw Exception('提交答案失败: ${response.statusCode}');
+      }
+    } catch (e) {
+      final errorMsg = '提交答案失败: $e';
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      throw Exception(errorMsg);
+    }
+  }
+
+  // 获取问卷作答结果
+  Future<List<SurveyResult>> getSurveyResults(
+    int surveyId, {
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在获取作答结果...');
+      _updateStatus(RequestStatus.loading, '正在获取作答结果...');
+      
+      final response = await _httpRequest(
+        'GET',
+        '$baseUrl/api/answer/list/$surveyId',
+        onStatus: onStatus,
+      );
+      
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        final results = data.map((item) => SurveyResult.fromJson(item)).toList();
+        onStatus?.call(RequestStatus.success, '作答结果获取成功');
+        _updateStatus(RequestStatus.success, '作答结果获取成功');
+        return results;
+      } else if (response.statusCode == 401) {
+        throw TokenExpiredException('未登录或登录已过期');
+      } else {
+        throw Exception('获取作答结果失败: ${response.statusCode}');
+      }
+    } catch (e) {
+      final errorMsg = '获取作答结果失败: $e';
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      throw Exception(errorMsg);
+    }
+  }
+
+  // 删除单个答案
+  Future<void> deleteAnswer(
+    int answerId, {
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在删除答案...');
+      _updateStatus(RequestStatus.loading, '正在删除答案...');
+      
+      final response = await _httpRequest(
+        'DELETE',
+        '$baseUrl/api/answer/$answerId',
+        onStatus: onStatus,
+      );
+      
+      if (response.statusCode == 200) {
+        onStatus?.call(RequestStatus.success, '答案删除成功');
+        _updateStatus(RequestStatus.success, '答案删除成功');
+      } else if (response.statusCode == 401) {
+        throw TokenExpiredException('未登录或登录已过期');
+      } else if (response.statusCode == 403) {
+        throw Exception('无权限删除此答案');
+      } else {
+        throw Exception('删除答案失败: ${response.statusCode}');
+      }
+    } catch (e) {
+      final errorMsg = '删除答案失败: $e';
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      throw Exception(errorMsg);
+    }
+  }
+
+  // 批量删除答案
+  Future<void> batchDeleteAnswers(
+    List<int> answerIds, {
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在批量删除答案...');
+      _updateStatus(RequestStatus.loading, '正在批量删除答案...');
+      
+      final response = await _httpRequest(
+        'DELETE',
+        '$baseUrl/api/answers/batch',
+        data: {'answerIds': answerIds},
+        onStatus: onStatus,
+      );
+      
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+        final deletedCount = responseData['deletedCount'] ?? answerIds.length;
+        onStatus?.call(RequestStatus.success, '成功删除 $deletedCount 条答案');
+        _updateStatus(RequestStatus.success, '成功删除 $deletedCount 条答案');
+      } else if (response.statusCode == 401) {
+        throw TokenExpiredException('未登录或登录已过期');
+      } else if (response.statusCode == 403) {
+        throw Exception('无权限删除这些答案');
+      } else {
+        throw Exception('批量删除答案失败: ${response.statusCode}');
+      }
+    } catch (e) {
+      final errorMsg = '批量删除答案失败: $e';
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      throw Exception(errorMsg);
+    }
   }
 }

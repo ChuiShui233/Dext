@@ -7,11 +7,17 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:forui/forui.dart';
 import 'package:layout/layout.dart';
 import 'package:window_manager/window_manager.dart' hide WindowCaption;
+import 'package:tray_manager/tray_manager.dart';
+
+import 'services/url_handler.dart';
+import 'services/clipboard_service.dart';
 
 import 'models/project.dart';
 import 'pages/login_page.dart';
 import 'pages/create_survey_page.dart';
 import 'pages/frame_page.dart';
+import 'pages/public_survey_page.dart';
+import 'pages/public_access_page.dart';
 import 'services/api_service.dart';
 import 'widgets/window_caption.dart';
 
@@ -29,23 +35,89 @@ bool get isDesktop {
   }
 }
 
+class _AppWindowListener with WindowListener {
+  @override
+  void onWindowClose() async {
+    // 拦截关闭，隐藏到托盘
+    final isPrevent = await windowManager.isPreventClose();
+    if (isPrevent) {
+      await windowManager.hide();
+    }
+  }
+}
+
+class _AppTrayListener with TrayListener {
+  @override
+  void onTrayIconMouseDown() async {
+    // 单击切换显示/隐藏
+    final visible = await windowManager.isVisible();
+    if (visible) {
+      await windowManager.hide();
+    } else {
+      await windowManager.show();
+      await windowManager.focus();
+    }
+  }
+
+  @override
+  void onTrayIconRightMouseDown() {
+    // 右键弹出菜单
+    TrayManager.instance.popUpContextMenu();
+  }
+
+  @override
+  void onTrayMenuItemClick(MenuItem menuItem) async {
+    switch (menuItem.key) {
+      case 'show':
+        await windowManager.show();
+        await windowManager.focus();
+        break;
+      case 'hide':
+        await windowManager.hide();
+        break;
+      case 'exit':
+        await windowManager.setPreventClose(false);
+        await windowManager.close();
+        break;
+    }
+  }
+}
+
+Future<void> _initDesktopWindowAndTray() async {
+  // 窗口初始化
+  await windowManager.ensureInitialized();
+  WindowOptions windowOptions = const WindowOptions(
+    size: Size(1500, 880),
+    center: true,
+    minimumSize: Size(600, 329),
+    backgroundColor: Colors.transparent,
+    titleBarStyle: TitleBarStyle.hidden,
+  );
+  await windowManager.waitUntilReadyToShow(windowOptions, () async {
+    await windowManager.show();
+    await windowManager.focus();
+  });
+  await windowManager.setPreventClose(true);
+  windowManager.addListener(_AppWindowListener());
+
+  // 托盘初始化
+  await TrayManager.instance.setIcon('assets/images/Dext.ico');
+  final menu = Menu(items: [
+    MenuItem(key: 'show', label: '显示窗口'),
+    MenuItem(key: 'hide', label: '隐藏到托盘'),
+    MenuItem.separator(),
+    MenuItem(key: 'exit', label: '退出'),
+  ]);
+  await TrayManager.instance.setContextMenu(menu);
+  TrayManager.instance.addListener(_AppTrayListener());
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // 桌面窗口管理
   if (isDesktop) {
-    await windowManager.ensureInitialized();
-    WindowOptions windowOptions = const WindowOptions(
-      size: Size(1500, 880),
-      center: true,
-      minimumSize: Size(600, 329),
-      backgroundColor: Colors.transparent,
-      titleBarStyle: TitleBarStyle.hidden,
-    );
-    await windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.focus();
-    });
+    await _initDesktopWindowAndTray();
   }
 
   // Android 状态栏透明
@@ -66,6 +138,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
     with WidgetsBindingObserver {
   final _storage = const FlutterSecureStorage();
   final PageStorageBucket _pageStorageBucket = PageStorageBucket();
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   ThemeMode _themeMode = ThemeMode.system;
   bool _isDark = false;
   final ValueNotifier<User?> userNotifier = ValueNotifier<User?>(null);
@@ -74,6 +147,8 @@ class _YuMeng233AppState extends State<YuMeng233App>
   DateTime? _tokenExpiry;
   int _selectedIndex = 0;
   bool _isRefreshingToken = false;
+  String? _pendingSurveyId;
+  
 
   @override
   void initState() {
@@ -81,11 +156,14 @@ class _YuMeng233AppState extends State<YuMeng233App>
     _checkAuthStatus();
     WidgetsBinding.instance.addObserver(this);
     _updateThemeMode();
+    _handleInitialUrl();
+    _startClipboardListening();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    ClipboardService.instance.stopListening();
     super.dispose();
   }
 
@@ -162,6 +240,16 @@ class _YuMeng233AppState extends State<YuMeng233App>
 
   @override
   Widget build(BuildContext context) {
+    // 处理待处理的surveyId导航
+    if (_pendingSurveyId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final surveyId = _pendingSurveyId!;
+        _pendingSurveyId = null; // 清除待处理状态
+        print('Web URL调试: 开始执行跳转，ID = $surveyId');
+        _navigateToPublicSurvey(surveyId);
+      });
+    }
+    
     return Directionality(
       textDirection: TextDirection.ltr,
       child: FToaster(
@@ -169,6 +257,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
           child: FTheme(
             data: _isDark ? zincDark : zincLight, // Forui 主题
             child: MaterialApp(
+              navigatorKey: _navigatorKey,
               title: '问卷调查系统',
               theme: lightTheme,
               darkTheme: darkTheme,
@@ -312,35 +401,52 @@ class _YuMeng233AppState extends State<YuMeng233App>
           },
         ),
       );
-    } else {
+    } else if (settings.name?.startsWith('/public/survey/') == true) {
+      // 处理公开问卷访问路由 /public/survey/{uid}
+      final uri = Uri.parse(settings.name!);
+      final pathSegments = uri.pathSegments;
+      
+      if (pathSegments.length >= 3 && pathSegments[0] == 'public' && pathSegments[1] == 'survey') {
+        final surveyUID = pathSegments[2];
+        return MaterialPageRoute(
+          builder: (context) => PublicSurveyPage(surveyUID: surveyUID),
+        );
+      }
+    } else if (settings.name == '/public/access') {
+      // 公开问卷访问入口页面
       return MaterialPageRoute(
-        builder: (context) => Scaffold(
-          appBar: AppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            toolbarHeight: 0,
-            systemOverlayStyle: _isDark
-                ? SystemUiOverlayStyle.light
-                : SystemUiOverlayStyle.dark,
-            title: const Text('页面未找到'),
-          ),
-          body: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text('页面不存在: ${settings.name}'),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
-                  },
-                  child: const Text('返回首页'),
-                ),
-              ],
-            ),
-          ),
-        ),
+        builder: (context) => const PublicAccessPage(),
       );
     }
+    
+    // 默认404页面
+    return MaterialPageRoute(
+      builder: (context) => Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          toolbarHeight: 0,
+          systemOverlayStyle: _isDark
+              ? SystemUiOverlayStyle.light
+              : SystemUiOverlayStyle.dark,
+          title: const Text('页面未找到'),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('页面不存在: ${settings.name}'),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+                },
+                child: const Text('返回首页'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<List<Project>> _fetchProjects(String token) async {
@@ -354,6 +460,119 @@ class _YuMeng233AppState extends State<YuMeng233App>
         throw Exception('服务器连接失败，请稍后重试');
       } else {
         throw Exception('获取项目失败: $e');
+      }
+    }
+  }
+
+  /// 处理初始URL和深度链接
+  void _handleInitialUrl() async {
+    try {
+      if (kIsWeb) {
+        // Web平台：从浏览器URL获取参数
+        _handleWebUrl();
+      } else {
+        // 移动平台：处理深度链接
+        _handleMobileDeepLink();
+      }
+    } catch (e) {
+      print('处理初始URL失败: $e');
+    }
+  }
+
+  /// Web平台URL处理
+  void _handleWebUrl() {
+    if (kIsWeb) {
+      try {
+        final surveyId = UrlHandler.instance.getWebUrlParameter('id');
+        print('Web URL调试: 获取到的surveyId = $surveyId');
+        
+        if (surveyId != null && surveyId.isNotEmpty) {
+          print('Web URL调试: 准备跳转到问卷页面，ID = $surveyId');
+          // 保存surveyId，在build完成后处理
+          _pendingSurveyId = surveyId;
+        } else {
+          print('Web URL调试: surveyId为空或null');
+        }
+      } catch (e) {
+        print('Web URL解析失败: $e');
+      }
+    }
+  }
+
+  /// 移动平台深度链接处理
+  void _handleMobileDeepLink() async {
+    if (!kIsWeb) {
+      try {
+        // 获取初始链接
+        final initialLink = await UrlHandler.instance.getInitialDeepLink();
+        if (initialLink != null) {
+          _processDeepLink(initialLink);
+        }
+
+        // 监听后续链接
+        final linkStream = UrlHandler.instance.getDeepLinkStream();
+        linkStream?.listen((String link) {
+          _processDeepLink(link);
+        }, onError: (err) {
+          print('深度链接监听错误: $err');
+        });
+      } catch (e) {
+        print('深度链接处理失败: $e');
+      }
+    }
+  }
+
+  /// 处理深度链接
+  void _processDeepLink(String link) {
+    try {
+      final surveyId = UrlHandler.instance.extractSurveyId(link);
+      
+      if (surveyId != null && surveyId.isNotEmpty) {
+        // 导航到公开问卷页面
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _navigateToPublicSurvey(surveyId);
+        });
+      }
+    } catch (e) {
+      print('深度链接解析失败: $e');
+    }
+  }
+
+  /// 启动剪切板监听
+  void _startClipboardListening() {
+    if (!kIsWeb) {
+      ClipboardService.instance.startListening(
+        onSurveyIdDetected: (surveyId) {
+          // 确保在主线程中显示Toast
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final context = _navigatorKey.currentContext;
+            if (context != null && mounted) {
+              ClipboardService.showSurveyToast(
+                context,
+                surveyId,
+                () => _navigateToPublicSurvey(surveyId),
+              );
+            }
+          });
+        },
+      );
+    }
+  }
+
+  /// 导航到公开问卷页面
+  void _navigateToPublicSurvey(String surveyId) {
+    final navigatorState = _navigatorKey.currentState;
+    if (navigatorState != null) {
+      // 在Web平台直接使用MaterialPageRoute避免URL历史记录问题
+      if (kIsWeb) {
+        navigatorState.push(
+          MaterialPageRoute(
+            builder: (context) => PublicSurveyPage(surveyUID: surveyId),
+            settings: RouteSettings(name: '/public/survey/$surveyId'),
+          ),
+        );
+      } else {
+        navigatorState.pushNamed('/public/survey/$surveyId');
       }
     }
   }
