@@ -5,6 +5,7 @@ import 'package:layout/layout.dart';
 import '../services/api_service.dart';
 import 'submission_detail_page.dart';
 import '../main.dart' show isDesktop;
+import '../widgets/top_safe_spacer.dart';
 
 class HomeHistoryContent extends StatefulWidget {
   final ApiService apiService;
@@ -94,8 +95,11 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final value = PageStorage.maybeOf(context)?.readState(context) ?? 0;
-    _paginationController.page = value;
+    // 只在首次构建时从PageStorage读取状态
+    if (_items.isEmpty && !_loading) {
+      final value = PageStorage.maybeOf(context)?.readState(context) ?? 0;
+      _paginationController.page = value;
+    }
   }
 
   void _handlePageChange(int page) {
@@ -115,110 +119,387 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     }
   }
 
-  String _statusText(int s) {
-    switch (s) {
-      case 0: return '未发布';
-      case 1: return '发布中';
-      case 2: return '已完结';
-      default: return '未知状态';
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    final EdgeInsets outerPadding = LayoutValue(
-      xs: const EdgeInsets.all(16),
-      sm: const EdgeInsets.all(20),
-      md: const EdgeInsets.all(24),
-      lg: const EdgeInsets.all(30),
-    ).resolve(context);
-
+    Theme.of(context);
+    
     return Column(
       children: [
+        const TopSafeSpacer(desktop: 20, web: 16, mobile: 8),
         Expanded(
           child: SingleChildScrollView(
             child: Padding(
-              padding: outerPadding,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('提交记录', style: Theme.of(context).textTheme.headlineMedium),
-                  SizedBox(height: LayoutValue(xs: 16.0, sm: 20.0, md: 24.0, lg: 28.0).resolve(context)),
+                  _buildHeader(context),
+                  const SizedBox(height: 24),
                   _buildFilters(context),
-                  const SizedBox(height: 12),
-                  _buildListCard(context),
+                  const SizedBox(height: 32),
+                  _buildTimelineContent(context),
                 ],
               ),
             ),
           ),
         ),
-        _buildFPagination(context),
+        _buildPagination(context),
       ],
     );
   }
 
-  Widget _buildFilters(BuildContext context) {
-    return _glass(
-      context,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              crossAxisAlignment: WrapCrossAlignment.center,
+  Widget _buildHeader(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: isDark 
+          ? Colors.white.withValues(alpha: 0.05)
+          : Colors.white.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark 
+            ? Colors.white.withValues(alpha: 0.1)
+            : Colors.black.withValues(alpha: 0.1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Icon(
+            FIcons.clock,
+            color: theme.colorScheme.primary,
+            size: 24,
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(
-                  width: isDesktop ? 320 : 260,
-                  child: FTextFormField(
-                    controller: _searchController,
-                    label: const Text('问卷名称关键字'),
-                    hint: '输入名称搜索',
-                    onChange: _onSearchChanged,
+                Text(
+                  '提交记录',
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black87,
                   ),
                 ),
-                SizedBox(
-                  width: isDesktop ? 220 : 200,
-                  child: FSelect<int>(
-                    controller: _typeSelectController,
-                    label: const Text('问卷类型'),
-                    hint: _selectedType == null ? '全部类型' : _typeText(_selectedType!),
-                    format: (v) => _typeText(v),
-                    onChange: (v) {
-                      setState(() => _selectedType = v);
-                      _fetch(resetPage: true);
-                    },
-                    children: [
-                      FSelectItem('普通问卷', 0),
-                      FSelectItem('限时问卷', 1),
-                      FSelectItem('限次问卷', 2),
-                      FSelectItem('自选风格', 3),
-                    ],
+                const SizedBox(height: 4),
+                Text(
+                  '查看所有问卷提交的历史记录和详细信息',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: isDark ? Colors.white70 : Colors.black54,
                   ),
                 ),
-                Row(
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilters(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark 
+          ? Colors.white.withValues(alpha: 0.05)
+          : Colors.white.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark 
+            ? Colors.white.withValues(alpha: 0.1)
+            : Colors.black.withValues(alpha: 0.1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.filter_list,
+                size: 20,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '筛选条件',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 16,
+            runSpacing: 16,
+            crossAxisAlignment: WrapCrossAlignment.end,
+            children: [
+              SizedBox(
+                width: isDesktop ? 300 : 250,
+                child: FTextFormField(
+                  controller: _searchController,
+                  label: const Text('搜索问卷'),
+                  hint: '输入问卷名称关键字',
+                  onChange: _onSearchChanged,
+                ),
+              ),
+              SizedBox(
+                width: isDesktop ? 200 : 180,
+                child: FSelect<int>(
+                  controller: _typeSelectController,
+                  label: const Text('问卷类型'),
+                  hint: _selectedType == null ? '全部类型' : _typeText(_selectedType!),
+                  format: (v) => _typeText(v),
+                  onChange: (v) {
+                    setState(() => _selectedType = v);
+                    _fetch(resetPage: true);
+                  },
+                  children: [
+                    FSelectItem('普通问卷', 0),
+                    FSelectItem('限时问卷', 1),
+                    FSelectItem('限次问卷', 2),
+                    FSelectItem('自选风格', 3),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     FButton(
                       onPress: () => _fetch(resetPage: true),
                       child: const Text('搜索'),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 12),
                     FButton(
                       style: FButtonStyle.ghost,
                       onPress: () {
+                        _searchController.clear();
                         setState(() {
                           _selectedType = null;
-                          // 尝试清空选择器的值（若组件支持）
                           try { _typeSelectController.value = null; } catch (_) {}
                         });
                         _fetch(resetPage: true);
                       },
-                      child: const Text('重置筛选'),
+                      child: const Text('重置'),
                     ),
                   ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimelineContent(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    if (_loading) {
+      return Container(
+        padding: const EdgeInsets.all(48),
+        decoration: BoxDecoration(
+          color: isDark 
+            ? Colors.white.withValues(alpha: 0.05)
+            : Colors.white.withValues(alpha: 0.7),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark 
+              ? Colors.white.withValues(alpha: 0.1)
+              : Colors.black.withValues(alpha: 0.1),
+          ),
+        ),
+        child: Center(
+          child: Column(
+            children: [
+              CircularProgressIndicator(
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '加载中...',
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.black54,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    if (_items.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(48),
+        decoration: BoxDecoration(
+          color: isDark 
+            ? Colors.white.withValues(alpha: 0.05)
+            : Colors.white.withValues(alpha: 0.7),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark 
+              ? Colors.white.withValues(alpha: 0.1)
+              : Colors.black.withValues(alpha: 0.1),
+          ),
+        ),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(
+                FIcons.fileText,
+                size: 48,
+                color: isDark ? Colors.white30 : Colors.black26,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '暂无提交记录',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                  color: isDark ? Colors.white70 : Colors.black54,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '尝试调整筛选条件或创建新的问卷',
+                style: TextStyle(
+                  color: isDark ? Colors.white.withValues(alpha: 0.5) : Colors.black38,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    return Column(
+      children: _items.asMap().entries.map((entry) {
+        final index = entry.key;
+        final item = entry.value;
+        return _buildTimelineItem(context, item, index);
+      }).toList(),
+    );
+  }
+  
+  Widget _buildTimelineItem(BuildContext context, Map<String, dynamic> item, int index) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final answerId = (item['answerId'] as num?)?.toInt();
+    final surveyType = (item['surveyType'] as num?)?.toInt() ?? 0;
+    final surveyStatus = (item['surveyStatus'] as num?)?.toInt() ?? 0;
+    
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isDark 
+            ? Colors.white.withValues(alpha: 0.05)
+            : Colors.white.withValues(alpha: 0.8),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark 
+              ? Colors.white.withValues(alpha: 0.1)
+              : Colors.black.withValues(alpha: 0.1),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    (item['surveyName'] ?? '') as String,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                ),
+                _buildStatusBadge(surveyStatus, isDark),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 16,
+              runSpacing: 8,
+              children: [
+                _buildInfoChip(
+                  FIcons.tag,
+                  '类型',
+                  _typeText(surveyType),
+                  isDark,
+                ),
+                _buildInfoChip(
+                  FIcons.user,
+                  '创建人',
+                  (item['creator'] ?? '') as String,
+                  isDark,
+                ),
+                _buildInfoChip(
+                  FIcons.clock,
+                  '提交时间',
+                  (item['submitTime'] ?? '') as String,
+                  isDark,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                SizedBox(
+                  width: 100,
+                  height: 40,
+                  child: FButton(
+                    onPress: answerId == null ? null : () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => SubmissionDetailPage(
+                            apiService: widget.apiService,
+                            answerId: answerId,
+                          ),
+                        ),
+                      );
+                    },
+                    child: const Text('查看详细'),
+                  ),
                 ),
               ],
             ),
@@ -228,113 +509,65 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     );
   }
 
-  Widget _buildListCard(BuildContext context) {
-    return _glass(
-      context,
-      child: _loading
-          ? const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          : (_items.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Center(child: Text('暂无提交记录')),
-                )
-              : ListView.separated(
-                  physics: const NeverScrollableScrollPhysics(),
-                  shrinkWrap: true,
-                  itemCount: _items.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final it = _items[index];
-                    final answerId = (it['answerId'] as num?)?.toInt();
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 18,
-                            child: Text(((it['surveyName'] ?? '?') as String).characters.first),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        (it['surveyName'] ?? '') as String,
-                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Wrap(
-                                  spacing: 12,
-                                  runSpacing: 4,
-                                  children: [
-                                    _kv('类型', _typeText((it['surveyType'] as num?)?.toInt() ?? -1)),
-                                    _kv('状态', _statusText((it['surveyStatus'] as num?)?.toInt() ?? -1)),
-                                    _kv('创建人', (it['creator'] ?? '') as String),
-                                    _kv('提交时间', (it['submitTime'] ?? '') as String),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          FButton(
-                            onPress: answerId == null ? null : () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => SubmissionDetailPage(
-                                    apiService: widget.apiService,
-                                    answerId: answerId,
-                                  ),
-                                ),
-                              );
-                            },
-                            child: const Text('查看详细'),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                )),
-    );
-  }
-
-  Widget _buildFPagination(BuildContext context) {
+  Widget _buildPagination(BuildContext context) {
     final totalPages = (_total / _pageSize).ceil();
     if (totalPages <= 1) return const SizedBox.shrink();
     
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final bool isMobile = LayoutValue(xs: true, md: false).resolve(context);
+
     // 确保分页控制器显示正确的当前页
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_paginationController.page != _page - 1) {
         _paginationController.page = (_page - 1).clamp(0, (totalPages - 1).clamp(0, double.infinity).toInt());
       }
     });
-    
-    final bool isMobile = LayoutValue(xs: true, md: false).resolve(context);
 
-    return Padding(
-      padding: EdgeInsets.only(bottom: isMobile ? 46 : 0),
-      child: _glass(
-        context,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
+    return Container(
+      margin: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        bottom: isMobile ? 46 : 20,
+        top: 16,
+      ),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark 
+          ? Colors.white.withValues(alpha: 0.05)
+          : Colors.white.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark 
+            ? Colors.white.withValues(alpha: 0.1)
+            : Colors.black.withValues(alpha: 0.1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: isMobile 
+        ? Center(
+            child: FPagination(
+              controller: _paginationController,
+              onChange: _handlePageChange,
+            ),
+          )
+        : Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '共 $_total 条记录，第 $_page / $totalPages 页',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+              Expanded(
+                child: Text(
+                  '共 $_total 条记录，第 $_page / $totalPages 页',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.white70 : Colors.black54,
+                  ),
                 ),
               ),
               FPagination(
@@ -343,38 +576,92 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
               ),
             ],
           ),
+    );
+  }
+
+
+  Widget _buildStatusBadge(int status, bool isDark) {
+    Color color;
+    String text;
+    
+    switch (status) {
+      case 0:
+        color = Colors.orange;
+        text = '未发布';
+        break;
+      case 1:
+        color = Colors.green;
+        text = '发布中';
+        break;
+      case 2:
+        color = Colors.blue;
+        text = '已完结';
+        break;
+      default:
+        color = Colors.grey;
+        text = '未知';
+    }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: color.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
   }
 
-  Widget _glass(BuildContext context, {required Widget child}) {
-    return Card(
-      elevation: 2,
-      clipBehavior: Clip.antiAlias,
-      color: Theme.of(context).brightness == Brightness.dark
-          ? Colors.white.withValues(alpha: 0.04)
-          : Colors.white.withValues(alpha: 0.8),
-      shape: RoundedRectangleBorder(
+  Widget _buildInfoChip(IconData icon, String label, String value, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDark 
+          ? Colors.white.withValues(alpha: 0.05)
+          : Colors.black.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.06),
-          width: 1,
+        border: Border.all(
+          color: isDark 
+            ? Colors.white.withValues(alpha: 0.1)
+            : Colors.black.withValues(alpha: 0.1),
         ),
       ),
-      child: child,
-    );
-  }
-
-  Widget _kv(String k, String v) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text('$k: ', style: const TextStyle(fontWeight: FontWeight.w600)),
-        Text(v),
-      ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: isDark ? Colors.white60 : Colors.black54,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '$label: ',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white60 : Colors.black54,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? Colors.white.withValues(alpha: 0.8) : Colors.black87,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

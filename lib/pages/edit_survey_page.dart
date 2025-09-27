@@ -3,8 +3,8 @@ import 'package:forui/forui.dart';
 import '../models/survey.dart';
 import '../models/project.dart';
 import '../services/api_service.dart';
-import '../main.dart' show isDesktop;
-import 'dart:async';
+import '../widgets/frosted_glass_background.dart';
+import '../widgets/top_safe_spacer.dart';
 import 'edit_survey_content_page.dart';
 import 'survey_results_page.dart';
 
@@ -687,9 +687,10 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
     return Scaffold(
       body: Stack(
         children: [
+          const FrostedGlassBackground(),
           Column(
             children: [
-              SizedBox(height: isDesktop ? 40 : 20),
+              const TopSafeSpacer(), // Replace SizedBox with TopSafeSpacer
               FHeader.nested(
                 title: const Text('编辑问卷'),
                 prefixes: [

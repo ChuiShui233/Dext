@@ -4,6 +4,7 @@ import '../models/survey.dart';
 import '../models/project.dart';
 import '../services/api_service.dart';
 import '../main.dart' show isDesktop;
+import '../widgets/frosted_glass_background.dart';
 
 class CreateSurveyPage extends StatefulWidget {
   final String token;
@@ -335,6 +336,7 @@ class _CreateSurveyPageState extends State<CreateSurveyPage> with TickerProvider
       return Scaffold(
         body: Stack(
           children: [
+            const FrostedGlassBackground(),
             Column(
               children: [
                 if (isDesktop)
@@ -383,6 +385,7 @@ class _CreateSurveyPageState extends State<CreateSurveyPage> with TickerProvider
     return Scaffold(
       body: Stack(
         children: [
+          const FrostedGlassBackground(),
           Column(
             children: [
               if (isDesktop)

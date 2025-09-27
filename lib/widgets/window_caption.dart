@@ -1,6 +1,7 @@
 import 'package:forui/forui.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:dext/app_navigator.dart';
 
 class WindowCaption extends StatefulWidget {
   const WindowCaption({super.key});
@@ -44,6 +45,51 @@ class _WindowCaptionState extends State<WindowCaption> with WindowListener {
     final iconColor =
         theme.brightness == Brightness.dark ? Colors.white : Colors.black;
 
+    Future<void> showCloseConfirmDialog() async {
+      final navCtx = appNavigatorKey.currentContext;
+      if (navCtx == null) return;
+      await showDialog(
+        context: navCtx,
+        barrierDismissible: true,
+        builder: (ctx) {
+          return Center(
+            child: Material(
+              color: Colors.transparent,
+              child: FDialog(
+                direction: Axis.horizontal,
+                title: const Text('确认操作'),
+                body: const Text('你要关闭应用还是最小化到任务栏？'),
+                actions: [
+                  FButton(
+                    style: FButtonStyle.ghost,
+                    onPress: () => Navigator.of(ctx).pop(),
+                    child: const Text('取消'),
+                  ),
+                  FButton(
+                    style: FButtonStyle.outline,
+                    onPress: () async {
+                      Navigator.of(ctx).pop();
+                      await windowManager.hide();
+                    },
+                    child: const Text('隐藏到托盘'),
+                  ),
+                  FButton(
+                    style: FButtonStyle.outline,
+                    onPress: () async {
+                      Navigator.of(ctx).pop();
+                      // 直接销毁应用，绕过 preventClose 拦截
+                      await windowManager.destroy();
+                    },
+                    child: const Text('关闭应用'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    }
+
     return Container(
       height: 40,
       color: Colors.transparent,
@@ -76,7 +122,7 @@ class _WindowCaptionState extends State<WindowCaption> with WindowListener {
           // 关闭按钮
           _CaptionIconButton(
             icon: FIcons.x,
-            onPressed: () => windowManager.close(),
+            onPressed: showCloseConfirmDialog,
             color: iconColor,
             hoverColor: Colors.red.withValues(alpha: 0.1),
           ),

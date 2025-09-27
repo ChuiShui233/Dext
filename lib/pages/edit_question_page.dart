@@ -1,15 +1,15 @@
 // file: edit_question_page.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:forui/forui.dart';
-import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-
+import '../widgets/top_safe_spacer.dart';
 import '../models/question.dart';
 import '../services/api_service.dart';
-import '../main.dart' show isDesktop;
+import '../widgets/frosted_glass_background.dart';
 import '../components/video_player_widget.dart';
 
 
@@ -590,24 +590,27 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
+      body: Stack(
         children: [
-          SizedBox(height: isDesktop ? 40 : 20),
-          FHeader.nested(
-            title: Text(widget.question == null ? '添加问题' : '编辑问题'),
-            prefixes: [
-              FHeaderAction(
-                icon: const Icon(Icons.close, size: 20),
-                onPress: () => Navigator.pop(context),
+          const FrostedGlassBackground(),
+          Column(
+            children: [
+              const TopSafeSpacer(),
+              FHeader.nested(
+                title: Text(widget.question == null ? '添加问题' : '编辑问题'),
+                prefixes: [
+                  FHeaderAction(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPress: () => Navigator.pop(context),
+                  ),
+                ],
               ),
-            ],
-          ),
-          Expanded(
-            child: Form(
-              key: _formKey,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
+              Expanded(
+                child: Form(
+                  key: _formKey,
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
                   FTextFormField(
                     controller: _titleController,
                     label: const Text('问题标题'),
@@ -644,9 +647,11 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
                     onPress: _isLoading ? null : _saveQuestion,
                     child: _isLoading ? const CircularProgressIndicator() : const Text('保存问题'),
                   ),
-                ],
+                    ],
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ],
       ),

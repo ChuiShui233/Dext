@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../widgets/top_safe_spacer.dart';
 import 'package:flutter/material.dart' as vmath;
 import 'package:forui/forui.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -11,6 +12,7 @@ import '../services/api_service.dart';
 import '../main.dart' show isDesktop;
 import '../utils/date_format.dart';
 import 'dart:ui' as ui;
+import '../widgets/frosted_glass_background.dart';
 
 class SurveyResultsPage extends StatefulWidget {
   final String token;
@@ -1107,46 +1109,28 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
         children: [
           // 背景层
           Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                image: (_desktopBackground != null && _desktopBackground!.isNotEmpty) ||
-                       (_mobileBackground != null && _mobileBackground!.isNotEmpty)
-                    ? DecorationImage(
+            child: (_desktopBackground != null && _desktopBackground!.isNotEmpty) ||
+                   (_mobileBackground != null && _mobileBackground!.isNotEmpty)
+                ? Container(
+                    decoration: BoxDecoration(
+                      image: DecorationImage(
                         image: CachedNetworkImageProvider(
                           isWide ? (_desktopBackground ?? '') : (_mobileBackground ?? ''),
                         ),
                         fit: BoxFit.cover,
                         onError: (_, __) {},
-                      )
-                    : null,
-                gradient: (_desktopBackground == null || _desktopBackground!.isEmpty) &&
-                          (_mobileBackground == null || _mobileBackground!.isEmpty)
-                    ? LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: isDark
-                            ? [
-                                const Color(0xFF0F2027),
-                                const Color(0xFF203A43),
-                                const Color(0xFF2C5364),
-                              ]
-                            : [
-                                Colors.blue[50]!,
-                                Colors.indigo[100]!,
-                              ],
-                      )
-                    : null,
-              ),
-              child: isDark
-                  ? Container(color: Colors.black.withValues(alpha: 0.4))
-                  : null,
-            ),
+                      ),
+                    ),
+                    child: isDark
+                        ? Container(color: Colors.black.withValues(alpha: 0.4))
+                        : null,
+                  )
+                : const FrostedGlassBackground(),
           ),
-
           // 内容层
           Column(
             children: [
-              SizedBox(height: isDesktop ? 40 : 20),
+              const TopSafeSpacer(),
               FHeader.nested(
                 title: Text('${widget.survey.surveyName} - 作答结果'),
                 prefixes: [

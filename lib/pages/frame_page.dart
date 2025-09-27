@@ -571,13 +571,6 @@ Widget _buildSidebarHeader(BuildContext context) {
             handleTabChange(2);
           },
         ),
-        FSidebarItem(
-          icon: const Icon(Icons.help_outline),
-          label: const Text('帮助中心'),
-          onPress: () {
-            _showHelpDialog(context);
-          },
-        ),
       ],
     );
   }
@@ -1016,22 +1009,6 @@ Widget _buildSidebarHeader(BuildContext context) {
       builder: (context) => FDialog(
         title: const Text('数据统计'),
         body: const Text('数据统计功能开发中...'),
-        actions: [
-          FButton(
-            child: const Text('关闭'),
-            onPress: () => Navigator.pop(context),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showHelpDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => FDialog(
-        title: const Text('帮助中心'),
-        body: const Text('帮助中心功能开发中...'),
         actions: [
           FButton(
             child: const Text('关闭'),

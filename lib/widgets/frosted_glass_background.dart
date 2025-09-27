@@ -62,6 +62,8 @@ class FrostedGlassBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Generate a unique seed based on app startup time to ensure different patterns each launch
+    final dynamicSeed = seed ?? DateTime.now().millisecondsSinceEpoch;
 
     return IgnorePointer(
       child: Stack(
@@ -73,7 +75,7 @@ class FrostedGlassBackground extends StatelessWidget {
                 final width = constraints.maxWidth;
                 final height = constraints.maxHeight;
                 final blobs = List.generate(count, (i) {
-                  final localRand = math.Random((seed ?? 0) + i);
+                  final localRand = math.Random(dynamicSeed + i);
 
                   // Random size within a range relative to viewport
                   final w = _randDouble(localRand, 0.35, 0.65) * math.min(width, height);
@@ -83,36 +85,62 @@ class FrostedGlassBackground extends StatelessWidget {
                   final left = _randDouble(localRand, -0.2, 0.8) * width;
                   final top = _randDouble(localRand, -0.2, 0.8) * height;
 
-                  // Pick two colors to make a gradient
+                  // Pick multiple colors for more complex gradients
                   final c1 = palette[localRand.nextInt(palette.length)];
                   final c2 = palette[localRand.nextInt(palette.length)];
+                  final c3 = palette[localRand.nextInt(palette.length)];
 
-                  // Random rotation
-                  final rot = _randDouble(localRand, -math.pi, math.pi);
+                  // Random rotation with more variety
+                  final rot = _randDouble(localRand, -math.pi * 2, math.pi * 2);
 
-                  // Random polygon points
+                  // Random polygon points with more complexity
                   final pts = _randomPolygon(localRand);
 
-                  final durationMs = 6000 + localRand.nextInt(8000);
+                  // Varied animation duration for more organic feel
+                  final durationMs = 4000 + localRand.nextInt(12000);
+
+                  // Simplified gradient to avoid assertion errors
+                  final gradientType = localRand.nextInt(2);
+                  Gradient gradient;
+                  
+                  switch (gradientType) {
+                    case 0:
+                      // Linear gradient with safe directions
+                      gradient = LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          c1.withValues(alpha: blobOpacity),
+                          c2.withValues(alpha: blobOpacity * 0.8),
+                          c3.withValues(alpha: blobOpacity * 0.6),
+                        ],
+                        stops: const [0.0, 0.5, 1.0],
+                      );
+                      break;
+                    default:
+                      // Radial gradient with safe parameters
+                      gradient = RadialGradient(
+                        center: Alignment.center,
+                        radius: 0.8,
+                        colors: [
+                          c1.withValues(alpha: blobOpacity),
+                          c2.withValues(alpha: blobOpacity * 0.7),
+                        ],
+                        stops: const [0.0, 1.0],
+                      );
+                  }
 
                   final child = _PolygonBlob(
                     width: w,
                     height: h,
                     rotation: rot,
                     points: pts,
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        c1.withValues(alpha: blobOpacity),
-                        c2.withValues(alpha: blobOpacity * 0.9),
-                      ],
-                    ),
+                    gradient: gradient,
                     animated: animated,
                     durationMs: durationMs,
                     initialOffset: Offset(
-                      _randDouble(localRand, -0.25, 0.25) * w,
-                      _randDouble(localRand, -0.25, 0.25) * h,
+                      _randDouble(localRand, -0.4, 0.4) * w,
+                      _randDouble(localRand, -0.4, 0.4) * h,
                     ),
                   );
 
@@ -160,10 +188,22 @@ class FrostedGlassBackground extends StatelessWidget {
 
   static double _randDouble(math.Random r, double min, double max) => min + r.nextDouble() * (max - min);
 
+
   static List<Offset> _randomPolygon(math.Random r) {
-    // 5~7 vertices polygon around unit square, similar to CSS clip-path polygon randomness
-    final count = 5 + r.nextInt(3);
-    return List.generate(count, (_) => Offset(r.nextDouble(), r.nextDouble()));
+    // Simple 5-6 vertices polygon to avoid rendering issues
+    final count = 5 + r.nextInt(2);
+    final points = <Offset>[];
+    
+    // Generate simple, safe polygon points
+    for (int i = 0; i < count; i++) {
+      final angle = (i / count) * 2 * math.pi;
+      final radius = _randDouble(r, 0.4, 0.7);
+      final x = 0.5 + radius * math.cos(angle) * 0.4;
+      final y = 0.5 + radius * math.sin(angle) * 0.4;
+      points.add(Offset(x.clamp(0.1, 0.9), y.clamp(0.1, 0.9)));
+    }
+    
+    return points;
   }
 }
 

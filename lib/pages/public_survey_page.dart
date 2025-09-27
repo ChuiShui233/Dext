@@ -11,6 +11,7 @@ import 'public_access_page.dart';
 import '../components/glass_card.dart';
 import '../widgets/question_display_widget.dart';
 import 'fullscreen_media_viewer.dart';
+import '../widgets/frosted_glass_background.dart';
 
 class PublicSurveyPage extends StatefulWidget {
   final String surveyUID;
@@ -326,35 +327,23 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
         children: [
           // 背景层
           Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                image: (_desktopBackground != null && _desktopBackground!.isNotEmpty) ||
-                       (_mobileBackground != null && _mobileBackground!.isNotEmpty)
-                    ? DecorationImage(
+            child: (_desktopBackground != null && _desktopBackground!.isNotEmpty) ||
+                   (_mobileBackground != null && _mobileBackground!.isNotEmpty)
+                ? Container(
+                    decoration: BoxDecoration(
+                      image: DecorationImage(
                         image: NetworkImage(isWide
                             ? (_desktopBackground ?? '')
                             : (_mobileBackground ?? '')),
                         fit: BoxFit.cover,
                         onError: (_, __) {},
-                      )
-                    : null,
-                gradient: (_desktopBackground == null || _desktopBackground!.isEmpty) &&
-                          (_mobileBackground == null || _mobileBackground!.isEmpty)
-                    ? LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: isDark
-                            ? [Colors.grey[900]!, Colors.grey[800]!]
-                            : [Colors.blue[50]!, Colors.indigo[100]!],
-                      )
-                    : null,
-              ),
-              child: isDark
-                  ? Container(
-                      color: Colors.black.withValues(alpha: 0.4),
-                    )
-                  : null,
-            ),
+                      ),
+                    ),
+                    child: isDark
+                        ? Container(color: Colors.black.withValues(alpha: 0.4))
+                        : null,
+                  )
+                : const FrostedGlassBackground(),
           ),
 
           // 内容层

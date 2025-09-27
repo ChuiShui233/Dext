@@ -1,20 +1,20 @@
 // file: edit_survey_content_page.dart
 
 import 'dart:ui';
-
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:forui/forui.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:desktop_drop/desktop_drop.dart';
-
-import '/pages/survey_preview_page.dart';
-import '../models/question.dart';
+import '../widgets/top_safe_spacer.dart';
 import '../models/survey.dart';
+import '../models/question.dart';
 import '../services/api_service.dart';
 import '../main.dart' show isDesktop;
+import '../widgets/frosted_glass_background.dart';
 import 'edit_question_page.dart';
+import 'survey_preview_page.dart';
 
 
 
@@ -356,35 +356,38 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
+      body: Stack(
         children: [
-          SizedBox(height: isDesktop ? 40 : 20),
-          FHeader.nested(
-            title: const Text('编辑问卷内容'),
-            prefixes: [
-              FHeaderAction(
-                icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-                onPress: () => Navigator.pop(context),
+          const FrostedGlassBackground(),
+          Column(
+            children: [
+              const TopSafeSpacer(),
+              FHeader.nested(
+                title: const Text('编辑问卷内容'),
+                prefixes: [
+                  FHeaderAction(
+                    icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+                    onPress: () => Navigator.pop(context),
+                  ),
+                ],
+                suffixes: [
+                  FHeaderAction(
+                    icon: const Icon(Icons.visibility, size: 20),
+                    onPress: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => SurveyPreviewPage(
+                            survey: widget.survey,
+                            token: widget.token,
+                            questions: _questions,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
-            ],
-            suffixes: [
-              FHeaderAction(
-                icon: const Icon(Icons.visibility, size: 20),
-                onPress: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => SurveyPreviewPage(
-                        survey: widget.survey,
-                        token: widget.token,
-                        questions: _questions,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -420,13 +423,15 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                       ),
                     ],
                   ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-Widget _buildBackgroundCard() {
+  Widget _buildBackgroundCard() {
   final isCurrentDesktop = _isDesktopPreview;
   final currentImage = isCurrentDesktop ? _desktopBackground : _mobileBackground;
   final isDark = Theme.of(context).brightness == Brightness.dark;

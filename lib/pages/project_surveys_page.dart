@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../widgets/top_safe_spacer.dart';
 import 'package:forui/forui.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
 import '../models/project.dart';
 import '../models/survey.dart';
 import '../services/api_service.dart';
-import '../main.dart' show isDesktop;
 import '../components/survey_actions.dart';
+import '../widgets/frosted_glass_background.dart';
+import '../components/glass_card.dart';
 
 class ProjectSurveysPage extends StatefulWidget {
   final String token;
@@ -174,9 +176,10 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
     return Scaffold(
       body: Stack(
         children: [
+          const FrostedGlassBackground(),
           Column(
             children: [
-              SizedBox(height: isDesktop ? 40 : 20),
+              const TopSafeSpacer(),
               FHeader.nested(
                 title: Row(
                   children: [
@@ -251,21 +254,8 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
                               itemCount: _surveys.length,
                               itemBuilder: (context, index) {
                                 final survey = _surveys[index];
-                                return Card(
+                                return GlassCard(
                                   margin: const EdgeInsets.all(8.0),
-                                  elevation: 2,
-                                  color: Theme.of(context).brightness == Brightness.dark 
-                                    ? Colors.transparent
-                                    : Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    side: BorderSide(
-                                      color: Theme.of(context).brightness == Brightness.dark 
-                                        ? Colors.white.withValues(alpha: 0.1)
-                                        : Colors.black.withValues(alpha: 0.1),
-                                      width: 1,
-                                    ),
-                                  ),
                                   child: ListTile(
                                     title: Text(
                                       survey.surveyName,

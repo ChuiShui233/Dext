@@ -143,23 +143,12 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
 
   // ==================== 用户信息卡片 ====================
   Widget _buildUserInfoCard(ThemeData theme) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: theme.cardColor.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Stack(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Center(
+          child: Stack(
             children: [
               Container(
                 width: 100,
@@ -220,25 +209,25 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            _currentUser?.username ?? '用户名示例',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface,
-            ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          _currentUser?.username ?? '用户名示例',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface,
           ),
-          const SizedBox(height: 4),
-          Text(
-            _currentUser?.email ?? 'user@example.com',
-            style: TextStyle(
-              fontSize: 14,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          _currentUser?.email ?? 'user@example.com',
+          style: TextStyle(
+            fontSize: 14,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

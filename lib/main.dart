@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:ui';
+import 'package:dext/app_navigator.dart';
 import 'package:dext/models/user.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, PlatformDispatcher, kDebugMode;
@@ -115,20 +116,56 @@ Future<void> _initDesktopWindowAndTray() async {
 
 void main() async {
   if (kDebugMode) {
+    // 设置日志过滤器
+    debugPrint = (String? message, {int? wrapWidth}) {
+      if (message != null) {
+        // 过滤AccessibilityBridge相关日志
+        if (message.contains('AccessibilityBridge') ||
+            message.contains('Scroll index is out of bounds') ||
+            message.contains('E/AccessibilityBridge')) {
+          return;
+        }
+        // 过滤网络连接错误
+        if (message.contains('SocketException') ||
+            message.contains('Connection refused')) {
+          return;
+        }
+      }
+
+    };
     
     FlutterError.onError = (FlutterErrorDetails details) {
+      // 过滤网络连接错误
       if (details.exception.toString().contains('SocketException') ||
           details.exception.toString().contains('Connection refused')) {
         return;
       }
+      
+      // 过滤AccessibilityBridge错误日志
+      final errorMessage = details.exception.toString();
+      if (errorMessage.contains('AccessibilityBridge') ||
+          errorMessage.contains('Scroll index is out of bounds')) {
+        return;
+      }
+      
       FlutterError.presentError(details);
     };
     
     PlatformDispatcher.instance.onError = (error, stack) {
-      if (error.toString().contains('SocketException') ||
-          error.toString().contains('Connection refused')) {
+      final errorString = error.toString();
+      
+      // 过滤网络连接错误
+      if (errorString.contains('SocketException') ||
+          errorString.contains('Connection refused')) {
         return true;
       }
+      
+      // 过滤AccessibilityBridge错误日志
+      if (errorString.contains('AccessibilityBridge') ||
+          errorString.contains('Scroll index is out of bounds')) {
+        return true;
+      }
+      
       return false;
     };
   }
@@ -319,7 +356,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
           child: FTheme(
             data: _isDark ? zincDark : zincLight, // Forui 主题
             child: MaterialApp(
-              navigatorKey: _navigatorKey,
+              navigatorKey: appNavigatorKey,
               title: '问卷调查系统',
               theme: lightTheme,
               darkTheme: darkTheme,

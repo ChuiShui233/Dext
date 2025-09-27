@@ -3,13 +3,15 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import '../widgets/top_safe_spacer.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
 import '../models/project.dart';
 import '../services/api_service.dart';
-import '../main.dart' show isDesktop;
 import 'project_surveys_page.dart';
 import '../components/multi_select_actions.dart';
+import '../components/glass_card.dart';
 import 'frame_page.dart'; // 确保已导入
+import '../widgets/frosted_glass_background.dart';
 
 class ProjectPage extends StatefulWidget {
   final String token;
@@ -596,9 +598,10 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
       child: Scaffold(
         body: Stack(
           children: [
+            const FrostedGlassBackground(),
             Column(
               children: [
-                SizedBox(height: isDesktop ? 40 : 20),
+                const TopSafeSpacer(),
                 FHeader.nested(
                   title: Row(
                     children: [
@@ -747,131 +750,127 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                                           final project = _projects[index];
                                           final isSelected = _selectedProjectIds.contains(project.id);
                                   
-                                                Widget cardContent = Card(
-                                                  margin: const EdgeInsets.all(8.0),
-                                                  elevation: 2,
+                                          final glassCard = GlassCard(
+                                            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(12),
+                                              side: BorderSide(
+                                                color: isSelected 
+                                                  ? Theme.of(context).colorScheme.primary
+                                                  : Colors.transparent,
+                                                width: isSelected ? 2 : 0,
+                                              ),
+                                            ),
+                                            child: ListTile(
+                                              title: Text(
+                                                project.projectName,
+                                                style: TextStyle(
                                                   color: Theme.of(context).brightness == Brightness.dark 
-                                                    ? Colors.transparent
-                                                    : Colors.white,
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius: BorderRadius.circular(12),
-                                                    side: BorderSide(
+                                                    ? Colors.white 
+                                                    : Colors.black87,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                              subtitle: Text(
+                                                project.projectDescription,
+                                                style: TextStyle(
+                                                  color: Theme.of(context).brightness == Brightness.dark 
+                                                    ? Colors.white70 
+                                                    : Colors.black54,
+                                                ),
+                                              ),
+                                              trailing: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  FButton(
+                                                    onPress: () => _openProjectSurveys(project),
+                                                    child: Icon(
+                                                      Icons.assignment_outlined,
+                                                      size: 20,
                                                       color: Theme.of(context).brightness == Brightness.dark 
-                                                        ? Colors.white.withValues(alpha: 0.1)
-                                                        : Colors.black.withValues(alpha: 0.1),
-                                                      width: 1,
+                                                        ? Colors.black.withValues(alpha: 0.6)
+                                                        : Colors.white.withValues(alpha: 0.7),
                                                     ),
                                                   ),
-                                                  child: ListTile(
-                                                    title: Text(
-                                                      project.projectName,
-                                                      style: TextStyle(
-                                                        color: Theme.of(context).brightness == Brightness.dark 
-                                                          ? Colors.white 
-                                                          : Colors.black87,
-                                                        fontWeight: FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                    subtitle: Text(
-                                                      project.projectDescription,
-                                                      style: TextStyle(
-                                                        color: Theme.of(context).brightness == Brightness.dark 
-                                                          ? Colors.white70 
-                                                          : Colors.black54,
-                                                      ),
-                                                    ),
-                                                    trailing: Row(
-                                                      mainAxisSize: MainAxisSize.min,
-                                                      children: [
-                                                        FButton(
-                                                          onPress: () => _openProjectSurveys(project),
-                                                          child: Icon(
-                                                            Icons.assignment_outlined,
-                                                            size: 20,
-                                                            color: Theme.of(context).brightness == Brightness.dark 
-                                                              ? Colors.black.withValues(alpha: 0.6)
-                                                              : Colors.white.withValues(alpha: 0.7),
-                                                          ),
-                                                        ),
-                                                        const SizedBox(width: 8),
-                                                        FButton(
-                                                          onPress: () => _showEditProjectDialog(project),
-                                                          child: Icon(
-                                                            Icons.edit,
-                                                            size: 20,
-                                                            color: Theme.of(context).brightness == Brightness.dark 
-                                                              ? Colors.black.withValues(alpha: 0.6)
-                                                              : Colors.white.withValues(alpha: 0.7),
-                                                          ),
-                                                        ),
-                                                        const SizedBox(width: 8),
-                                                        FButton(
-                                                          onPress: () async {
-                                                            final confirm = await showAdaptiveDialog<bool>(
-                                                              context: context,
-                                                              builder: (context) => FDialog(
-                                                                direction: Axis.horizontal,
-                                                                title: const Text('确认删除'),
-                                                                body: const Text('确定要删除这个项目吗？此操作不可撤销。'),
-                                                                actions: [
-                                                                  FButton(
-                                                                    style: FButtonStyle.outline,
-                                                                    onPress: () => Navigator.of(context).pop(false),
-                                                                    child: const Text('取消'),
-                                                                  ),
-                                                                  FButton(
-                                                                    style: FButtonStyle.destructive,
-                                                                    onPress: () => Navigator.of(context).pop(true),
-                                                                    child: const Text('删除'),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                            );
-
-                                                            if (confirm == true) {
-                                                              try {
-                                                                await _apiService.deleteProject(project.id);
-                                                                WidgetsBinding.instance.addPostFrameCallback((_) {
-                                                                  _refreshController.requestRefresh();
-                                                                });
-                                                              } catch (e) {
-                                                                if (!context.mounted) return;
-                                                                showFToast(
-                                                                  context: context,
-                                                                  alignment:FToastAlignment.bottomRight,
-                                                                  title: const Text('删除失败'),
-                                                                  description: Text('删除项目失败: $e'),
-                                                                );
-                                                              }
-                                                            }
-                                                          },
-                                                          child: Icon(
-                                                            Icons.delete,
-                                                            size: 20,
-                                                            color: Theme.of(context).brightness == Brightness.dark 
-                                                              ? Colors.red.shade300
-                                                              : Colors.red.shade700,
-                                                          ),
-                                                        ),
-                                                      ],
+                                                  const SizedBox(width: 8),
+                                                  FButton(
+                                                    onPress: () => _showEditProjectDialog(project),
+                                                    child: Icon(
+                                                      Icons.edit,
+                                                      size: 20,
+                                                      color: Theme.of(context).brightness == Brightness.dark 
+                                                        ? Colors.black.withValues(alpha: 0.6)
+                                                        : Colors.white.withValues(alpha: 0.7),
                                                     ),
                                                   ),
-                                                );
+                                                  const SizedBox(width: 8),
+                                                  FButton(
+                                                    onPress: () async {
+                                                      final confirm = await showAdaptiveDialog<bool>(
+                                                        context: context,
+                                                        builder: (context) => FDialog(
+                                                          direction: Axis.horizontal,
+                                                          title: const Text('确认删除'),
+                                                          body: const Text('确定要删除这个项目吗？此操作不可撤销。'),
+                                                          actions: [
+                                                            FButton(
+                                                              style: FButtonStyle.outline,
+                                                              onPress: () => Navigator.of(context).pop(false),
+                                                              child: const Text('取消'),
+                                                            ),
+                                                            FButton(
+                                                              style: FButtonStyle.destructive,
+                                                              onPress: () => Navigator.of(context).pop(true),
+                                                              child: const Text('删除'),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      );
 
-                                                // 如果处于多选模式，用MultiSelectItem包装
-                                                if (_isMultiSelectMode) {
-                                                  cardContent = MultiSelectItem(
-                                                    id: project.id,
-                                                    isSelected: isSelected,
-                                                    onSelectionChanged: _onProjectSelectionChanged,
-                                                    child: cardContent,
-                                                  );
-                                                }
-
-                                          return Padding(
-                                            padding: const EdgeInsets.all(8.0),
-                                            child: cardContent,
+                                                      if (confirm == true) {
+                                                        try {
+                                                          await _apiService.deleteProject(project.id);
+                                                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                                                            _refreshController.requestRefresh();
+                                                          });
+                                                        } catch (e) {
+                                                          if (!context.mounted) return;
+                                                          showFToast(
+                                                            context: context,
+                                                            alignment:FToastAlignment.bottomRight,
+                                                            title: const Text('删除失败'),
+                                                            description: Text('删除项目失败: $e'),
+                                                          );
+                                                        }
+                                                      }
+                                                    },
+                                                    child: Icon(
+                                                      Icons.delete,
+                                                      size: 20,
+                                                      color: Theme.of(context).brightness == Brightness.dark 
+                                                        ? Colors.red.shade300
+                                                        : Colors.red.shade700,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              onTap: _isMultiSelectMode 
+                                                ? () => _onProjectSelectionChanged(project.id, !isSelected)
+                                                : () => _openProjectSurveys(project),
+                                            ),
                                           );
+
+                                          // 如果处于多选模式，用MultiSelectItem包装
+                                          if (_isMultiSelectMode) {
+                                            return MultiSelectItem(
+                                              id: project.id,
+                                              isSelected: isSelected,
+                                              onSelectionChanged: _onProjectSelectionChanged,
+                                              child: glassCard,
+                                            );
+                                          }
+
+                                          return glassCard;
                                         },
                                       ),
                                     ),

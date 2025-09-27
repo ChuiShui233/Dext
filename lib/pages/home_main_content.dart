@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:layout/layout.dart';
 import 'package:flutter_speed_dial/flutter_speed_dial.dart';
+import '../widgets/top_safe_spacer.dart';
 import '../widgets/dashboard_stats_card.dart';
 import '../widgets/dashboard_chart.dart';
 import '../widgets/recent_survey_responses_list.dart';
@@ -45,6 +46,8 @@ class HomeMainContent extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // 仅为移动端添加顶部留白，避免与页面级留白叠加
+                const TopSafeSpacer(desktop: 0, web: 0, mobile: 24),
                 
                 // Dashboard标题
                 Row(
@@ -59,29 +62,29 @@ class HomeMainContent extends StatelessWidget {
                     ),
                     if (!isMobile)
                       Row(
-                        children: [
-                          FButton(
-                            onPress: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const PublicAccessPage(),
-                                ),
-                              );
-                            },
-                            child: const Text('填写问卷'),
-                          ),
+                            children: [
+                              FButton(
+                                onPress: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const PublicAccessPage(),
+                                    ),
+                                  );
+                                },
+                                child: const Text('填写问卷'),
+                              ),
                           const SizedBox(width: 12),
-                          FButton(
-                            onPress: onProjectTap,
-                            child: const Text('管理项目'),
-                          ),
+                              FButton(
+                                onPress: onProjectTap,
+                                child: const Text('管理项目'),
+                              ),
                           const SizedBox(width: 12),
-                          FButton(
-                            onPress: onSurveyTap,
-                            child: const Text('管理问卷'),
-                          ),
-                        ],
+                              FButton(
+                                onPress: onSurveyTap,
+                                child: const Text('管理问卷'),
+                              ),
+                            ],
                       ),
                   ],
                 ),
@@ -230,8 +233,8 @@ class HomeMainContent extends StatelessWidget {
         ),
         if (isMobile)
           Positioned(
-            right: 16,
-            bottom: 46,
+            right: 4,
+            bottom: 62,
             child: Builder(
               builder: (context) {
                 final screenWidth = MediaQuery.of(context).size.width;

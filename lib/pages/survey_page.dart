@@ -1,18 +1,20 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../widgets/top_safe_spacer.dart';
 import 'package:forui/forui.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
 import '../models/survey.dart';
 import '../models/project.dart';
 import '../models/survey_stats.dart';
 import '../services/api_service.dart';
-import '../main.dart' show isDesktop;
 import 'create_survey_page.dart';
 import '../utils/date_format.dart';
 import '../components/survey_actions.dart';
 import '../components/multi_select_actions.dart';
+import '../components/glass_card.dart';
 import 'frame_page.dart'; // 确保已导入
+import '../widgets/frosted_glass_background.dart';
 
 class SurveyPage extends StatefulWidget {
   final String token;
@@ -473,9 +475,10 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
       child: Scaffold(
         body: Stack(
           children: [
+            const FrostedGlassBackground(),
             Column(
               children: [
-                SizedBox(height: isDesktop ? 40 : 20),
+                const TopSafeSpacer(),
                 FHeader.nested(
                   title: Row(
                     children: [
@@ -753,7 +756,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                   final isExpired = deadlineDt != null && !now.isBefore(deadlineDt);
                                   final remain = (deadlineDt != null && now.isBefore(deadlineDt)) ? deadlineDt.difference(now) : Duration.zero;
                                   
-                                  Widget cardContent = FCard(
+                                  Widget cardContent = GlassCard(
                                     child: Theme(
                                       data: Theme.of(context).copyWith(
                                         dividerColor: Colors.transparent,

@@ -6,6 +6,7 @@ import '../models/question.dart';
 import '../services/api_service.dart';
 import '../main.dart' show isDesktop;
 import 'fullscreen_media_viewer.dart';
+import '../widgets/frosted_glass_background.dart';
 
 class SubmissionDetailPage extends StatefulWidget {
   final ApiService apiService;
@@ -74,25 +75,10 @@ class _SubmissionDetailPageState extends State<SubmissionDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       body: Stack(
         children: [
-          // 背景（轻量渐变，避免重图）
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: isDark
-                      ? [Colors.grey[900]!, Colors.grey[800]!]
-                      : [Colors.blue[50]!, Colors.indigo[100]!],
-                ),
-              ),
-              child: isDark ? Container(color: Colors.black.withValues(alpha: 0.35)) : null,
-            ),
-          ),
+          const FrostedGlassBackground(),
           Column(
             children: [
               SizedBox(height: isDesktop ? 38 : 24),

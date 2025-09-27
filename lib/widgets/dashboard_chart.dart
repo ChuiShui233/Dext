@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:forui/forui.dart';
 
 typedef FetchTrend = Future<Map<String, dynamic>> Function(String range);
 
@@ -16,6 +15,7 @@ class _DashboardChartState extends State<DashboardChart> {
   bool _loading = false;
   List<String> _labels = const [];
   List<int> _counts = const [];
+  double _prevTotalForRange = 0;
 
   @override
   void initState() {
@@ -27,10 +27,13 @@ class _DashboardChartState extends State<DashboardChart> {
     if (widget.fetchTrend == null) return; // 兼容占位
     setState(() => _loading = true);
     try {
+      // 记录加载前的总数，供动画起点使用
+      final oldTotal = _counts.isNotEmpty ? _counts.fold<int>(0, (a, b) => a + b) : 0;
       final data = await widget.fetchTrend!.call(_range);
       final labels = (data['labels'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [];
       final counts = (data['counts'] as List<dynamic>?)?.map((e) => (e as num).toInt()).toList() ?? [];
       setState(() {
+        _prevTotalForRange = oldTotal.toDouble();
         _labels = labels;
         _counts = counts;
       });
@@ -43,7 +46,12 @@ class _DashboardChartState extends State<DashboardChart> {
 
   void _setRange(String r) {
     if (_range == r) return;
-    setState(() => _range = r);
+    // 切换范围前，记录当前合计作为动画起点
+    final oldTotal = _counts.isNotEmpty ? _counts.fold<int>(0, (a, b) => a + b) : 0;
+    setState(() {
+      _prevTotalForRange = oldTotal.toDouble();
+      _range = r;
+    });
     _loadTrend();
   }
 
@@ -78,9 +86,9 @@ class _DashboardChartState extends State<DashboardChart> {
           }).toList()
         : const <String>[];
 
-    final total7d = (_range == '7d' && hasData)
-        ? _counts.fold<int>(0, (a, b) => a + b)
-        : null;
+    // 按范围展示合计：7日显示“近7日合计”，按月显示“当月合计”
+    final int? totalForRange = hasData ? _counts.fold<int>(0, (a, b) => a + b) : null;
+    final String totalLabel = _range == 'month' ? '当月合计' : '近7日合计';
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -105,45 +113,85 @@ class _DashboardChartState extends State<DashboardChart> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Text(
-                        '答卷提交趋势',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      ),
-                      if (total7d != null) ...[
-                        const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          '近7日合计 $total7d',
+                          '答卷提交趋势',
                           style: TextStyle(
-                            fontSize: 13,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.70),
-                            fontWeight: FontWeight.w500,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface,
                           ),
                         ),
+                        if (totalForRange != null) ...[
+                          const SizedBox(height: 6),
+                          TweenAnimationBuilder<double>(
+                            tween: Tween<double>(
+                              begin: _prevTotalForRange,
+                              end: totalForRange.toDouble(),
+                            ),
+                            duration: const Duration(milliseconds: 600),
+                            curve: Curves.easeOutCubic,
+                            builder: (context, value, child) {
+                              return Text(
+                                '$totalLabel ${value.round()}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.70),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                  Row(
-                    children: [
-                      FButton(
-                        style: _range == '7d' ? FButtonStyle.outline : FButtonStyle.ghost,
-                        onPress: () => _setRange('7d'),
-                        child: const Text('近7日'),
+                  Flexible(
+                    child: Align(
+                      alignment: Alignment.topRight,
+                      child: SegmentedButton<String>(
+                        showSelectedIcon: false,
+                        style: ButtonStyle(
+                          visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
+                          padding: WidgetStatePropertyAll(
+                            const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          ),
+                          foregroundColor: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.selected)) {
+                              return Theme.of(context).colorScheme.onPrimaryContainer;
+                            }
+                            return Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7);
+                          }),
+                          backgroundColor: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.selected)) {
+                              return Theme.of(context).colorScheme.primaryContainer;
+                            }
+                            return null;
+                          }),
+                          side: WidgetStateProperty.resolveWith((states) {
+                            final color = Theme.of(context).colorScheme.outline.withValues(
+                              alpha: states.contains(WidgetState.selected) ? 0.0 : 0.3,
+                            );
+                            return BorderSide(color: color, width: 1);
+                          }),
+                        ),
+                        segments: const <ButtonSegment<String>>[
+                          ButtonSegment<String>(value: '7d', label: Text('7日')),
+                          ButtonSegment<String>(value: 'month', label: Text('月')),
+                        ],
+                        selected: <String>{_range},
+                        onSelectionChanged: (selection) {
+                          if (selection.isNotEmpty) {
+                            _setRange(selection.first);
+                          }
+                        },
                       ),
-                      const SizedBox(width: 8),
-                      FButton(
-                        style: _range == 'month' ? FButtonStyle.outline : FButtonStyle.ghost,
-                        onPress: () => _setRange('month'),
-                        child: const Text('按月'),
-                      ),
-                    ],
+                    ),
                   ),
                 ],
               ),

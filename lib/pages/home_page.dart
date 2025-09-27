@@ -122,17 +122,13 @@ class HomePage extends StatelessWidget {
             ) : null,
             body: LayoutBuilder(
               builder: (context, constraints) {
-                return SafeArea(
-                  top: isMobileOrTablet, // 只在移动端添加顶部安全区域
-                  bottom: false, // 不添加底部安全区域，因为有底部导航栏
-                  child: Padding(
-                    padding: padding,
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
-                      switchInCurve: Curves.fastOutSlowIn,
-                      switchOutCurve: Curves.fastOutSlowIn.flipped,
-                      child: contents[currentIndex],
-                    ),
+                return Padding(
+                  padding: padding,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    switchInCurve: Curves.fastOutSlowIn,
+                    switchOutCurve: Curves.fastOutSlowIn.flipped,
+                    child: contents[currentIndex],
                   ),
                 );
               },

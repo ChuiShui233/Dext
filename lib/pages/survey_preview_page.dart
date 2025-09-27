@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import '../widgets/top_safe_spacer.dart';
 import 'package:forui/forui.dart';
 import '../models/survey.dart';
 import '../models/question.dart';
@@ -8,6 +9,7 @@ import '../controllers/survey_runtime.dart';
 import '../components/glass_card.dart';
 import '../widgets/question_display_widget.dart';
 import 'fullscreen_media_viewer.dart';
+import '../widgets/frosted_glass_background.dart';
 
 class SurveyPreviewPage extends StatefulWidget {
   final Survey survey;
@@ -77,28 +79,31 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
         children: [
           // 背景层
           Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                image: DecorationImage(
-                  image: NetworkImage(isWide
-                      ? (_desktopBackground ?? '')
-                      : (_mobileBackground ?? '')),
-                  fit: BoxFit.cover,
-                  onError: (_, __) {},
-                ),
-              ),
-              child: isDark
-                  ? Container(
-                      color: Colors.black.withValues(alpha: 0.4),
-                    )
-                  : null,
-            ),
+            child: (_desktopBackground != null && _desktopBackground!.isNotEmpty) ||
+                   (_mobileBackground != null && _mobileBackground!.isNotEmpty)
+                ? Container(
+                    decoration: BoxDecoration(
+                      image: DecorationImage(
+                        image: NetworkImage(isWide
+                            ? (_desktopBackground ?? '')
+                            : (_mobileBackground ?? '')),
+                        fit: BoxFit.cover,
+                        onError: (_, __) {},
+                      ),
+                    ),
+                    child: isDark
+                        ? Container(
+                            color: Colors.black.withValues(alpha: 0.4),
+                          )
+                        : null,
+                  )
+                : const FrostedGlassBackground(),
           ),
 
           // 内容层
           Column(
             children: [
-              const SizedBox(height: 40),
+              const TopSafeSpacer(),
               FHeader.nested(
                 title: Row(
                   mainAxisAlignment: MainAxisAlignment.center,

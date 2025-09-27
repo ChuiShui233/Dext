@@ -2,10 +2,11 @@ import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../widgets/top_safe_spacer.dart';
 import 'package:flutter/services.dart';
-import '../main.dart' show isDesktop;
 import 'package:forui/forui.dart';
 import 'public_survey_page.dart';
+import '../widgets/frosted_glass_background.dart';
 
 class PublicAccessPage extends StatefulWidget {
   const PublicAccessPage({super.key});
@@ -106,33 +107,11 @@ class _PublicAccessPageState extends State<PublicAccessPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // 渐变背景
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: isDark
-                      // 暗色主题使用更有层次的冷色系渐变
-                      ? [
-                          const Color(0xFF0F2027), // 深青蓝
-                          const Color(0xFF203A43), // 青蓝
-                          const Color(0xFF2C5364), // 蓝灰
-                        ]
-                      : [
-                          Colors.blue[50]!,
-                          Colors.indigo[100]!,
-                        ],
-                ),
-              ),
-            ),
-          ),
-          
+          const FrostedGlassBackground(),
           // 内容层
           Column(
             children: [
-              SizedBox(height: isDesktop ? 40 : 20),
+              const TopSafeSpacer(),
               FHeader.nested(
                 title: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,

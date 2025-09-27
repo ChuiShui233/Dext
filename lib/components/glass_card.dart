@@ -26,8 +26,13 @@ class GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color bg = backgroundColor ?? CupertinoColors.white.withAlpha(51); // ~20%
-    final Color bd = borderColor ?? CupertinoColors.white.withAlpha(51);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color bg = backgroundColor ?? (isDark 
+        ? Colors.black.withAlpha(102) // ~40% 深色模式使用更深的黑色
+        : CupertinoColors.white.withAlpha(51)); // ~20% 浅色模式保持原样
+    final Color bd = borderColor ?? (isDark
+        ? Colors.white.withAlpha(38) // ~15% 深色模式边框稍微淡一些
+        : CupertinoColors.white.withAlpha(51));
     final ShapeBorder effectiveShape = shape ?? RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(borderRadius),
     );
