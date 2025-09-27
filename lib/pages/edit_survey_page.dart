@@ -204,6 +204,7 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _totalTimesController = TextEditingController();
+  final _perUserLimitController = TextEditingController();
   
   // 为每个 FSelect 创建唯一的 key
   final _projectSelectKey = GlobalKey();
@@ -237,9 +238,11 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
     _selectedProjectId = widget.survey.projectId;
     _selectedType = widget.survey.surveyType;
     _selectedStatus = widget.survey.surveyStatus;
-    if (widget.survey.surveyType == 2) {
-      _totalTimesController.text = widget.survey.totalTimes.toString();
-    }
+    // 初始化次数限制（均为可选）
+    _totalTimesController.text = widget.survey.totalTimes > 0 ? widget.survey.totalTimes.toString() : '';
+    _perUserLimitController.text = (widget.survey.perUserLimit != null && widget.survey.perUserLimit! > 0)
+        ? widget.survey.perUserLimit!.toString()
+        : '';
     
     // 初始化截止时间
     if (widget.survey.surveyType == 1 && widget.survey.deadline != null) {
@@ -278,6 +281,7 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
     _titleController.dispose();
     _descriptionController.dispose();
     _totalTimesController.dispose();
+    _perUserLimitController.dispose();
     _projectSelectController.dispose();
     _typeSelectController.dispose();
     _statusSelectController.dispose();
@@ -352,6 +356,16 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
 
   Future<void> _showTimeLimitDialog() async {
     if (!mounted) return;
+    // 已完结时不允许修改截止时间
+    if (_selectedStatus == 2) {
+      showFToast(
+        context: context,
+        alignment:FToastAlignment.bottomRight,
+        title: const Text('已完结'),
+        description: const Text('问卷已完结，截止时间不可修改'),
+      );
+      return;
+    }
     
     int tempDays = _selectedDays;
     int tempHours = _selectedHours;
@@ -562,30 +576,7 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
       return;
     }
 
-    if (_selectedType == 2 && (_totalTimesController.text.isEmpty || int.tryParse(_totalTimesController.text) == null)) {
-      if (!mounted) return;
-      showFToast(
-        context: context,
-        alignment:FToastAlignment.bottomRight,
-        title: const Text('提示'),
-        description: const Text('请输入有效的提交次数限制'),
-        suffixBuilder: (context, entry, _) => IntrinsicHeight(
-          child: FButton(
-            style: context.theme.buttonStyles.primary.copyWith(
-              contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                textStyle: FWidgetStateMap.all(
-                  context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                ),
-              ),
-            ),
-            onPress: entry.dismiss,
-            child: const Text('关闭'),
-          ),
-        ),
-      );
-      return;
-    }
+    // 次数限制均为可选，留空表示不限制
 
     if (_selectedType == 1 && (_selectedDays == 0 && _selectedHours == 0 && _selectedMinutes == 0)) {
       if (!mounted) return;
@@ -618,13 +609,22 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
     try {
       final apiService = ApiService(authToken: widget.token);
       final now = DateTime.now();
-      final deadline = _selectedType == 1 
-          ? now.add(Duration(
-              days: _selectedDays,
-              hours: _selectedHours,
-              minutes: _selectedMinutes,
-            )).toIso8601String()
-          : null;
+      // 若问卷已完结，则禁止修改 deadline，沿用原值；否则按选择计算
+      final String? deadline = (_selectedStatus == 2)
+          ? widget.survey.deadline
+          : (_selectedType == 1 
+              ? now.add(Duration(
+                  days: _selectedDays,
+                  hours: _selectedHours,
+                  minutes: _selectedMinutes,
+                )).toIso8601String()
+              : null);
+
+      // 解析可选提交上限（留空或0都视为不限制）
+      final String totalTimesRaw = _totalTimesController.text.trim();
+      final int totalTimes = totalTimesRaw.isEmpty ? 0 : (int.tryParse(totalTimesRaw) ?? 0);
+      final String perUserRaw = _perUserLimitController.text.trim();
+      final int? perUserLimit = perUserRaw.isEmpty ? null : int.tryParse(perUserRaw);
 
       final survey = widget.survey.copyWith(
         surveyName: _titleController.text,
@@ -632,7 +632,8 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
         surveyType: _selectedType!,
         surveyStatus: _selectedStatus!,
         projectId: _selectedProjectId!,
-        totalTimes: _selectedType == 2 ? int.parse(_totalTimesController.text) : 0,
+        totalTimes: totalTimes,
+        perUserLimit: perUserLimit,
         deadline: deadline,
         updateTime: now.toIso8601String(),
       );
@@ -642,8 +643,9 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('更新问卷失败: ${e.toString()}')),
+      showFToast(
+        context: context,
+        title: Text('更新问卷失败: ${e.toString()}'),
       );
     } finally {
       if (mounted) {
@@ -761,29 +763,43 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
                             onPress: _showTimeLimitDialog,
                           ),
                         ],
-                        if (_selectedType == 2) ...[
-                          const SizedBox(height: 16),
-                          FTextFormField(
-                            controller: _totalTimesController,
-                            label: const Text('提交次数限制'),
-                            hint: '请输入允许的最大提交次数',
-                            keyboardType: TextInputType.number,
-                            autovalidateMode: AutovalidateMode.onUserInteraction,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return '请输入提交次数限制';
-                              }
-                              if (int.tryParse(value) == null) {
-                                return '请输入有效的数字';
-                              }
-                              final number = int.parse(value);
-                              if (number <= 0) {
-                                return '提交次数必须大于0';
-                              }
-                              return null;
-                            },
-                          ),
-                        ],
+                        // 提交次数限制（可选，留空表示不限制）
+                        const SizedBox(height: 16),
+                        FTextFormField(
+                          controller: _totalTimesController,
+                          label: const Text('总提交上限(可选)'),
+                          hint: '留空表示不限制，例如 100',
+                          keyboardType: TextInputType.number,
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) return null;
+                            final n = int.tryParse(value.trim());
+                            if (n == null) return '请输入有效的数字';
+                            if (n < 0 || n > 2147483647) return '请输入有效的数字';
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        FTextFormField(
+                          controller: _perUserLimitController,
+                          label: const Text('单用户提交上限(可选)'),
+                          hint: '留空表示不限制，例如 1',
+                          keyboardType: TextInputType.number,
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return null; // 空值允许
+                            }
+                            final intValue = int.tryParse(value.trim());
+                            if (intValue == null) {
+                              return '请输入有效的数字';
+                            }
+                            if (intValue < 1 || intValue > 2147483647) {
+                              return '请输入有效的数字';
+                            }
+                            return null;
+                          },
+                        ),
                         const SizedBox(height: 16),
                         FSelect<int>(
                           key: _statusSelectKey,
@@ -816,11 +832,14 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
                         FTextFormField(
                           controller: _titleController,
                           label: const Text('问卷标题'),
-                          hint: '请输入问卷标题',
+                          hint: '请输入问卷标题（最多100字符）',
                           autovalidateMode: AutovalidateMode.onUserInteraction,
                           validator: (value) {
-                            if (value == null || value.isEmpty) {
+                            if (value == null || value.trim().isEmpty) {
                               return '请输入问卷标题';
+                            }
+                            if (value.trim().length > 100) {
+                              return '问卷标题不能超过100个字符';
                             }
                             return null;
                           },

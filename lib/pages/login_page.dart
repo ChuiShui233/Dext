@@ -9,6 +9,7 @@ import 'package:window_manager/window_manager.dart' hide WindowCaption;
 import '../widgets/window_caption.dart';
 import '../main.dart' show isDesktop;
 import '../services/api_service.dart';
+import '../services/oauth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginPage extends StatefulWidget {
@@ -42,6 +43,7 @@ class _LoginPageState extends State<LoginPage> {
   // 默认使用滑块验证
 
   final _apiService = ApiService();
+  final _oauthService = OAuthService();
   String? _captchaId;
   String? _captchaImage;
   Timer? _refreshTimer;
@@ -164,6 +166,133 @@ class _LoginPageState extends State<LoginPage> {
       }
     }
   }
+
+  // Google OAuth登录
+  Future<void> _handleGoogleLogin() async {
+    if (_isLoading) return;
+    
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final result = await _oauthService.signInWithGoogle();
+      
+      if (!mounted) return;
+      
+      if (result['success']) {
+        final token = result['token'];
+        final expires = result['expires'];
+        
+        widget.onLoginSuccess(token, expires);
+        _recordLoginInfo(token, expires);
+      } else {
+        // 检查是否是用户取消或超时
+        if (result['cancelled'] == true) {
+          // 用户取消登录，不显示错误提示
+          return;
+        } else if (result['timeout'] == true) {
+          showErrorDialog('登录超时，请重试');
+        } else {
+          showErrorDialog(result['error']);
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      showErrorDialog('Google登录失败: ${e.toString()}');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  // GitHub OAuth登录
+  Future<void> _handleGitHubLogin() async {
+    if (_isLoading) return;
+    
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final result = await _oauthService.signInWithGitHub();
+      
+      if (!mounted) return;
+      
+      if (result['success']) {
+        final token = result['token'];
+        final expires = result['expires'];
+        
+        widget.onLoginSuccess(token, expires);
+        _recordLoginInfo(token, expires);
+      } else {
+        // 检查是否是用户取消或超时
+        if (result['cancelled'] == true) {
+          // 用户取消登录，不显示错误提示
+          return;
+        } else if (result['timeout'] == true) {
+          showErrorDialog('登录超时，请重试');
+        } else {
+          showErrorDialog(result['error']);
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      showErrorDialog('GitHub登录失败: ${e.toString()}');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  // Microsoft OAuth登录
+  Future<void> _handleMicrosoftLogin() async {
+    if (_isLoading) return;
+    
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final result = await _oauthService.signInWithMicrosoft();
+      
+      if (!mounted) return;
+      
+      if (result['success']) {
+        final token = result['token'];
+        final expires = result['expires'];
+        
+        widget.onLoginSuccess(token, expires);
+        _recordLoginInfo(token, expires);
+      } else {
+        // 检查是否是用户取消或超时
+        if (result['cancelled'] == true) {
+          // 用户取消登录，不显示错误提示
+          return;
+        } else if (result['timeout'] == true) {
+          showErrorDialog('登录超时，请重试');
+        } else {
+          showErrorDialog(result['error']);
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      showErrorDialog('Microsoft登录失败: ${e.toString()}');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
 ///哈哈不会再分个文件写判断的，千年屎山
   Future<void> _handleRegister() async {
     if (_isLoading || !_agreeToTerms) return;
@@ -299,7 +428,7 @@ Positioned.fill(
       // 遮罩
       if (isDark)
         Container(
-          color: Colors.black.withOpacity(0.4),
+          color: Colors.black.withValues(alpha: 0.4),
         ),
     ],
   ),
@@ -510,6 +639,85 @@ Positioned.fill(
                 style: FButtonStyle.destructive,
                 onPress: _isLoading ? null : () => setState(() => _isRegistering = true),
                 child: const Text('注册'),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(child: Divider(color: Colors.grey.withValues(alpha: 0.5))),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      '或使用第三方登录',
+                      style: TextStyle(
+                        color: Colors.grey.withValues(alpha: 0.8),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  Expanded(child: Divider(color: Colors.grey.withValues(alpha: 0.5))),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: FButton(
+                      style: FButtonStyle.outline,
+                      onPress: _isLoading ? null : _handleGoogleLogin,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.g_mobiledata,
+                            size: 20,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text('Google'),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FButton(
+                      style: FButtonStyle.outline,
+                      onPress: _isLoading ? null : _handleGitHubLogin,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.code,
+                            size: 20,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text('GitHub'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              FButton(
+                style: FButtonStyle.outline,
+                onPress: _isLoading ? null : _handleMicrosoftLogin,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.business,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text('Microsoft'),
+                  ],
+                ),
               ),
             ],
           ),

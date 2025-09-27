@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/project.dart';
+import '../models/paginated_response.dart';
 import 'core/api_core.dart';
 
 class ProjectService {
@@ -32,6 +33,38 @@ class ProjectService {
       }
     }
     return _refreshProjects(prefs, cacheKey, onStatus: onStatus);
+  }
+
+  Future<PaginatedResponse<Project>> getProjectsPaginated({
+    int page = 1,
+    int pageSize = 10,
+    String? search,
+    StatusCallback? onStatus,
+  }) async {
+    onStatus?.call(RequestStatus.loading, '正在获取项目列表...');
+    core.updateStatus(RequestStatus.loading, '正在获取项目列表...');
+
+    final queryParams = <String, String>{
+      'page': page.toString(),
+      'pageSize': pageSize.toString(),
+    };
+    if (search != null && search.isNotEmpty) {
+      queryParams['search'] = search;
+    }
+
+    final uri = Uri.parse('${ApiCore.baseUrl}/api/project/list').replace(queryParameters: queryParams);
+    final resp = await core.httpRequest('GET', uri.toString(), onStatus: onStatus);
+    
+    if (resp.statusCode == 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      final paginatedResponse = PaginatedResponse.fromJson(body, (json) => Project.fromJson(json));
+      
+      onStatus?.call(RequestStatus.success, '项目列表获取成功');
+      core.updateStatus(RequestStatus.success, '项目列表获取成功');
+      
+      return paginatedResponse;
+    }
+    throw '获取项目列表失败: ${resp.statusCode}';
   }
 
   Future<void> _refreshProjectsSilently(
@@ -79,7 +112,7 @@ class ProjectService {
       prefs.setString(cacheKey, json.encode(body));
       return body.map<Project>((j) => Project.fromJson(j)).toList();
     }
-    throw Exception('获取项目列表失败: ${resp.statusCode}');
+    throw '获取项目列表失败: ${resp.statusCode}';
   }
 
   Future<Project> createProject(Project project, {StatusCallback? onStatus}) async {
@@ -88,7 +121,7 @@ class ProjectService {
       await _clearProjectListCache();
       return Project.fromJson(json.decode(resp.body));
     }
-    throw Exception('创建项目失败: ${resp.statusCode}');
+    throw '创建项目失败: ${resp.statusCode}';
   }
 
   Future<void> updateProject(Project project, {StatusCallback? onStatus}) async {
@@ -97,7 +130,7 @@ class ProjectService {
       await _clearProjectListCache();
       return;
     }
-    throw Exception('更新项目失败: ${resp.statusCode}');
+    throw '更新项目失败: ${resp.statusCode}';
   }
 
   Future<void> deleteProject(int id, {StatusCallback? onStatus}) async {
@@ -106,7 +139,7 @@ class ProjectService {
       await _clearProjectRelatedCache(id);
       return;
     }
-    throw Exception('删除项目失败: ${resp.statusCode}');
+    throw '删除项目失败: ${resp.statusCode}';
   }
 
   Future<void> batchDeleteProjects(List<int> ids, {StatusCallback? onStatus}) async {
@@ -117,7 +150,7 @@ class ProjectService {
       }
       return;
     }
-    throw Exception('批量删除项目失败: ${resp.statusCode}');
+    throw '批量删除项目失败: ${resp.statusCode}';
   }
 
   Future<void> _clearProjectListCache() async {

@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' as vmath;
 import 'package:forui/forui.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
@@ -8,6 +9,8 @@ import '../models/survey_result.dart';
 import '../models/question.dart';
 import '../services/api_service.dart';
 import '../main.dart' show isDesktop;
+import '../utils/date_format.dart';
+import 'dart:ui' as ui;
 
 class SurveyResultsPage extends StatefulWidget {
   final String token;
@@ -23,7 +26,19 @@ class SurveyResultsPage extends StatefulWidget {
   State<SurveyResultsPage> createState() => _SurveyResultsPageState();
 }
 
-class _SurveyResultsPageState extends State<SurveyResultsPage> {
+// 渐变平移，用于实现无缝循环的彩虹动画（配合 TileMode.repeated）
+class _SlideGradientTransform extends GradientTransform {
+  const _SlideGradientTransform({required this.slide});
+  final double slide; // 0..1
+  @override
+  vmath.Matrix4 transform(Rect bounds, {TextDirection? textDirection}) {
+    // 将渐变按容器宽度进行周期性平移
+    final dx = bounds.width * slide;
+    return vmath.Matrix4.translationValues(dx, 0.0, 0.0);
+  }
+}
+
+class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTickerProviderStateMixin {
   List<SurveyResult> _results = [];
   List<Question> _questions = [];
   bool _isLoading = true;
@@ -38,6 +53,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> {
   // 统计块缓存
   Widget? _statisticsCache;
   String _statisticsCacheKey = '';
+  late final AnimationController _rainbowCtl;
 
   String _computeStatsKey() {
     // 基于结果与问题的数量及首尾 ID 简单生成 key（避免每次都重建）
@@ -48,12 +64,384 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> {
     return '$lenR-$lenQ-$firstId-$lastId';
   }
 
+  // 比例条：当 ratio==1.0 时显示循环炫彩流动彩虹色
+  Widget _buildPercentBar(double ratio) {
+    final clamped = ratio.clamp(0.0, 1.0);
+    const double h = 18.0;
+    final bg = Colors.grey.withValues(alpha: 0.2);
+    final Color fg = Theme.of(context).colorScheme.primary.withValues(alpha: 0.70);
+
+    if (clamped >= 0.999) {
+      // 无缝循环：使用重复渐变 + 平移变换
+      const rainbow = [
+        Color(0xFFFF0040), // 红
+        Color(0xFFFF8000), // 橙
+        Color(0xFFFFFF00), // 黄
+        Color(0xFF80FF00), // 绿
+        Color(0xFF00FFFF), // 青
+        Color(0xFF0080FF), // 蓝
+        Color(0xFF8000FF), // 靛/紫
+        Color(0xFFFF00FF), // 品
+        Color(0xFFFF0040), // 回到红，首尾一致确保无缝
+      ];
+
+      return Opacity(
+        opacity: 0.35,
+        child: ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: AnimatedBuilder(
+          animation: _rainbowCtl,
+          builder: (context, _) {
+            // 叠加一层轻微模糊的相同渐变，形成柔和光晕
+            return Stack(
+              children: [
+                Container(
+                  height: h,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: rainbow,
+                      tileMode: TileMode.repeated,
+                      transform: _SlideGradientTransform(slide: _rainbowCtl.value),
+                    ),
+                  ),
+                ),
+                Positioned.fill(
+                  child: Opacity(
+                    opacity: 0.55,
+                    child: ImageFiltered(
+                      imageFilter: ui.ImageFilter.blur(sigmaX: 10.0, sigmaY: 8.0),
+                      child: Container(
+                        height: h,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: rainbow,
+                            tileMode: TileMode.repeated,
+                            transform: _SlideGradientTransform(slide: _rainbowCtl.value),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+      );
+    }
+
+    return Stack(
+      children: [
+        Container(
+          height: h,
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(6),
+          ),
+        ),
+        FractionallySizedBox(
+          widthFactor: clamped,
+          child: Container(
+            height: h,
+            decoration: BoxDecoration(
+              color: fg,
+              borderRadius: BorderRadius.circular(6),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  
+
+  // 评级显示（用于 slider 题）：读取新评级配置（星/面包屑、半星、图标、自定义标签），只读展示
+  Widget _buildRatingRow(Question q, String selectChoices) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    const double starIconSize = 38.0;
+
+    // 解析答案：新数据为 1..stars（含0.5）；旧数据为[min..max]区间的原值
+    double min = q.ratingMin;
+    double max = q.ratingMax;
+    double initial = q.ratingInitial;
+    int stars = q.ratingStars;
+    bool allowHalf = q.ratingAllowHalf;
+    final String style = q.ratingStyle; // star | crumb
+    final String iconType = q.ratingIcon.isNotEmpty ? q.ratingIcon : 'star';
+    final String minLabel = q.ratingMinLabel.isNotEmpty ? q.ratingMinLabel : '最小值';
+    final String midLabel = q.ratingMidLabel.isNotEmpty ? q.ratingMidLabel : '一般';
+    final String maxLabel = q.ratingMaxLabel.isNotEmpty ? q.ratingMaxLabel : '最大值';
+    final labelsMap = q.ratingLabels; // Map<double,String>
+
+    double v;
+    if (selectChoices.isNotEmpty) {
+      final parsed = double.tryParse(selectChoices);
+      if (parsed != null) {
+        // 判断是否已经是 1..stars 范围
+        if (parsed >= 0.5 && parsed <= stars + 0.001) {
+          v = parsed;
+        } else {
+          // 旧数据：按 min..max 映射到 1..stars
+          final clamped = parsed.clamp(min, max);
+          final ratio = (max > min) ? ((clamped - min) / (max - min)).clamp(0.0, 1.0) : 0.0;
+          v = 1.0 + ratio * (stars - 1);
+        }
+      } else {
+        v = initial;
+      }
+    } else {
+      v = initial;
+    }
+
+    // 限制范围
+    if (allowHalf) {
+      v = v.clamp(0.5, stars.toDouble());
+    } else {
+      v = v.clamp(1.0, stars.toDouble());
+    }
+    final int filledFull = v.floor();
+    final bool hasHalf = allowHalf && (v - filledFull).abs() >= 0.5 && filledFull < stars;
+
+    final Color activeColor = theme.colorScheme.primary;
+    // 与 PublicSurveyPage 保持一致：未激活态使用统一透明度
+    final Color inactiveColor = theme.colorScheme.onSurface.withValues(alpha: 0.35);
+
+    Widget buildFilled(double size) {
+      switch (iconType) {
+        case 'favorite':
+          return Icon(Icons.favorite, size: size, color: activeColor);
+        case 'circle':
+          return Icon(Icons.circle, size: size, color: activeColor);
+        case 'heart_broken':
+          return Icon(Icons.heart_broken, size: size, color: activeColor);
+        case 'star':
+        default:
+          return Icon(Icons.star, size: size, color: activeColor);
+      }
+    }
+
+    Widget buildOutline(double size) {
+      switch (iconType) {
+        case 'favorite':
+          return Icon(Icons.favorite_border, size: size, color: inactiveColor);
+        case 'circle':
+          return Icon(Icons.circle_outlined, size: size, color: inactiveColor);
+        case 'heart_broken':
+          // 没有 outline 版本，使用低透明度的同一图标模拟
+          return Icon(Icons.heart_broken, size: size, color: inactiveColor);
+        case 'star':
+        default:
+          return Icon(Icons.star_border, size: size, color: inactiveColor);
+      }
+    }
+
+    Widget buildHalf(double size) {
+      if (iconType == 'star') {
+        return Icon(Icons.star_half, size: size, color: activeColor);
+      }
+      // 其他图标无半态：使用 ShaderMask 将填充图标的左半边显示，右半边透明
+      return Stack(
+        alignment: Alignment.center,
+        children: [
+          buildOutline(size),
+          SizedBox(
+            width: size,
+            height: size,
+            child: ShaderMask(
+              shaderCallback: (Rect bounds) {
+                return LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    activeColor,
+                    activeColor,
+                    Colors.transparent,
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.5, 0.5, 1.0],
+                ).createShader(bounds);
+              },
+              blendMode: BlendMode.srcIn,
+              child: buildFilled(size),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // 星星样式渲染
+    List<Widget> starRow = List.generate(stars, (i) {
+      final idx = i + 1;
+      Widget starWidget;
+      if (idx <= filledFull) {
+        starWidget = buildFilled(starIconSize);
+      } else if (idx == filledFull + 1 && hasHalf) {
+        starWidget = buildHalf(starIconSize);
+      } else {
+        starWidget = buildOutline(starIconSize);
+      }
+      
+      return SizedBox(
+        width: starIconSize,
+        height: starIconSize,
+        child: Center(child: starWidget),
+      );
+    });
+
+    // 面包屑样式渲染
+    Widget crumbRow() {
+      const double width = 24.0;
+      const double height = 12.0;
+      final Color base = theme.colorScheme.onSurface.withValues(alpha: 0.25);
+      final Color active = theme.colorScheme.primary;
+      
+      return Row(
+        children: List.generate(stars, (i) {
+          final seg = i + 1;
+          final full = seg <= filledFull;
+          final half = !full && (seg == filledFull + 1) && hasHalf;
+          
+          return SizedBox(
+            width: width,
+            height: 20,
+            child: Stack(
+              alignment: Alignment.centerLeft,
+              children: [
+                Container(
+                  width: width,
+                  height: height,
+                  decoration: BoxDecoration(
+                    color: base,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                if (full || half)
+                  ClipRect(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      widthFactor: full ? 1.0 : 0.5,
+                      child: Container(
+                        width: width,
+                        height: height,
+                        decoration: BoxDecoration(
+                          color: active,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }),
+      );
+    }
+
+    final bool useCrumb = (style == 'crumb');
+    final double barUnitWidth = useCrumb ? 24.0 : starIconSize;
+    final double barWidth = barUnitWidth * stars;
+
+    // 显示当前评分值和对应标签
+    final double key = (v * 2).round() / 2.0; // 规整到0.5步进
+    final String? mappedLabel = labelsMap[key];
+    final String currentLabel = mappedLabel ?? (key % 1 == 0 ? '${key.toInt()} 星' : '${key.toStringAsFixed(1)} 星');
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, top: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              ...(useCrumb ? [crumbRow()] : starRow),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Text(
+                  currentLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (useCrumb) ...[
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                ...List.generate(stars, (i) {
+                  final int segIndex = i + 1;
+                  final double labelKey = segIndex.toDouble();
+                  final String text = labelsMap[labelKey] ?? segIndex.toString();
+                  return SizedBox(
+                    width: 24,
+                    child: Center(
+                      child: Text(
+                        text,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12, 
+                          color: isDark ? Colors.white70 : Colors.black54
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ],
+          const SizedBox(height: 8),
+          SizedBox(
+            width: barWidth,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  minLabel, 
+                  // 与 PublicSurveyPage 颜色保持一致
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black87)
+                ),
+                Text(
+                  midLabel, 
+                  style: TextStyle(
+                    // 与 PublicSurveyPage 颜色保持一致
+                    color: isDark ? Colors.white : Colors.black87, 
+                    fontWeight: FontWeight.w500
+                  )
+                ),
+                Text(
+                  maxLabel, 
+                  // 与 PublicSurveyPage 颜色保持一致
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black87)
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
     _apiService = ApiService(authToken: widget.token);
     _loadBackground();
     _loadData();
+    _rainbowCtl = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
   }
 
   // 获取（或构建）统计块，带缓存以减少重建
@@ -72,6 +460,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _rainbowCtl.dispose();
     super.dispose();
   }
 
@@ -167,16 +556,18 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> {
       await apiService.deleteAnswer(answerId);
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('删除成功')),
+        showFToast(
+          context: context,
+          title: const Text('删除成功'),
         );
       }
       
       _loadData(); // 重新加载数据
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('删除失败: $e')),
+        showFToast(
+          context: context,
+          title: Text('删除失败: $e'),
         );
       }
     }
@@ -190,16 +581,18 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> {
       await apiService.batchDeleteAnswers(_selectedResults.toList());
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('成功删除 ${_selectedResults.length} 条记录')),
+        showFToast(
+          context: context,
+          title: Text('成功删除 ${_selectedResults.length} 条记录'),
         );
       }
       
       _loadData(); // 重新加载数据
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('批量删除失败: $e')),
+        showFToast(
+          context: context,
+          title: Text('批量删除失败: $e'),
         );
       }
     }
@@ -362,16 +755,20 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> {
                             Row(
                               children: [
                                 Text(
-                                  result.createTime,
+                                  DateFormatUtils.formatIsoString(result.createTime),
                                   style: TextStyle(
                                     fontSize: 14,
                                   ),
                                 ),
                                 if (!_isSelectionMode)
-                                  IconButton(
-                                    icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                    onPressed: () => _showDeleteConfirmDialog(result.id),
-                                    tooltip: '删除此条记录',
+                                  FButton(
+                                    style: FButtonStyle.ghost,
+                                    onPress: () => _showDeleteConfirmDialog(result.id),
+                                    child: Icon(
+                                      Icons.delete,
+                                      size: 18,
+                                      color: Theme.of(context).colorScheme.error,
+                                    ),
                                   ),
                               ],
                             ),
@@ -383,6 +780,17 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> {
                 const SizedBox(height: 16),
                 ...result.questions.map((answer) {
                   final questionTitle = _getQuestionTitle(answer.questionId);
+                  final question = _questions.firstWhere(
+                    (q) => q.id == answer.questionId,
+                    orElse: () => Question(
+                      id: answer.questionId,
+                      title: questionTitle,
+                      type: QuestionType.singleChoice,
+                      options: const [],
+                      required: false,
+                      order: 0,
+                    ),
+                  );
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Column(
@@ -396,7 +804,9 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        if (answer.selectedOptions.isNotEmpty)
+                        if (question.type == QuestionType.slider)
+                          _buildRatingRow(question, answer.selectChoices)
+                        else if (answer.selectedOptions.isNotEmpty)
                           ...answer.selectedOptions.map((optionIndex) {
                             final optionText = _getOptionText(answer.questionId, optionIndex);
                             return Padding(
@@ -480,7 +890,128 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> {
             ),
             const SizedBox(height: 16),
             ..._questions.map((question) {
-              final questionStats = responsesByQuestion[question.id] ?? {};
+              // 非评级题：沿用选项统计
+              if (question.type != QuestionType.slider) {
+                final questionStats = responsesByQuestion[question.id] ?? {};
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        question.title,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // 响应式：两列或三列网格
+                      LayoutBuilder(builder: (context, constraints) {
+                        final w = constraints.maxWidth;
+                        final cols = w >= 1200 ? 3 : (w >= 800 ? 2 : 1);
+                        const gap = 12.0;
+                        final itemW = cols > 1 ? (w - gap * (cols - 1)) / cols : w;
+                        final tiles = question.options.asMap().entries.map((entry) {
+                        final optionIndex = entry.key;
+                        final optionText = entry.value.text;
+                        final count = questionStats[optionIndex] ?? 0;
+                        final percentage = totalResponses > 0
+                            ? (count / totalResponses * 100).toStringAsFixed(1)
+                            : '0.0';
+                          final ratio = totalResponses > 0 ? (count / totalResponses) : 0.0;
+                          return SizedBox(
+                            width: itemW,
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 16, bottom: 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(child: _buildPercentBar(ratio)),
+                                      const SizedBox(width: 10),
+                                      SizedBox(
+                                        width: 110,
+                                        child: Text(
+                                          '$count 次 ($percentage%)',
+                                          style: const TextStyle(fontSize: 12),
+                                          textAlign: TextAlign.right,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    optionText,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.80),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList();
+                        return Wrap(spacing: gap, runSpacing: 8, children: tiles);
+                      }),
+                    ],
+                  ),
+                );
+              }
+
+              // 评级题：统计各评级被选中的概率
+              // 解析配置
+              final int stars = question.ratingStars;
+              final bool allowHalf = question.ratingAllowHalf;
+              final double min = question.ratingMin;
+              final double max = question.ratingMax;
+
+              // 收集该题的所有回答（从 _results 的 answer.selectChoices）
+              final Map<double, int> bins = {};
+              // 初始化 bin（按 0.5 或 1 颗粒度）
+              final step = allowHalf ? 0.5 : 1.0;
+              for (double v = 1.0; v <= stars; v += step) {
+                bins[double.parse(v.toStringAsFixed(1))] = 0;
+              }
+              int answered = 0;
+              for (final r in _results) {
+                final a = r.questions.firstWhere(
+                  (d) => d.questionId == question.id,
+                  orElse: () => AnswerDetail(
+                    id: 0,
+                    answerId: r.id,
+                    questionId: question.id,
+                    selectedOptions: const [],
+                    selectChoices: '',
+                  ),
+                );
+                if (a.selectChoices.isEmpty) continue;
+                final parsed = double.tryParse(a.selectChoices);
+                if (parsed == null) continue;
+                answered++;
+                // 判断是新范畴(1..stars)还是旧范畴(min..max)
+                double val;
+                if (parsed >= 0.5 && parsed <= stars + 0.001) {
+                  val = parsed;
+                } else {
+                  final clamped = parsed.clamp(min, max);
+                  final ratio = (max > min) ? ((clamped - min) / (max - min)).clamp(0.0, 1.0) : 0.0;
+                  val = 1.0 + ratio * (stars - 1);
+                }
+                // 归一化到 bin
+                final double rounded = allowHalf
+                    ? ( (val * 2).round() / 2.0 )
+                    : val.roundToDouble();
+                final key = double.parse(rounded.toStringAsFixed(1));
+                bins[key] = (bins[key] ?? 0) + 1;
+              }
+
+              // 渲染
+              final entries = bins.entries.toList()
+                ..sort((a, b) => a.key.compareTo(b.key));
+
               return Padding(
                 padding: const EdgeInsets.only(bottom: 16),
                 child: Column(
@@ -494,35 +1025,65 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    ...question.options.asMap().entries.map((entry) {
-                      final optionIndex = entry.key;
-                      final optionText = entry.value.text;
-                      final count = questionStats[optionIndex] ?? 0;
-                      final percentage = totalResponses > 0
-                          ? (count / totalResponses * 100).toStringAsFixed(1)
-                          : '0.0';
-
-                      return Padding(
-                        padding: const EdgeInsets.only(left: 16, bottom: 4),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: Text(
-                                optionText,
-                                style: const TextStyle(fontSize: 13),
+                      if (answered == 0)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16),
+                          child: Text(
+                          '暂无作答',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.70),
+                          ),
+                          ),
+                        )
+                    else LayoutBuilder(builder: (context, constraints) {
+                      final w = constraints.maxWidth;
+                      final cols = w >= 1200 ? 3 : (w >= 800 ? 2 : 1);
+                      const gap = 12.0;
+                      final itemW = cols > 1 ? (w - gap * (cols - 1)) / cols : w;
+                      return Wrap(
+                        spacing: gap,
+                        runSpacing: 8,
+                        children: entries.map((e) {
+                      final pct = answered > 0 ? (e.value / answered * 100).toStringAsFixed(1) : '0.0';
+                      final ratio = answered > 0 ? (e.value / answered) : 0.0;
+                      final label = (e.key % 1 == 0)
+                          ? '${e.key.toInt()} 星'
+                          : '${e.key.toStringAsFixed(1)} 星';
+                          return SizedBox(
+                            width: itemW,
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 16, bottom: 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(child: _buildPercentBar(ratio)),
+                                      const SizedBox(width: 10),
+                                      SizedBox(
+                                        width: 110,
+                                        child: Text(
+                                          '${e.value} 次 ($pct%)',
+                                          style: const TextStyle(fontSize: 12),
+                                          textAlign: TextAlign.right,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    label,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.80),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                '$count 次 ($percentage%)',
-                                style: const TextStyle(fontSize: 13),
-                                textAlign: TextAlign.right,
-                              ),
-                            ),
-                          ],
-                        ),
+                          );
+                        }).toList(),
                       );
                     }),
                   ],
@@ -611,9 +1172,14 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> {
                       onPress: _selectAll,
                     ),
                     if (_selectedResults.isNotEmpty)
-                      FHeaderAction(
-                        icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                      FButton(
+                        style: FButtonStyle.ghost,
                         onPress: _showBatchDeleteConfirmDialog,
+                        child: Icon(
+                          Icons.delete,
+                          size: 18,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                       ),
                     FHeaderAction(
                       icon: const Icon(Icons.close, size: 20),
@@ -706,7 +1272,8 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> {
                               : Builder(
                                   builder: (context) {
                                     final width = MediaQuery.of(context).size.width;
-                                    final double target = isDesktop ? 1100 : width;
+                                    // 扩大桌面端内容最大宽度上限，避免被 1100 限制导致列数上不去
+                                    final double target = isDesktop ? 2000 : width;
                                     final double side = width > target ? (width - target) / 2 : 0;
                                     return ScrollConfiguration(
                                       behavior: ScrollConfiguration.of(context).copyWith(
@@ -788,11 +1355,12 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> {
                                             padding: EdgeInsets.fromLTRB(side + 16, 0, side + 16, 0),
                                             sliver: SliverLayoutBuilder(
                                               builder: (context, constraints) {
-                                                // 根据右侧可用宽度自适应列数：>=1200 三列，>=720 两列，否则一列
+                                                // 根据可用宽度自适应列数（上限 4 列，门槛更温和）
                                                 final width = constraints.crossAxisExtent;
-                                                final crossAxisCount = width >= 1200
-                                                    ? 3
-                                                    : (width >= 720 ? 2 : 1);
+                                                final desired = isDesktop ? 330.0 : 300.0; // 目标卡片宽度（含间距）
+                                                int crossAxisCount = (width / desired).floor();
+                                                if (crossAxisCount < 1) crossAxisCount = 1;
+                                                if (crossAxisCount > 4) crossAxisCount = 4; // 最高 4 列
 
                                                 if (crossAxisCount > 1) {
                                                   return SliverMasonryGrid.count(

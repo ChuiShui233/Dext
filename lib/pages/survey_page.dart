@@ -1,13 +1,15 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
 import '../models/survey.dart';
-import '../models/survey_stats.dart';
 import '../models/project.dart';
+import '../models/survey_stats.dart';
 import '../services/api_service.dart';
 import '../main.dart' show isDesktop;
 import 'create_survey_page.dart';
+import '../utils/date_format.dart';
 import '../components/survey_actions.dart';
 import '../components/multi_select_actions.dart';
 import 'frame_page.dart'; // 确保已导入
@@ -32,11 +34,16 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   bool _isLoading = true;
   String _searchQuery = '';
   int? _selectedSurveyType;
-  int _currentPage = 1;
   final int _pageSize = 5;
   late final FSelectController<String> _typeSelectController;
   final bool _isAllExpanded = false;
   final Key _listKey = UniqueKey();
+  
+  // 分页相关
+  int _currentPage = 1;
+  int _totalPages = 1;
+  int _totalItems = 0;
+  FPaginationController _paginationController = FPaginationController(pages: 1);
   
   // 多选相关状态
   List<int> _selectedSurveyIds = [];
@@ -47,6 +54,10 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   
   // 自动刷新定时器
   Timer? _autoRefreshTimer;
+  // 倒计时刷新定时器（每秒一次）
+  Timer? _countdownTimer;
+  // 已经提示过到期的问卷，避免重复弹窗
+  final Set<int> _expiryNotified = {};
 
   @override
   void initState() {
@@ -58,7 +69,11 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     
     // 启动自动刷新定时器（每30秒自动刷新一次）
     _startAutoRefresh();
+    // 启动倒计时刷新（每秒更新UI）
+    _startCountdown();
   }
+
+  // 全局统一的时间格式化请使用 DateFormatUtils（lib/utils/date_format.dart）
 
   @override
   void dispose() {
@@ -66,6 +81,8 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     _typeSelectController.dispose();
     _refreshController.dispose();
     _autoRefreshTimer?.cancel();
+    _countdownTimer?.cancel();
+    _paginationController.dispose();
     super.dispose();
   }
 
@@ -74,8 +91,10 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     if (state == AppLifecycleState.resumed) {
       _loadData();
       _startAutoRefresh();
+      _startCountdown();
     } else if (state == AppLifecycleState.paused) {
       _stopAutoRefresh();
+      _stopCountdown();
     }
   }
 
@@ -92,6 +111,75 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   // 停止自动刷新
   void _stopAutoRefresh() {
     _autoRefreshTimer?.cancel();
+  }
+
+  // 启动倒计时刷新
+  void _startCountdown() {
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      // 检查是否有问卷刚刚到期，进行一次性提醒
+      _detectAndNotifyExpiry();
+      setState(() {}); // 触发UI中倒计时文本刷新
+    });
+  }
+
+  // 停止倒计时刷新
+  void _stopCountdown() {
+    _countdownTimer?.cancel();
+  }
+
+  // 检测问卷是否到期并提示一次，同时触发刷新以同步服务端状态
+  void _detectAndNotifyExpiry() {
+    if (_surveys.isEmpty) return;
+    final now = DateTime.now();
+    for (final s in _surveys) {
+      final dl = _parseDeadline(s.deadline);
+      if (dl == null) continue; // 无截止时间
+      if (now.isAfter(dl) || now.isAtSameMomentAs(dl)) {
+        if (!_expiryNotified.contains(s.id)) {
+          _expiryNotified.add(s.id);
+          // 弹出提醒
+          if (mounted) {
+            showFToast(
+              context: context,
+              alignment: FToastAlignment.bottomRight,
+              title: const Text('问卷已到期'),
+              description: Text('“${s.surveyName}” 已到达截止时间，状态将自动更新为已完结。'),
+            );
+            // 触发一次静默刷新，尽快获取到服务端自动完结后的状态
+            _loadData(silent: true);
+          }
+        }
+      }
+    }
+  }
+
+  DateTime? _parseDeadline(String? deadline) {
+    if (deadline == null || deadline.isEmpty) return null;
+    try {
+      // 后端返回格式通常为 "YYYY-MM-DD HH:MM:SS"（本地/UTC由DB驱动决定），统一按本地解析
+      return DateTime.parse(deadline).toLocal();
+    } catch (_) {
+      // 尝试将空格替换为T再解析
+      try {
+        return DateTime.parse(deadline.replaceFirst(' ', 'T')).toLocal();
+      } catch (_) {
+        return null;
+      }
+    }
+  }
+
+  String _formatDuration(Duration d) {
+    String two(int v) => v < 10 ? '0$v' : '$v';
+    final dd = d.inDays;
+    final hh = d.inHours % 24;
+    final mm = d.inMinutes % 60;
+    final ss = d.inSeconds % 60;
+    if (dd > 0) {
+      return '$dd 天 ${two(hh)}:${two(mm)}:${two(ss)}';
+    }
+    return '${two(hh)}:${two(mm)}:${two(ss)}';
   }
 
   // 下拉刷新回调
@@ -163,16 +251,29 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     }
     
     try {
-      final surveys = await _apiService.getSurveys();
-      final projects = await _apiService.getProjects();
+      final surveyResponse = await _apiService.getSurveysPaginated(
+        page: _currentPage,
+        pageSize: _pageSize,
+        search: _searchQuery.isNotEmpty ? _searchQuery : null,
+        type: _selectedSurveyType?.toString(),
+      );
+      final projectResponse = await _apiService.getProjectsPaginated();
       
       if (!mounted) return;
       
       setState(() {
-        _surveys = surveys;
-        _projects = {for (var p in projects) p.id: p};
+        _surveys = surveyResponse.items;
+        _totalPages = surveyResponse.totalPages;
+        _totalItems = surveyResponse.total;
+        _projects = {for (var p in projectResponse.items) p.id: p};
         _isLoading = false;
       });
+      
+      // 更新分页控制器
+      _paginationController.dispose();
+      _paginationController = FPaginationController(pages: _totalPages > 0 ? _totalPages : 1);
+      // 同步当前页码到分页控制器（转换为0-based）
+      _paginationController.page = (_currentPage - 1).clamp(0, (_totalPages - 1).clamp(0, double.infinity).toInt());
       
       // 异步加载统计信息
       _loadSurveyStats();
@@ -181,7 +282,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
       
       setState(() => _isLoading = false);
       
-      if (!silent) {
+      if (!silent && context.mounted) {
         showFToast(
           context: context,
           alignment:FToastAlignment.bottomRight,
@@ -218,9 +319,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
         };
       });
     } catch (e) {
-      // 统计信息加载失败不影响主界面显示
       if (mounted) {
-        // 静默处理错误，不显示调试信息
       }
     }
   }
@@ -266,20 +365,29 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     }
   }
 
-  List<Survey> _getFilteredSurveys() {
-    return _surveys.where((survey) {
-      final matchesSearch = survey.surveyName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          survey.description.toLowerCase().contains(_searchQuery.toLowerCase());
-      final matchesType = _selectedSurveyType == null || survey.surveyType == _selectedSurveyType;
-      return matchesSearch && matchesType;
-    }).toList();
+  void _onSearchChanged() {
+    setState(() {
+      _currentPage = 1; // Reset to first page when searching
+    });
+    _loadData();
   }
 
-  List<Survey> _getPaginatedSurveys() {
-    final filtered = _getFilteredSurveys();
-    final start = (_currentPage - 1) * _pageSize;
-    final end = start + _pageSize;
-    return filtered.length > start ? filtered.sublist(start, end > filtered.length ? filtered.length : end) : [];
+
+  // 分页处理方法
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final value = PageStorage.maybeOf(context)?.readState(context) ?? 0;
+    _paginationController.page = value;
+  }
+
+  void _handlePageChange(int page) {
+    if (_currentPage != page + 1) { // FPagination uses 0-based indexing
+      setState(() {
+        _currentPage = page + 1; // Convert to 1-based for API
+      });
+      _loadData();
+    }
   }
 
   Future<void> _viewSurveyStats(Survey survey) async {
@@ -290,8 +398,9 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
       final stats = await _apiService.getSurveyStats(survey.id);
       if (!mounted) return;
 
-      showAdaptiveDialog(
-        context: context,
+      if (context.mounted) {
+        showAdaptiveDialog(
+          context: context,
         builder: (context) => FDialog(
           direction: Axis.horizontal,
           title: Text('${survey.surveyName} - 统计信息'),
@@ -316,47 +425,50 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
             ),
           ],
         ),
-      );
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       
-      showFToast(
-        context: context,
-        alignment:FToastAlignment.bottomRight,
-        title: const Text('获取失败'),
-        description: Text('获取统计信息失败: $e'),
-        suffixBuilder: (context, entry, _) => IntrinsicHeight(
-          child: FButton(
-            style: context.theme.buttonStyles.primary.copyWith(
-              contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                textStyle: FWidgetStateMap.all(
-                  context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
+      if (context.mounted) {
+        showFToast(
+          context: context,
+          alignment:FToastAlignment.bottomRight,
+          title: const Text('获取失败'),
+          description: Text('获取统计信息失败: $e'),
+          suffixBuilder: (context, entry, _) => IntrinsicHeight(
+            child: FButton(
+              style: context.theme.buttonStyles.primary.copyWith(
+                contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                  textStyle: FWidgetStateMap.all(
+                    context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
+                  ),
                 ),
               ),
+              onPress: entry.dismiss,
+              child: const Text('关闭'),
             ),
-            onPress: entry.dismiss,
-            child: const Text('关闭'),
           ),
-        ),
-      );
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final filteredSurveys = _getFilteredSurveys();
-    final paginatedSurveys = _getPaginatedSurveys();
-    final totalPages = (filteredSurveys.length / _pageSize).ceil();
+    final paginatedSurveys = _surveys;
 
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
         final frameState = context.findAncestorStateOfType<FramePageState>();
         if (frameState != null) {
           frameState.handleTabChange(0);
-          return false;
+        } else {
+          Navigator.of(context).maybePop();
         }
-        return true;
       },
       child: Scaffold(
         body: Stack(
@@ -471,7 +583,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                         final projects = await _apiService.getProjects();
                         if (!mounted) return;
                         
-                        final result = await Navigator.push<bool>(
+                        final result = context.mounted ? await Navigator.push<bool>(
                           context,
                           MaterialPageRoute(
                             builder: (context) => CreateSurveyPage(
@@ -479,7 +591,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                               projects: projects,
                             ),
                           ),
-                        );
+                        ) : null;
                         
                         if (result == true) {
                           // 触发下拉刷新动画
@@ -521,8 +633,8 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                             onChange: (value) {
                               setState(() {
                                 _searchQuery = value;
-                                _currentPage = 1;
                               });
+                              _onSearchChanged();
                             },
                           ),
                         ),
@@ -533,7 +645,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                 Expanded(
                   child: _isLoading
                       ? const Center(child: CircularProgressIndicator())
-                      : filteredSurveys.isEmpty
+                      : _surveys.isEmpty
                           ? Center(
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
@@ -582,7 +694,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                           final projects = await _apiService.getProjects();
                                           if (!mounted) return;
                                           
-                                          final result = await Navigator.push<bool>(
+                                          final result = context.mounted ? await Navigator.push<bool>(
                                             context,
                                             MaterialPageRoute(
                                               builder: (context) => CreateSurveyPage(
@@ -590,7 +702,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                                 projects: projects,
                                               ),
                                             ),
-                                          );
+                                          ) : null;
                                           
                                           if (result == true) {
                                             // 触发下拉刷新动画
@@ -605,23 +717,41 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                 ],
                               ),
                             )
-                          : SmartRefresher(
-                              controller: _refreshController,
-                              onRefresh: _onRefresh,
-                              enablePullDown: true,
-                              enablePullUp: false,
-                              header: const ClassicHeader(
-                                refreshStyle: RefreshStyle.Follow,
-                                textStyle: TextStyle(color: Colors.grey),
-                                iconPos: IconPosition.top,
+                          : ScrollConfiguration(
+                              behavior: ScrollConfiguration.of(context).copyWith(
+                                scrollbars: false,
+                                dragDevices: const {
+                                  PointerDeviceKind.touch,
+                                  PointerDeviceKind.mouse,
+                                  PointerDeviceKind.trackpad,
+                                  PointerDeviceKind.stylus,
+                                },
                               ),
-                              child: ListView.builder(
-                                key: _listKey,
-                                itemCount: paginatedSurveys.length,
-                                itemBuilder: (context, index) {
+                              child: SmartRefresher(
+                                controller: _refreshController,
+                                onRefresh: _onRefresh,
+                                enablePullDown: true,
+                                enablePullUp: false,
+                                physics: const BouncingScrollPhysics(
+                                  parent: AlwaysScrollableScrollPhysics(),
+                                ),
+                                header: const ClassicHeader(
+                                  refreshStyle: RefreshStyle.Follow,
+                                  textStyle: TextStyle(color: Colors.grey),
+                                  iconPos: IconPosition.top,
+                                ),
+                                child: ListView.builder(
+                                  key: _listKey,
+                                  primary: true,
+                                  itemCount: paginatedSurveys.length,
+                                  itemBuilder: (context, index) {
                                   final survey = paginatedSurveys[index];
                                   final stats = _surveyStats[survey.id];
                                   final isSelected = _selectedSurveyIds.contains(survey.id);
+                                  final deadlineDt = _parseDeadline(survey.deadline);
+                                  final now = DateTime.now();
+                                  final isExpired = deadlineDt != null && !now.isBefore(deadlineDt);
+                                  final remain = (deadlineDt != null && now.isBefore(deadlineDt)) ? deadlineDt.difference(now) : Duration.zero;
                                   
                                   Widget cardContent = FCard(
                                     child: Theme(
@@ -685,18 +815,50 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                                 const SizedBox(height: 8),
                                                 _buildInfoRow('所属项目', _projects[survey.projectId]?.projectName ?? '未知项目'),
                                                 const SizedBox(height: 8),
-                                                _buildInfoRow('创建时间', survey.createTime),
+                                                _buildInfoRow('创建时间', DateFormatUtils.formatIsoString(survey.createTime)),
                                                 const SizedBox(height: 8),
-                                                _buildInfoRow('更新时间', survey.updateTime),
+                                                _buildInfoRow('更新时间', DateFormatUtils.formatIsoString(survey.updateTime)),
+                                                if (survey.deadline != null && survey.deadline!.isNotEmpty) ...[
+                                                  const SizedBox(height: 8),
+                                                  _buildInfoRow('截止时间', DateFormatUtils.formatIsoString(survey.deadline!)),
+                                                  const SizedBox(height: 8),
+                                                  Row(
+                                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                    children: [
+                                                      Text('倒计时', style: Theme.of(context).textTheme.bodyMedium),
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                        decoration: BoxDecoration(
+                                                          color: isExpired
+                                                              ? Colors.red.withValues(alpha: 0.1)
+                                                              : Colors.orange.withValues(alpha: 0.1),
+                                                          borderRadius: BorderRadius.circular(8),
+                                                          border: Border.all(
+                                                            color: isExpired
+                                                              ? Colors.red.withValues(alpha: 0.3)
+                                                              : Colors.orange.withValues(alpha: 0.3),
+                                                          ),
+                                                        ),
+                                                        child: Text(
+                                                          isExpired ? '已到期' : _formatDuration(remain),
+                                                          style: TextStyle(
+                                                            color: isExpired ? Colors.red : Colors.orange,
+                                                            fontWeight: FontWeight.w600,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
                                                 if (stats != null) ...[
                                                   const Divider(color: Colors.grey),
                                                   _buildInfoRow('访问量', stats.viewCount.toString()),
                                                   const SizedBox(height: 8),
                                                   _buildInfoRow('提交量', stats.submitCount.toString()),
                                                   const SizedBox(height: 8),
-                                                  _buildInfoRow('最近访问', stats.lastViewTime.toString()),
+                                                  _buildInfoRow('最近访问', DateFormatUtils.formatDateTime(stats.lastViewTime)),
                                                   const SizedBox(height: 8),
-                                                  _buildInfoRow('最近提交', stats.lastSubmitTime.toString()),
+                                                  _buildInfoRow('最近提交', DateFormatUtils.formatDateTime(stats.lastSubmitTime)),
                                                   if (stats.submittedUsers.isNotEmpty) ...[
                                                     const SizedBox(height: 8),
                                                     _buildInfoRow('提交用户', stats.submittedUsers.join(", ")),
@@ -758,46 +920,49 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                   );
                                 },
                               ),
+                              ),
                             ),
                 ),
-                if (totalPages > 1)
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        FButton(
-                          style: FButtonStyle.outline,
-                          onPress: _currentPage > 1
-                              ? () {
-                                  setState(() {
-                                    _currentPage--;
-                                  });
-                                }
-                              : null,
-                          child: const Text('上一页'),
-                        ),
-                        const SizedBox(width: 16),
-                        Text('第 $_currentPage 页，共 $totalPages 页'),
-                        const SizedBox(width: 16),
-                        FButton(
-                          style: FButtonStyle.outline,
-                          onPress: _currentPage < totalPages
-                              ? () {
-                                  setState(() {
-                                    _currentPage++;
-                                  });
-                                }
-                              : null,
-                          child: const Text('下一页'),
-                        ),
-                      ],
-                    ),
-                  ),
+                if (_totalPages > 1)
+                  _buildFPagination(context, _totalPages),
               ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFPagination(BuildContext context, int totalPages) {
+    return Container(
+      margin: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: Theme.of(context).brightness == Brightness.dark
+            ? Colors.white.withValues(alpha: 0.04)
+            : Colors.white.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.06),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            '共 $_totalItems 份问卷，第 $_currentPage / $_totalPages 页',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
+          ),
+          FPagination(
+            controller: _paginationController,
+            onChange: _handlePageChange,
+          ),
+        ],
       ),
     );
   }
@@ -841,8 +1006,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   }
 
   void _onSelectAll() {
-    final filteredSurveys = _getFilteredSurveys();
-    final allIds = filteredSurveys.map((survey) => survey.id).toList();
+    final allIds = _surveys.map((survey) => survey.id).toList();
     setState(() {
       _selectedSurveyIds = allIds;
       _isMultiSelectMode = true;

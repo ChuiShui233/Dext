@@ -8,7 +8,7 @@ import 'package:forui/forui.dart';
 import 'public_survey_page.dart';
 
 class PublicAccessPage extends StatefulWidget {
-  const PublicAccessPage({Key? key}) : super(key: key);
+  const PublicAccessPage({super.key});
 
   @override
   State<PublicAccessPage> createState() => _PublicAccessPageState();
@@ -79,19 +79,23 @@ class _PublicAccessPageState extends State<PublicAccessPage> {
         _surveyIdController.text = surveyId;
       });
       
-      showFToast(
-        context: context,
-        alignment: FToastAlignment.bottomRight,
-        title: const Text('成功'),
-        description: const Text('已粘贴问卷ID'),
-      );
+      if (mounted) {
+        showFToast(
+          context: context,
+          alignment: FToastAlignment.bottomRight,
+          title: const Text('成功'),
+          description: const Text('已粘贴问卷ID'),
+        );
+      }
     } catch (e) {
-      showFToast(
-        context: context,
-        alignment: FToastAlignment.bottomRight,
-        title: const Text('失败'),
-        description: const Text('粘贴失败'),
-      );
+      if (mounted) {
+        showFToast(
+          context: context,
+          alignment: FToastAlignment.bottomRight,
+          title: const Text('失败'),
+          description: const Text('粘贴失败'),
+        );
+      }
     }
   }
 
@@ -213,8 +217,8 @@ class _PublicAccessPageState extends State<PublicAccessPage> {
                                   ),
                                   filled: true,
                                   fillColor: isDark 
-                                      ? Colors.white.withOpacity(0.1)
-                                      : Colors.white.withOpacity(0.8),
+                                      ? Colors.white.withValues(alpha: 0.1)
+                                      : Colors.white.withValues(alpha: 0.8),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
                                     borderSide: BorderSide.none,
@@ -374,9 +378,9 @@ class _PublicAccessPageState extends State<PublicAccessPage> {
           filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
           child: Container(
             decoration: BoxDecoration(
-              color: CupertinoColors.white.withOpacity(0.2),
+              color: CupertinoColors.white.withValues(alpha: 0.2),
               border: Border.all(
-                color: CupertinoColors.white.withOpacity(0.2),
+                color: CupertinoColors.white.withValues(alpha: 0.2),
                 width: 0.8,
               ),
               borderRadius: BorderRadius.circular(16),

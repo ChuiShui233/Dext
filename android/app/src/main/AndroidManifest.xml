@@ -30,11 +30,11 @@
             </intent-filter>
             
             <!-- 深度链接配置 - 支持 wucode.xyz 域名 -->
-            <intent-filter android:autoVerify="true">
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https"
+                <data android:scheme="http"
                       android:host="wucode.xyz" />
             </intent-filter>
             

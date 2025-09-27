@@ -19,7 +19,7 @@ class ProjectSurveysPage extends StatefulWidget {
   });
 
   @override
-  _ProjectSurveysPageState createState() => _ProjectSurveysPageState();
+  State<ProjectSurveysPage> createState() => _ProjectSurveysPageState();
 }
 
 class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBindingObserver {
@@ -186,7 +186,7 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -227,7 +227,7 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
                                 Icon(
                                   Icons.assignment_outlined,
                                   size: 64,
-                                  color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
                                 ),
                                 const SizedBox(height: 16),
                                 Text(
@@ -238,7 +238,7 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
                                 Text(
                                   '该项目下还没有问卷',
                                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                                   ),
                                 ),
                               ],
@@ -261,8 +261,8 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
                                     borderRadius: BorderRadius.circular(12),
                                     side: BorderSide(
                                       color: Theme.of(context).brightness == Brightness.dark 
-                                        ? Colors.white.withOpacity(0.1)
-                                        : Colors.black.withOpacity(0.1),
+                                        ? Colors.white.withValues(alpha: 0.1)
+                                        : Colors.black.withValues(alpha: 0.1),
                                       width: 1,
                                     ),
                                   ),
@@ -293,7 +293,7 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                               decoration: BoxDecoration(
-                                                color: _getStatusColor(survey.surveyStatus).withOpacity(0.1),
+                                                color: _getStatusColor(survey.surveyStatus).withValues(alpha: 0.1),
                                                 borderRadius: BorderRadius.circular(12),
                                               ),
                                               child: Text(
@@ -308,7 +308,7 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                               decoration: BoxDecoration(
-                                                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                                                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                                                 borderRadius: BorderRadius.circular(12),
                                               ),
                                               child: Text(

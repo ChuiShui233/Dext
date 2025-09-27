@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:http/http.dart' as http;
@@ -17,12 +18,13 @@ import '../models/question.dart';
 import '../models/captcha.dart';
 import '../models/user.dart';
 import '../models/survey_result.dart';
+import '../models/paginated_response.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 令牌过期异常类
-class TokenExpiredException implements Exception {
+class TokenExpired {
   final String message;
-  TokenExpiredException(this.message);
+  TokenExpired(this.message);
   
   @override
   String toString() => message;
@@ -34,8 +36,10 @@ typedef StatusCallback = core.StatusCallback;
 typedef ProgressCallback = core.ProgressCallback;
 
 class ApiService {
-  static const String baseUrl = 'http://127.0.0.1:11222';  //wucode.xyz:11222
+  static const String baseUrl = 'http://192.168.1.6:11222';  //127.0.0.1:11222
   static const Duration timeoutDuration = Duration(seconds: 15);
+  // 全局401未授权处理回调（由应用在启动时注册）
+  static VoidCallback? onUnauthorized;
   String? authToken;
   final CryptoService _cryptoService = CryptoService();
   // Facade over modular services
@@ -78,6 +82,151 @@ class ApiService {
     _coreDataSub = _core.dataUpdateStream.listen((d) => _dataUpdateController.add(d));
   }
 
+  // 确保 authToken 已加载（例如应用重启后从本地恢复）
+  Future<void> _ensureAuthTokenLoaded() async {
+    if (authToken == null || authToken!.isEmpty) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final t = prefs.getString('auth_token');
+        if (t != null && t.isNotEmpty) {
+          authToken = t;
+        }
+      } catch (_) {}
+    }
+  }
+
+  // 最近提交列表（用于仪表盘卡片）
+  Future<List<Map<String, dynamic>>> getRecentSubmissions({StatusCallback? onStatus}) async {
+    try {
+      final url = '$baseUrl/api/survey/recent-submissions';
+      final response = await _httpRequest('GET', url, onStatus: onStatus);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        final submissions = (data['submissions'] as List<dynamic>? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+        return submissions;
+      } else if (response.statusCode == 401) {
+        throw response;
+      } else {
+        throw '获取最近提交失败: ${response.statusCode}';
+      }
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
+    }
+  }
+
+  // 分析概览：总浏览数 / 总提交数
+  Future<Map<String, int>> getAnalyticsOverview({StatusCallback? onStatus}) async {
+    try {
+      final response = await _httpRequest('GET', '$baseUrl/api/analytics/overview', onStatus: onStatus);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        return {
+          'totalViews': (data['totalViews'] as num?)?.toInt() ?? 0,
+          'totalSubmits': (data['totalSubmits'] as num?)?.toInt() ?? 0,
+        };
+      } else if (response.statusCode == 401) {
+        throw response;
+      } else {
+        throw '获取统计概览失败: ${response.statusCode}';
+      }
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
+    }
+  }
+
+  // 判定是否为媒体相关或应排除AES加密的URL
+  bool _isMediaUrl(String url) {
+    // 排除真正的媒体相关（二进制/表单）接口，避免破坏上传/下载
+    if (url.contains('/openassets/')) return true; // 统一的文件存储服务
+    if (url.contains('/images/')) return true;     // 图像管理上传/删除
+    if (url.contains('/uploads')) return true;     // 静态上传目录
+    // 仅排除问卷媒体文件接口：/survey/:surveyId/media
+    if (url.contains('/survey/') && url.contains('/media')) return true;
+    return false;
+  }
+
+  // 提交趋势：range = '7d' | 'month'，默认 '7d'
+  Future<Map<String, dynamic>> getSubmitTrend({String range = '7d', StatusCallback? onStatus}) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/analytics/submit-trend').replace(queryParameters: {'range': range});
+      final response = await _httpRequest('GET', uri.toString(), onStatus: onStatus);
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      } else if (response.statusCode == 401) {
+        throw response;
+      } else {
+        throw '获取提交趋势失败: ${response.statusCode}';
+      }
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
+    }
+  }
+
+  // 提交详情：返回题目、选项与我的作答
+  Future<Map<String, dynamic>> getSubmissionDetail(int answerId, {StatusCallback? onStatus}) async {
+    try {
+      final url = '$baseUrl/api/survey/submissions/$answerId/detail';
+      final response = await _httpRequest('GET', url, onStatus: onStatus);
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      } else if (response.statusCode == 401) {
+        throw response;
+      } else {
+        throw '获取提交详情失败: ${response.statusCode}';
+      }
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
+    }
+  }
+
+  // 提交记录查询（带筛选和分页）
+  Future<Map<String, dynamic>> getSubmissionHistory({
+    String? query,
+    int? type,
+    int page = 1,
+    int pageSize = 20,
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      final params = <String, String>{
+        'page': page.toString(),
+        'pageSize': pageSize.toString(),
+      };
+      if (query != null && query.trim().isNotEmpty) params['query'] = query.trim();
+      if (type != null) params['type'] = type.toString();
+
+      final uri = Uri.parse('$baseUrl/api/survey/submissions/history').replace(queryParameters: params);
+      final response = await _httpRequest('GET', uri.toString(), onStatus: onStatus);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        return data;
+      } else if (response.statusCode == 401) {
+        throw response;
+      } else {
+        throw '获取提交记录失败: ${response.statusCode}';
+      }
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
+    }
+  }
+
   // 更新状态并通知监听者
   void _updateStatus(RequestStatus status, [String? message]) {
     _currentStatus = status;
@@ -107,7 +256,7 @@ class ApiService {
     _core.dispose();
   }
 
-  // 登录方法
+  // 登录方法 - 支持RSA+AES混合加密
   Future<Map<String, dynamic>> login({
     required String username,
     required String password,
@@ -119,7 +268,17 @@ class ApiService {
       onStatus?.call(RequestStatus.loading, '正在登录...');
       _updateStatus(RequestStatus.loading, '正在登录...');
 
-      final response = await _encryptedRequest(
+      await _cryptoService.initialize();
+      
+      // 生成会话密钥
+      onStatus?.call(RequestStatus.loading, '正在生成会话密钥...');
+      _updateStatus(RequestStatus.loading, '正在生成会话密钥...');
+      
+      final sessionKey = _cryptoService.generateSessionKey();
+      final encryptedSessionKey = await _cryptoService.encryptSessionKey(sessionKey);
+
+      // 使用混合加密发送登录请求
+      final response = await _hybridEncryptedRequest(
         'POST',
         '$baseUrl/api/auth/login',
         {
@@ -127,14 +286,52 @@ class ApiService {
           'password': password,
           'captchaId': captchaId,
           'captchaValue': captchaValue,
+          'sessionKey': encryptedSessionKey,
         },
+        sessionKey: sessionKey,
         onStatus: onStatus,
       );
 
       if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
+        Map<String, dynamic> responseData;
+        
+        // 检查响应是否加密
+        
+        // 检查响应内容是否为二进制数据（可能是加密的）
+        bool isEncrypted = response.headers['x-encrypted'] == 'aes' || 
+                          response.body.contains('\u0000') || 
+                          response.body.codeUnits.any((unit) => unit > 127);
+        
+        if (isEncrypted) {
+          // 解密AES加密的响应
+          onStatus?.call(RequestStatus.loading, '正在解密响应...');
+          _updateStatus(RequestStatus.loading, '正在解密响应...');
+          
+          try {
+            final encryptedResponse = response.bodyBytes;
+            
+            final decryptedBytes = _cryptoService.decryptWithAES(encryptedResponse, sessionKey);
+            final decryptedJson = utf8.decode(decryptedBytes);
+            
+            responseData = json.decode(decryptedJson);
+          } catch (e) {
+            throw '响应解密失败: $e';
+          }
+        } else {
+          // 未加密的响应（向后兼容）
+          responseData = json.decode(response.body);
+        }
+        
         final token = responseData['token'];
         final expires = DateTime.parse(responseData['expires']);
+        
+        // 持久化并同步内存 token
+        authToken = token?.toString();
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('auth_token', authToken ?? '');
+          await prefs.setString('auth_token_expires', expires.toIso8601String());
+        } catch (_) {}
         
         onStatus?.call(RequestStatus.success, '登录成功');
         _updateStatus(RequestStatus.success, '登录成功');
@@ -144,19 +341,45 @@ class ApiService {
           'expires': expires,
         };
       } else {
-        final responseData = json.decode(response.body);
+        Map<String, dynamic> responseData;
+        
+        // 检查错误响应是否也加密了
+        
+        if (response.headers['x-encrypted'] == 'aes') {
+          try {
+            final encryptedResponse = response.bodyBytes;
+            final decryptedBytes = _cryptoService.decryptWithAES(encryptedResponse, sessionKey);
+            final decryptedJson = utf8.decode(decryptedBytes);
+            responseData = json.decode(decryptedJson);
+          } catch (e) {
+            // 解密失败，尝试直接解析
+            try {
+              responseData = json.decode(response.body);
+            } catch (jsonError) {
+              responseData = {'message': '响应解析失败', 'error': response.body};
+            }
+          }
+        } else {
+          try {
+            responseData = json.decode(response.body);
+          } catch (jsonError) {
+            responseData = {'message': '响应解析失败', 'error': response.body};
+          }
+        }
+        
         final errorMessage = responseData['message'] ?? responseData['error'] ?? '登录失败';
         
         onStatus?.call(RequestStatus.error, errorMessage);
         _updateStatus(RequestStatus.error, errorMessage);
         
-        throw Exception(errorMessage);
+        throw errorMessage;
       }
     } catch (e) {
-      final errorMsg = '登录失败: $e';
+      
+      final errorMsg = e.toString();
       onStatus?.call(RequestStatus.error, errorMsg);
       _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      rethrow;
     }
   }
 
@@ -194,13 +417,13 @@ class ApiService {
         onStatus?.call(RequestStatus.error, errorMessage);
         _updateStatus(RequestStatus.error, errorMessage);
         
-        throw Exception(errorMessage);
+        throw errorMessage;
       }
     } catch (e) {
-      final errorMsg = '注册失败: $e';
+      final errorMsg = e.toString();
       onStatus?.call(RequestStatus.error, errorMsg);
       _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      rethrow;
     }
   }
 
@@ -270,8 +493,10 @@ class ApiService {
     Map<String, dynamic>? data, {
     ProgressCallback? onProgress,
     StatusCallback? onStatus,
+    bool allowRetry = true,
   }) async {
     try {
+      await _ensureAuthTokenLoaded();
       onStatus?.call(RequestStatus.loading, '正在准备请求...');
       _updateStatus(RequestStatus.loading, '正在准备请求...');
       
@@ -310,6 +535,17 @@ class ApiService {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         onStatus?.call(RequestStatus.success, '请求成功');
         _updateStatus(RequestStatus.success, '请求成功');
+      } else if (response.statusCode == 401 && allowRetry) {
+        final refreshed = await _refreshToken();
+        if (refreshed) {
+          return await _encryptedRequest(method, url, data, onProgress: onProgress, onStatus: onStatus, allowRetry: false);
+        }
+        final errorMsg = '请求失败: 401 (未授权)';
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        if (ApiService.onUnauthorized != null) {
+          ApiService.onUnauthorized!.call();
+        }
       } else {
         final errorMsg = '请求失败: ${response.statusCode}';
         onStatus?.call(RequestStatus.error, errorMsg);
@@ -317,16 +553,18 @@ class ApiService {
       }
       
       return response;
-    } on TimeoutException {
-      final errorMsg = '请求超时，请检查您的网络连接。';
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
     } catch (e) {
-      final errorMsg = '请求失败: $e';
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        final errorMsg = '请求超时，请检查您的网络连接。';
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        throw errorMsg;
+      } else {
+        final errorMsg = '请求失败: $e';
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        throw errorMsg;
+      }
     }
   }
 
@@ -341,58 +579,75 @@ class ApiService {
     return _encryptedRequest(method, url, data, onProgress: onProgress, onStatus: onStatus);
   }
 
-  // 普通HTTP请求方法（带实时响应）
-  Future<http.Response> _httpRequest(
+  // 混合加密请求方法（RSA+AES）
+  Future<http.Response> _hybridEncryptedRequest(
     String method,
-    String url, {
-    Map<String, dynamic>? data,
+    String url,
+    Map<String, dynamic>? data, {
+    required SessionKey sessionKey,
+    ProgressCallback? onProgress,
     StatusCallback? onStatus,
+    bool allowRetry = true,
   }) async {
     try {
+      await _ensureAuthTokenLoaded();
+      onStatus?.call(RequestStatus.loading, '正在准备混合加密请求...');
+      _updateStatus(RequestStatus.loading, '正在准备混合加密请求...');
+      
+      await _cryptoService.initialize();
+      
+      onStatus?.call(RequestStatus.loading, '正在加密数据...');
+      _updateStatus(RequestStatus.loading, '正在加密数据...');
+      
+      final headers = {
+        ..._headers,
+        'X-Encrypted': 'hybrid',
+        'Content-Type': 'application/json',
+      };
+
+      String? encryptedBody;
+      if (data != null) {
+        // 使用传统RSA加密方式（向后兼容登录接口）
+        encryptedBody = await _cryptoService.encryptBody(data);
+      }
+
       onStatus?.call(RequestStatus.loading, '正在发送请求...');
       _updateStatus(RequestStatus.loading, '正在发送请求...');
-      
+
       final uri = Uri.parse(url);
-      final headers = _headers;
-      
-      http.Response response;
-      
-      switch (method.toUpperCase()) {
-        case 'GET':
-          response = await http.get(uri, headers: headers).timeout(timeoutDuration);
-          break;
-        case 'POST':
-          response = await http.post(
-            uri, 
-            headers: headers,
-            body: data != null ? json.encode(data) : null,
-          ).timeout(timeoutDuration);
-          break;
-        case 'PUT':
-          response = await http.put(
-            uri, 
-            headers: headers,
-            body: data != null ? json.encode(data) : null,
-          ).timeout(timeoutDuration);
-          break;
-        case 'DELETE':
-          if (data != null) {
-            response = await http.delete(
-              uri, 
-              headers: headers,
-              body: json.encode(data),
-            ).timeout(timeoutDuration);
-          } else {
-            response = await http.delete(uri, headers: headers).timeout(timeoutDuration);
-          }
-          break;
-        default:
-          throw Exception('不支持的HTTP方法: $method');
+      final request = http.Request(method, uri);
+      request.headers.addAll(headers);
+      if (encryptedBody != null) {
+        request.body = encryptedBody;
       }
+
+      final streamedResponse = await request.send().timeout(timeoutDuration);
+      
+      onStatus?.call(RequestStatus.loading, '正在接收响应...');
+      _updateStatus(RequestStatus.loading, '正在接收响应...');
+      
+      final response = await http.Response.fromStream(streamedResponse);
       
       if (response.statusCode >= 200 && response.statusCode < 300) {
         onStatus?.call(RequestStatus.success, '请求成功');
         _updateStatus(RequestStatus.success, '请求成功');
+      } else if (response.statusCode == 401 && allowRetry) {
+        final refreshed = await _refreshToken();
+        if (refreshed) {
+          return await _hybridEncryptedRequest(
+            method, url, data, 
+            sessionKey: sessionKey,
+            onProgress: onProgress, 
+            onStatus: onStatus, 
+            allowRetry: false
+          );
+        }
+        final errorMsg = '请求失败: 401 (未授权)';
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        if (ApiService.onUnauthorized != null) {
+          ApiService.onUnauthorized!.call();
+        }
       } else {
         final errorMsg = '请求失败: ${response.statusCode}';
         onStatus?.call(RequestStatus.error, errorMsg);
@@ -400,25 +655,247 @@ class ApiService {
       }
       
       return response;
-    } on TimeoutException {
-      final errorMsg = '请求超时，请检查您的网络连接。';
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
     } catch (e) {
-      final errorMsg = '请求失败: $e';
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        final errorMsg = '请求超时，请检查您的网络连接。';
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        throw errorMsg;
+      } else {
+        final errorMsg = '请求失败: $e';
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        throw errorMsg;
+      }
+    }
+  }
+
+
+  // 普通HTTP请求方法（带实时响应）
+  Future<http.Response> _httpRequest(
+    String method,
+    String url, {
+    Map<String, dynamic>? data,
+    StatusCallback? onStatus,
+    bool allowRetry = true,
+  }) async {
+    try {
+      await _ensureAuthTokenLoaded();
+      onStatus?.call(RequestStatus.loading, '正在发送请求...');
+      _updateStatus(RequestStatus.loading, '正在发送请求...');
+      
+      final uri = Uri.parse(url);
+      http.Response response;
+
+      // 仅对有请求体的方法（POST/PUT/DELETE）尝试AES加密；GET保持原样
+      final upperMethod = method.toUpperCase();
+      final canEncryptBody = (upperMethod == 'POST' || upperMethod == 'PUT' || upperMethod == 'DELETE')
+          && data != null
+          && _cryptoService.currentSessionKey != null
+          && !_isMediaUrl(url);
+
+      if (canEncryptBody) {
+        // 使用AES-GCM加密请求体
+        final sessionKey = _cryptoService.currentSessionKey!;
+        final jsonData = json.encode(data);
+        final bodyBytes = Uint8List.fromList(utf8.encode(jsonData));
+        final encryptedBody = _cryptoService.encryptWithAES(bodyBytes, sessionKey);
+
+        final headers = <String, String>{
+          ..._headers,
+          'X-Encrypted': 'aes',
+          'Content-Type': 'application/octet-stream',
+        };
+
+        switch (upperMethod) {
+          case 'POST':
+            response = await http
+                .post(uri, headers: headers, body: encryptedBody)
+                .timeout(timeoutDuration);
+            break;
+          case 'PUT':
+            response = await http
+                .put(uri, headers: headers, body: encryptedBody)
+                .timeout(timeoutDuration);
+            break;
+          case 'DELETE':
+            response = await http
+                .delete(uri, headers: headers, body: encryptedBody)
+                .timeout(timeoutDuration);
+            break;
+          default:
+            throw '不支持的HTTP方法: $method';
+        }
+      } else {
+        // 非加密路径（GET、无数据、媒体相关或无会话密钥时）保持原逻辑
+        final headers = _headers;
+        switch (upperMethod) {
+          case 'GET':
+            response = await http.get(uri, headers: headers).timeout(timeoutDuration);
+            break;
+          case 'POST':
+            response = await http
+                .post(uri, headers: headers, body: data != null ? json.encode(data) : null)
+                .timeout(timeoutDuration);
+            break;
+          case 'PUT':
+            response = await http
+                .put(uri, headers: headers, body: data != null ? json.encode(data) : null)
+                .timeout(timeoutDuration);
+            break;
+          case 'DELETE':
+            if (data != null) {
+              response = await http
+                  .delete(uri, headers: headers, body: json.encode(data))
+                  .timeout(timeoutDuration);
+            } else {
+              response = await http.delete(uri, headers: headers).timeout(timeoutDuration);
+            }
+            break;
+          default:
+            throw '不支持的HTTP方法: $method';
+        }
+      }
+      
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        onStatus?.call(RequestStatus.success, '请求成功');
+        _updateStatus(RequestStatus.success, '请求成功');
+      } else if (response.statusCode == 401 && allowRetry) {
+        // 尝试刷新令牌后重试一次
+        final refreshed = await _refreshToken();
+        if (refreshed) {
+          return await _httpRequest(method, url, data: data, onStatus: onStatus, allowRetry: false);
+        }
+        final errorMsg = '请求失败: 401 (未授权)';
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        // 通知应用处理登录过期
+        if (ApiService.onUnauthorized != null) {
+          ApiService.onUnauthorized!.call();
+        }
+      } else {
+        final errorMsg = '请求失败: ${response.statusCode}';
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+      }
+
+      return response;
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        final errorMsg = '请求超时，请检查您的网络连接。';
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        throw errorMsg;
+      } else {
+        final errorMsg = '请求失败: $e';
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        throw errorMsg;
+      }
     }
   }
 
   // 自动刷新token并重试的通用方法
+  Future<bool> _refreshToken() async {
+    try {
+      // 优先使用当前内存 token
+      String? token = authToken;
+      // 如无内存token，尝试从本地取
+      if (token == null || token.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        token = prefs.getString('auth_token');
+        if (token != null && token.isNotEmpty) {
+          authToken = token;
+          // rely on ApiService.authToken for headers
+        }
+      }
+      
+      // 检查是否有有效的token
+      if (authToken == null || authToken!.isEmpty) {
+        return false;
+      }
+      
+      // 优先尝试使用 AES（需要已有会话密钥），否则回退到 RSA 加密
+      http.Response resp;
+      final refreshUrl = '$baseUrl/api/auth/refresh';
+      final refreshData = {'refresh': true};
+      try {
+        if (_cryptoService.currentSessionKey != null) {
+          // 使用 _httpRequest，触发 AES 加密；避免递归刷新，禁止自动重试
+          resp = await _httpRequest(
+            'POST',
+            refreshUrl,
+            data: refreshData,
+            allowRetry: false,
+          );
+        } else {
+          // 无会话密钥时使用 RSA 加密
+          resp = await _encryptedRequest(
+            'POST',
+            refreshUrl,
+            refreshData,
+            allowRetry: false,
+          );
+        }
+      } catch (_) {
+        return false;
+      }
+
+      if (resp.statusCode == 200) {
+        final body = json.decode(resp.body) as Map<String, dynamic>;
+        final newToken = body['token']?.toString();
+        final expiresStr = body['expires']?.toString();
+        if (newToken != null && newToken.isNotEmpty) {
+          authToken = newToken;
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('auth_token', newToken);
+            if (expiresStr != null) {
+              await prefs.setString('auth_token_expires', expiresStr);
+            }
+          } catch (_) {}
+          return true;
+        }
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // 退出登录并清除本地令牌
+  Future<void> logoutAndClear({StatusCallback? onStatus}) async {
+    try {
+      await _httpRequest('POST', '$baseUrl/api/auth/logout', onStatus: onStatus, allowRetry: false);
+    } catch (_) {}
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('auth_token');
+      await prefs.remove('auth_token_expires');
+    } catch (_) {}
+    authToken = null;
+    // rely on ApiService.authToken for headers
+    _updateStatus(RequestStatus.success, '已退出登录');
+  }
 
   // 项目相关API（带实时响应）
   Future<List<Project>> getProjects({StatusCallback? onStatus}) async {
     // Delegate to ProjectService (preserves signature)
     return await _projectService.getProjects(onStatus: onStatus);
+  }
+
+  Future<PaginatedResponse<Project>> getProjectsPaginated({
+    int page = 1,
+    int pageSize = 10,
+    String? search,
+    StatusCallback? onStatus,
+  }) async {
+    return await _projectService.getProjectsPaginated(
+      page: page,
+      pageSize: pageSize,
+      search: search,
+      onStatus: onStatus,
+    );
   }
 
   Future<List<Project>> _refreshProjects(
@@ -453,10 +930,13 @@ class ApiService {
       } else if (response.statusCode == 401) {
         throw response;
       } else {
-        throw Exception('获取项目列表失败: ${response.statusCode}');
+        throw '获取项目列表失败: ${response.statusCode}';
       }
-    } on TimeoutException {
-      throw Exception('请求超时，请检查您的网络连接。');
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
     }
   }
 
@@ -485,13 +965,13 @@ class ApiService {
         _updateStatus(RequestStatus.success, '项目创建成功');
         return createdProject;
     } else {
-      throw Exception('创建项目失败: ${response.statusCode}');
+      throw '创建项目失败: ${response.statusCode}';
     }
     } catch (e) {
-      final errorMsg = '创建项目失败: $e';
+      final errorMsg = e.toString();
       onStatus?.call(RequestStatus.error, errorMsg);
       _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      rethrow;
     }
   }
 
@@ -528,92 +1008,38 @@ class ApiService {
         onStatus?.call(RequestStatus.success, '项目更新成功');
         _updateStatus(RequestStatus.success, '项目更新成功');
       } else {
-      throw Exception('更新项目失败: ${response.statusCode}');
+      throw '更新项目失败: ${response.statusCode}';
     }
     } catch (e) {
-      final errorMsg = '更新项目失败: $e';
+      final errorMsg = e.toString();
       onStatus?.call(RequestStatus.error, errorMsg);
       _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      rethrow;
     }
   }
 
   // 问卷相关API（带实时响应）
   Future<List<Survey>> getSurveys({StatusCallback? onStatus}) async {
-    final prefs = await SharedPreferences.getInstance();
-    const cacheKey = 'surveys_cache';
-    final cached = prefs.getString(cacheKey);
-    if (cached != null) {
-      try {
-        onStatus?.call(RequestStatus.loading, '正在加载缓存数据...');
-        _updateStatus(RequestStatus.loading, '正在加载缓存数据...');
-        
-        final List<dynamic> jsonList = json.decode(cached);
-        final List<Survey> surveys = jsonList.map((e) => Survey.fromJson(e)).toList();
-        
-        onStatus?.call(RequestStatus.success, '缓存数据加载成功');
-        _updateStatus(RequestStatus.success, '缓存数据加载成功');
-        
-        // 异步刷新网络数据，使用独立的回调避免状态混乱
-        _refreshSurveysSilently(prefs, cacheKey, surveys);
-        return surveys;
-      } catch (e) {
-        onStatus?.call(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
-        _updateStatus(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
-      }
-    }
-    return await _refreshSurveys(prefs, cacheKey, onStatus: onStatus);
+    return await _surveyService.getSurveys(onStatus: onStatus);
   }
 
-  // 静默刷新问卷数据（用于异步更新）
-  Future<void> _refreshSurveysSilently(
-    SharedPreferences prefs, 
-    String cacheKey,
-    List<Survey> cachedSurveys,
-  ) async {
-    try {
-      final response = await _httpRequest(
-        'GET',
-        '$baseUrl/api/survey/list',
-        onStatus: null, // 不使用回调，避免状态混乱
-      );
-      
-      if (response.statusCode == 200) {
-        final dynamic body = json.decode(response.body);
-        if (body == null || body is! List) {
-          return;
-        }
-        
-        final newSurveys = body.map<Survey>((json) => Survey.fromJson(json)).toList();
-        
-        // 检查数据是否有变化
-        if (_hasSurveysChanged(cachedSurveys, newSurveys)) {
-          prefs.setString(cacheKey, json.encode(body));
-          
-          // 通知UI数据已更新
-          _notifyDataUpdate('surveys', newSurveys);
-          _updateStatus(RequestStatus.success, '问卷数据已更新');
-        }
-      }
-    } catch (e) {
-      // 静默处理错误，不影响主流程
-    }
+  Future<PaginatedResponse<Survey>> getSurveysPaginated({
+    int page = 1,
+    int pageSize = 5,
+    String? search,
+    String? type,
+    StatusCallback? onStatus,
+  }) async {
+    return await _surveyService.getSurveysPaginated(
+      page: page,
+      pageSize: pageSize,
+      search: search,
+      type: type,
+      onStatus: onStatus,
+    );
   }
-  
-  // 检查问卷数据是否有变化
-  bool _hasSurveysChanged(List<Survey> oldSurveys, List<Survey> newSurveys) {
-    if (oldSurveys.length != newSurveys.length) return true;
-    
-    for (int i = 0; i < oldSurveys.length; i++) {
-      if (oldSurveys[i].id != newSurveys[i].id ||
-          oldSurveys[i].surveyName != newSurveys[i].surveyName ||
-          oldSurveys[i].description != newSurveys[i].description ||
-          oldSurveys[i].updateTime != newSurveys[i].updateTime) {
-        return true;
-      }
-    }
-    return false;
-  }
+
+
 
   Future<List<Survey>> _refreshSurveys(
     SharedPreferences prefs, 
@@ -645,10 +1071,13 @@ class ApiService {
         
         return surveys;
       } else {
-        throw Exception('获取问卷列表失败: ${response.statusCode}');
+        throw '获取问卷列表失败: ${response.statusCode}';
       }
-    } on TimeoutException {
-      throw Exception('请求超时，请检查您的网络连接。');
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
     }
   }
 
@@ -677,13 +1106,13 @@ class ApiService {
         _updateStatus(RequestStatus.success, '问卷创建成功');
         return createdSurvey;
     } else {
-      throw Exception('创建问卷失败: ${response.statusCode}');
+      throw '创建问卷失败: ${response.statusCode}';
     }
     } catch (e) {
-      final errorMsg = '创建问卷失败: $e';
+      final errorMsg = e.toString();
       onStatus?.call(RequestStatus.error, errorMsg);
       _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      rethrow;
     }
   }
 
@@ -731,10 +1160,13 @@ class ApiService {
         onStatus?.call(RequestStatus.success, '问卷删除成功');
         _updateStatus(RequestStatus.success, '问卷删除成功');
       } else {
-        throw Exception('删除问卷失败: ${response.statusCode}');
+        throw '删除问卷失败: ${response.statusCode}';
       }
-    } on TimeoutException {
-      throw Exception('请求超时，请检查您的网络连接。');
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
     }
   }
 
@@ -763,10 +1195,13 @@ class ApiService {
         onStatus?.call(RequestStatus.success, '批量删除问卷成功');
         _updateStatus(RequestStatus.success, '批量删除问卷成功');
       } else {
-        throw Exception('批量删除问卷失败: ${response.statusCode}');
+        throw '批量删除问卷失败: ${response.statusCode}';
       }
-    } on TimeoutException {
-      throw Exception('请求超时，请检查您的网络连接。');
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
     }
   }
 
@@ -810,10 +1245,13 @@ class ApiService {
         onStatus?.call(RequestStatus.success, '项目删除成功');
         _updateStatus(RequestStatus.success, '项目删除成功');
       } else {
-        throw Exception('删除项目失败: ${response.statusCode}');
+        throw '删除项目失败: ${response.statusCode}';
       }
-    } on TimeoutException {
-      throw Exception('请求超时，请检查您的网络连接。');
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
     }
   }
 
@@ -842,10 +1280,13 @@ class ApiService {
         onStatus?.call(RequestStatus.success, '批量删除项目成功');
         _updateStatus(RequestStatus.success, '批量删除项目成功');
       } else {
-        throw Exception('批量删除项目失败: ${response.statusCode}');
+        throw '批量删除项目失败: ${response.statusCode}';
       }
-    } on TimeoutException {
-      throw Exception('请求超时，请检查您的网络连接。');
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
     }
   }
 
@@ -889,10 +1330,13 @@ class ApiService {
         _updateStatus(RequestStatus.success, '问卷统计获取成功');
         return stats;
       } else {
-        throw Exception('获取问卷统计信息失败: ${response.statusCode}');
+        throw '获取问卷统计信息失败: ${response.statusCode}';
       }
-    } on TimeoutException {
-      throw Exception('请求超时，请检查您的网络连接。');
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
     }
   }
 
@@ -1030,10 +1474,13 @@ class ApiService {
           return [];
         }
       } else {
-        throw Exception('获取问卷统计信息失败: ${response.statusCode}');
+        throw '获取问卷统计信息失败: ${response.statusCode}';
       }
-    } on TimeoutException {
-      throw Exception('请求超时，请检查您的网络连接。');
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
     }
   }
 
@@ -1115,13 +1562,13 @@ class ApiService {
         final errorMsg = '重新登录失败: ${response.statusCode}';
         onStatus?.call(RequestStatus.error, errorMsg);
         _updateStatus(RequestStatus.error, errorMsg);
-        throw Exception(errorMsg);
+        throw errorMsg;
       }
     } catch (e) {
-      final errorMsg = '重新登录失败: $e';
+      final errorMsg = e.toString();
       onStatus?.call(RequestStatus.error, errorMsg);
       _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      rethrow;
     }
   }
 
@@ -1242,10 +1689,13 @@ class ApiService {
         
         return questions;
       } else {
-        throw Exception('获取问卷问题列表失败: ${response.statusCode}');
+        throw '获取问卷问题列表失败: ${response.statusCode}';
       }
-    } on TimeoutException {
-      throw Exception('请求超时，请检查您的网络连接。');
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
     }
   }
 Future<Question> addQuestion(
@@ -1257,11 +1707,6 @@ Future<Question> addQuestion(
     onStatus?.call(RequestStatus.loading, '正在添加问题...');
     _updateStatus(RequestStatus.loading, '正在添加问题...');
 
-    // 打印漂亮格式的上传数据
-    final prettyJson = const JsonEncoder.withIndent('  ').convert(question.toJson());
-    if (kDebugMode) {
-      print('上传的数据:\n$prettyJson');
-    }
 
     final response = await _encryptedRequest(
       'POST',
@@ -1280,13 +1725,13 @@ Future<Question> addQuestion(
       _updateStatus(RequestStatus.success, '问题添加成功');
       return addedQuestion;
     } else {
-      throw Exception('添加问题失败: ${response.statusCode}');
+      throw '添加问题失败: ${response.statusCode}';
     }
   } catch (e) {
-    final errorMsg = '添加问题失败: $e';
+    final errorMsg = e.toString();
     onStatus?.call(RequestStatus.error, errorMsg);
     _updateStatus(RequestStatus.error, errorMsg);
-    throw Exception(errorMsg);
+    rethrow;
   }
 }
 
@@ -1327,13 +1772,13 @@ Future<Question> addQuestion(
         _updateStatus(RequestStatus.success, '问题更新成功');
         return updatedQuestion;
     } else {
-      throw Exception('更新问题失败: ${response.statusCode}');
+      throw '更新问题失败: ${response.statusCode}';
     }
     } catch (e) {
-      final errorMsg = '更新问题失败: $e';
+      final errorMsg = e.toString();
       onStatus?.call(RequestStatus.error, errorMsg);
       _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      rethrow;
     }
   }
 
@@ -1359,10 +1804,13 @@ Future<Question> addQuestion(
         onStatus?.call(RequestStatus.success, '问题删除成功');
         _updateStatus(RequestStatus.success, '问题删除成功');
       } else {
-        throw Exception('删除问题失败: ${response.statusCode}');
+        throw '删除问题失败: ${response.statusCode}';
       }
-    } on TimeoutException {
-      throw Exception('请求超时，请检查您的网络连接。');
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
     }
   }
 
@@ -1389,17 +1837,227 @@ Future<Question> addQuestion(
         onStatus?.call(RequestStatus.success, '问题排序成功');
         _updateStatus(RequestStatus.success, '问题排序成功');
       } else {
-      throw Exception('重新排序问题失败: ${response.statusCode}');
+      throw '重新排序问题失败: ${response.statusCode}';
     }
     } catch (e) {
-      final errorMsg = '重新排序问题失败: $e';
+      final errorMsg = e.toString();
       onStatus?.call(RequestStatus.error, errorMsg);
       _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      rethrow;
     }
   }
 
-  // 增强版流式上传函数
+  // Web平台专用的字节数据上传函数
+  Future<String> uploadMediaBytes(
+    int surveyId, 
+    List<int> fileBytes,
+    String fileName, {
+    ProgressCallback? onProgress,
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在准备上传文件...');
+      _updateStatus(RequestStatus.loading, '正在准备上传文件...');
+      
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/api/survey/$surveyId/media'),
+      );
+      
+      final Map<String, String> multipartHeaders = {
+        if (authToken != null) 'Authorization': 'Bearer $authToken',
+      };
+      request.headers.addAll(multipartHeaders);
+      
+      onStatus?.call(RequestStatus.loading, '正在准备文件...');
+      _updateStatus(RequestStatus.loading, '正在准备文件...');
+      
+      final fileSize = fileBytes.length;
+      
+      if (fileSize == 0) {
+        throw '文件为空，无法上传';
+      }
+      
+      // 使用字节数据创建MultipartFile
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        fileBytes,
+        filename: fileName,
+      ));
+      
+      onStatus?.call(RequestStatus.loading, '正在上传文件...');
+      _updateStatus(RequestStatus.loading, '正在上传文件...');
+      
+      final streamedResponse = await request.send();
+      
+      // 监听上传进度
+      int uploadedBytes = 0;
+      final responseBytes = <int>[];
+      final startTime = DateTime.now();
+      
+      await for (final chunk in streamedResponse.stream) {
+        responseBytes.addAll(chunk);
+        uploadedBytes += chunk.length;
+        
+        // 计算进度
+        final progress = (uploadedBytes / fileSize * 100).round();
+        
+        // 计算上传速度
+        final elapsed = DateTime.now().difference(startTime).inSeconds;
+        final speed = elapsed > 0 ? (uploadedBytes / elapsed / 1024).round() : 0; // KB/s
+        
+        // 回调进度
+        onProgress?.call(uploadedBytes, fileSize);
+        onStatus?.call(RequestStatus.loading, '上传进度: $progress% ($speed KB/s)');
+        _updateStatus(RequestStatus.loading, '上传进度: $progress% ($speed KB/s)');
+      }
+      
+      // 构建响应
+      final response = http.Response(
+        utf8.decode(responseBytes),
+        streamedResponse.statusCode,
+        headers: streamedResponse.headers,
+        request: streamedResponse.request,
+      );
+      
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final url = data['publicUrl'] ?? data['url'] as String;
+        
+        final totalTime = DateTime.now().difference(startTime).inSeconds;
+        final avgSpeed = totalTime > 0 ? (fileSize / totalTime / 1024).round() : 0;
+        
+        onStatus?.call(RequestStatus.success, '文件上传成功 (平均速度: $avgSpeed KB/s)');
+        _updateStatus(RequestStatus.success, '文件上传成功 (平均速度: $avgSpeed KB/s)');
+        
+        return url;
+      } else {
+        final errorMsg = '上传媒体文件失败: ${response.statusCode}, Body: ${response.body}';
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        throw errorMsg;
+      }
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        final errorMsg = '上传超时，请检查网络连接';
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        throw errorMsg;
+      } else {
+        final errorMsg = e.toString();
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        rethrow;
+      }
+    }
+  }
+
+  // 通用上传方法，自动适配Web和移动端
+  Future<String> uploadMediaUniversal(
+    int surveyId, 
+    {String? filePath,
+    List<int>? fileBytes,
+    String? fileName,
+    ProgressCallback? onProgress,
+    StatusCallback? onStatus}) async {
+    
+    // Web平台使用字节数据
+    if (kIsWeb) {
+      if (fileBytes == null || fileName == null) {
+        throw 'Web平台需要提供文件字节数据和文件名';
+      }
+      return uploadMediaBytes(surveyId, fileBytes, fileName, 
+          onProgress: onProgress, onStatus: onStatus);
+    }
+    
+    // 桌面端优先使用字节数据，备选文件路径
+    if (fileBytes != null && fileName != null) {
+      return uploadMediaBytes(surveyId, fileBytes, fileName, 
+          onProgress: onProgress, onStatus: onStatus);
+    } else if (filePath != null) {
+      return uploadMedia(surveyId, filePath, 
+          onProgress: onProgress, onStatus: onStatus);
+    } else {
+      throw '需要提供文件路径或字节数据';
+    }
+  }
+
+  // 删除媒体文件
+  Future<void> deleteMediaFile(
+    int surveyId, 
+    String fileId, {
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在删除媒体文件...');
+      _updateStatus(RequestStatus.loading, '正在删除媒体文件...');
+      
+      final response = await _httpRequest(
+        'DELETE',
+        '$baseUrl/api/survey/$surveyId/media/$fileId',
+      );
+      
+      if (response.statusCode == 200) {
+        onStatus?.call(RequestStatus.success, '媒体文件删除成功');
+        _updateStatus(RequestStatus.success, '媒体文件删除成功');
+      } else {
+        throw '删除媒体文件失败: ${response.statusCode}';
+      }
+    } catch (e) {
+      final errorMsg = e.toString();
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
+    }
+  }
+
+  // 通过文件名删除媒体文件
+  Future<void> deleteMediaFileByName(
+    int surveyId, 
+    String fileName, {
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在查找媒体文件...');
+      _updateStatus(RequestStatus.loading, '正在查找媒体文件...');
+      
+      // 先获取问卷的所有媒体文件
+      final response = await _httpRequest(
+        'GET',
+        '$baseUrl/api/survey/$surveyId/media',
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final files = data['files'] as List<dynamic>;
+        
+        // 查找匹配的文件
+        String? fileId;
+        for (final file in files) {
+          if (file['fileName'] == fileName) {
+            fileId = file['id'].toString();
+            break;
+          }
+        }
+        
+        if (fileId != null) {
+          // 找到文件ID，调用删除接口
+          await deleteMediaFile(surveyId, fileId, onStatus: onStatus);
+        } else {
+          throw '未找到指定的媒体文件';
+        }
+      } else {
+        throw '获取媒体文件列表失败: ${response.statusCode}';
+      }
+    } catch (e) {
+      final errorMsg = e.toString();
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
+    }
+  }
+
+  // 增强版流式上传函数（移动端使用文件路径）
   Future<String> uploadMedia(
     int surveyId, 
     String filePath, {
@@ -1428,7 +2086,7 @@ Future<Question> addQuestion(
       final fileSize = await file.length();
       
       if (fileSize == 0) {
-        throw Exception('文件为空，无法上传');
+        throw '文件为空，无法上传';
       }
       
       request.files.add(await http.MultipartFile.fromPath('file', filePath));
@@ -1485,18 +2143,20 @@ Future<Question> addQuestion(
         final errorMsg = '上传媒体文件失败: ${response.statusCode}, Body: ${response.body}';
         onStatus?.call(RequestStatus.error, errorMsg);
         _updateStatus(RequestStatus.error, errorMsg);
-        throw Exception(errorMsg);
+        throw errorMsg;
       }
-    } on TimeoutException {
-      final errorMsg = '上传超时，请检查网络连接';
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
     } catch (e) {
-      final errorMsg = '上传媒体文件失败: $e';
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        final errorMsg = '上传超时，请检查网络连接';
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        throw errorMsg;
+      } else {
+        final errorMsg = e.toString();
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        rethrow;
+      }
     }
   }
 
@@ -1530,7 +2190,7 @@ Future<Question> addQuestion(
       final fileSize = await file.length();
       
       if (fileSize == 0) {
-        throw Exception('文件为空，无法上传');
+        throw '文件为空，无法上传';
       }
       
       request.files.add(await http.MultipartFile.fromPath('file', filePath));
@@ -1589,18 +2249,20 @@ Future<Question> addQuestion(
         final errorMsg = '上传媒体文件失败: ${response.statusCode}, Body: ${response.body}';
         onStatus?.call(RequestStatus.error, errorMsg);
         _updateStatus(RequestStatus.error, errorMsg);
-        throw Exception(errorMsg);
+        throw errorMsg;
       }
-    } on TimeoutException {
-      final errorMsg = '上传超时，请检查网络连接';
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
     } catch (e) {
-      final errorMsg = '上传媒体文件失败: $e';
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        final errorMsg = '上传超时，请检查网络连接';
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        throw errorMsg;
+      } else {
+        final errorMsg = e.toString();
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        rethrow;
+      }
     }
   }
 
@@ -1654,15 +2316,15 @@ Future<Question> addQuestion(
         onStatus?.call(RequestStatus.success, '批量上传完成，成功上传 ${uploadedUrls.length}/${filePaths.length} 个文件');
         _updateStatus(RequestStatus.success, '批量上传完成，成功上传 ${uploadedUrls.length}/${filePaths.length} 个文件');
       } else {
-        throw Exception('所有文件上传失败');
+        throw '所有文件上传失败';
       }
       
       return uploadedUrls;
     } catch (e) {
-      final errorMsg = '批量上传失败: $e';
+      final errorMsg = e.toString();
       onStatus?.call(RequestStatus.error, errorMsg);
       _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      rethrow;
     }
   }
 
@@ -1692,13 +2354,13 @@ Future<Question> addQuestion(
         onStatus?.call(RequestStatus.success, '问卷背景更新成功');
         _updateStatus(RequestStatus.success, '问卷背景更新成功');
       } else {
-    throw Exception('更新问卷背景失败: ${response.statusCode}');
+    throw '更新问卷背景失败: ${response.statusCode}';
   }
     } catch (e) {
-      final errorMsg = '更新问卷背景失败: $e';
+      final errorMsg = e.toString();
       onStatus?.call(RequestStatus.error, errorMsg);
       _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      rethrow;
     }
 }
 
@@ -1723,10 +2385,13 @@ Future<Question> addQuestion(
         _updateStatus(RequestStatus.success, '问卷背景获取成功');
         return data;
       } else {
-        throw Exception('获取问卷背景失败: ${response.statusCode}');
+        throw '获取问卷背景失败: ${response.statusCode}';
       }
-    } on TimeoutException {
-      throw Exception('请求超时，请检查您的网络连接。');
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
     }
   }
 
@@ -1747,10 +2412,13 @@ Future<Question> addQuestion(
         _updateStatus(RequestStatus.success, '点击验证码生成成功');
         return captcha;
       } else {
-        throw Exception('获取点击验证码失败: ${response.statusCode}');
+        throw '获取点击验证码失败: ${response.statusCode}';
       }
-    } on TimeoutException {
-      throw Exception('请求超时，请检查您的网络连接。');
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
     }
   }
 
@@ -1775,13 +2443,13 @@ Future<Question> addQuestion(
         _updateStatus(RequestStatus.success, '验证码验证成功');
         return result;
     } else {
-      throw Exception('验证失败: ${response.statusCode}');
+      throw '验证失败: ${response.statusCode}';
     }
     } catch (e) {
-      final errorMsg = '验证码验证失败: $e';
+      final errorMsg = e.toString();
       onStatus?.call(RequestStatus.error, errorMsg);
       _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      rethrow;
     }
   }
 
@@ -1805,10 +2473,13 @@ Future<Question> addQuestion(
         _updateStatus(RequestStatus.success, '问卷详情获取成功');
         return survey;
       } else {
-        throw Exception('获取问卷详情失败: ${response.statusCode}');
+        throw '获取问卷详情失败: ${response.statusCode}';
       }
-    } on TimeoutException {
-      throw Exception('请求超时，请检查您的网络连接。');
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
     }
   }
 
@@ -1834,22 +2505,26 @@ Future<Question> addQuestion(
           final errorMsg = data['msg'] ?? '验证码获取失败';
           onStatus?.call(RequestStatus.error, errorMsg);
           _updateStatus(RequestStatus.error, errorMsg);
-          throw Exception(errorMsg);
+          throw errorMsg;
         }
       } else {
         final errorMsg = '验证码获取失败: ${response.statusCode}';
         onStatus?.call(RequestStatus.error, errorMsg);
         _updateStatus(RequestStatus.error, errorMsg);
-        throw Exception(errorMsg);
+        throw errorMsg;
       }
-    } on TimeoutException {
-      final errorMsg = '请求超时，请检查网络后重试';
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      return {
-        'code': -1,
-        'msg': errorMsg,
-      };
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        final errorMsg = '请求超时，请检查网络后重试';
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        return {
+          'code': -1,
+          'msg': errorMsg,
+        };
+      } else {
+        rethrow;
+      }
     }
   }
 
@@ -1872,10 +2547,13 @@ Future<Question> addQuestion(
         _updateStatus(RequestStatus.success, '用户信息获取成功');
         return user;
       } else {
-        throw Exception('获取用户信息失败: ${response.statusCode}');
+        throw '获取用户信息失败: ${response.statusCode}';
       }
-    } on TimeoutException {
-      throw Exception('请求超时，请检查您的网络连接。');
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
     }
   }
 
@@ -1898,14 +2576,96 @@ Future<Question> addQuestion(
         _updateStatus(RequestStatus.success, '个人资料获取成功');
         return user;
       } else {
-        throw Exception('获取个人资料失败: ${response.statusCode}');
+        throw '获取个人资料失败: ${response.statusCode}';
       }
-    } on TimeoutException {
-      throw Exception('请求超时，请检查您的网络连接。');
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        throw '请求超时，请检查您的网络连接。';
+      }
+      rethrow;
     }
   }
 
-  /// 上传用户头像
+  /// Web平台专用的头像上传方法（使用字节数据）
+  Future<String> uploadAvatarBytes({
+    required List<int> imageBytes,
+    required String fileName,
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在上传头像...');
+      _updateStatus(RequestStatus.loading, '正在上传头像...');
+
+      final uri = Uri.parse('$baseUrl/api/user/avatar/upload');
+      final request = http.MultipartRequest('POST', uri);
+
+      // 添加请求头
+      request.headers.addAll(_headers);
+
+      // 添加图片文件（使用字节数据）
+      final multipartFile = http.MultipartFile.fromBytes(
+        'avatar',
+        imageBytes,
+        filename: fileName,
+        contentType: MediaType('image', _getFileExtension(fileName)),
+      );
+      request.files.add(multipartFile);
+
+      // 发送请求
+      final streamedResponse = await request.send().timeout(timeoutDuration);
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final jsonData = json.decode(response.body);
+        final avatarUrl = jsonData['avatarUrl'] as String;
+        onStatus?.call(RequestStatus.success, '头像上传成功');
+        _updateStatus(RequestStatus.success, '头像上传成功');
+        return avatarUrl;
+      } else {
+        throw '上传失败: ${response.statusCode}';
+      }
+    } catch (e) {
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        final errorMsg = '上传超时，请检查网络连接';
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        throw errorMsg;
+      } else {
+        final errorMsg = e.toString();
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        rethrow;
+      }
+    }
+  }
+
+  /// 通用头像上传方法，自动适配Web和移动端
+  Future<String> uploadAvatarUniversal({
+    File? imageFile,
+    List<int>? imageBytes,
+    String? fileName,
+    StatusCallback? onStatus,
+  }) async {
+    // Web平台使用字节数据
+    if (kIsWeb) {
+      if (imageBytes == null || fileName == null) {
+        throw 'Web平台需要提供图片字节数据和文件名';
+      }
+      return uploadAvatarBytes(
+        imageBytes: imageBytes,
+        fileName: fileName,
+        onStatus: onStatus,
+      );
+    }
+    
+    // 移动端使用文件对象
+    if (imageFile == null) {
+      throw '移动端需要提供图片文件';
+    }
+    return uploadAvatar(imageFile: imageFile, onStatus: onStatus);
+  }
+
+  /// 上传用户头像（移动端使用文件对象）
   Future<String> uploadAvatar({
     required File imageFile,
     StatusCallback? onStatus,
@@ -1939,18 +2699,20 @@ Future<Question> addQuestion(
         _updateStatus(RequestStatus.success, '头像上传成功');
         return avatarUrl;
       } else {
-        throw Exception('上传失败: ${response.statusCode}');
+        throw '上传失败: ${response.statusCode}';
       }
-    } on TimeoutException {
-      final errorMsg = '上传超时，请检查网络连接';
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
     } catch (e) {
-      final errorMsg = '头像上传失败: $e';
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
+        final errorMsg = '上传超时，请检查网络连接';
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        throw errorMsg;
+      } else {
+        final errorMsg = e.toString();
+        onStatus?.call(RequestStatus.error, errorMsg);
+        _updateStatus(RequestStatus.error, errorMsg);
+        rethrow;
+      }
     }
   }
 
@@ -1964,7 +2726,7 @@ Future<Question> addQuestion(
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('authToken');
     if (token == null) {
-      throw Exception('未找到令牌');
+      throw '未找到令牌';
     }
 
     final response = await http.post(
@@ -1976,7 +2738,7 @@ Future<Question> addQuestion(
     );
 
     if (response.statusCode != 200) {
-      throw Exception('注销失败: ${response.body}');
+      throw '注销失败: ${response.body}';
     }
 
     // 注销成功后清除本地存储的令牌
@@ -2004,15 +2766,15 @@ Future<Question> addQuestion(
         _updateStatus(RequestStatus.success, '问卷信息获取成功');
         return data;
       } else if (response.statusCode == 401) {
-        throw TokenExpiredException('未登录或登录已过期');
+        throw TokenExpired('未登录或登录已过期');
       } else {
-        throw Exception('获取问卷信息失败: ${response.statusCode}');
+        throw '获取问卷信息失败: ${response.statusCode}';
       }
     } catch (e) {
-      final errorMsg = '获取问卷信息失败: $e';
+      final errorMsg = e.toString();
       onStatus?.call(RequestStatus.error, errorMsg);
       _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      rethrow;
     }
   }
 
@@ -2037,15 +2799,15 @@ Future<Question> addQuestion(
         onStatus?.call(RequestStatus.success, '答案提交成功');
         _updateStatus(RequestStatus.success, '答案提交成功');
       } else if (response.statusCode == 401) {
-        throw TokenExpiredException('未登录或登录已过期');
+        throw TokenExpired('未登录或登录已过期');
       } else {
-        throw Exception('提交答案失败: ${response.statusCode}');
+        throw '提交答案失败: ${response.statusCode}';
       }
     } catch (e) {
-      final errorMsg = '提交答案失败: $e';
+      final errorMsg = e.toString();
       onStatus?.call(RequestStatus.error, errorMsg);
       _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      rethrow;
     }
   }
 
@@ -2071,15 +2833,15 @@ Future<Question> addQuestion(
         _updateStatus(RequestStatus.success, '作答结果获取成功');
         return results;
       } else if (response.statusCode == 401) {
-        throw TokenExpiredException('未登录或登录已过期');
+        throw TokenExpired('未登录或登录已过期');
       } else {
-        throw Exception('获取作答结果失败: ${response.statusCode}');
+        throw '获取作答结果失败: ${response.statusCode}';
       }
     } catch (e) {
-      final errorMsg = '获取作答结果失败: $e';
+      final errorMsg = e.toString();
       onStatus?.call(RequestStatus.error, errorMsg);
       _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      rethrow;
     }
   }
 
@@ -2102,17 +2864,17 @@ Future<Question> addQuestion(
         onStatus?.call(RequestStatus.success, '答案删除成功');
         _updateStatus(RequestStatus.success, '答案删除成功');
       } else if (response.statusCode == 401) {
-        throw TokenExpiredException('未登录或登录已过期');
+        throw TokenExpired('未登录或登录已过期');
       } else if (response.statusCode == 403) {
-        throw Exception('无权限删除此答案');
+        throw '无权限删除此答案';
       } else {
-        throw Exception('删除答案失败: ${response.statusCode}');
+        throw '删除答案失败: ${response.statusCode}';
       }
     } catch (e) {
-      final errorMsg = '删除答案失败: $e';
+      final errorMsg = e.toString();
       onStatus?.call(RequestStatus.error, errorMsg);
       _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      rethrow;
     }
   }
 
@@ -2138,17 +2900,17 @@ Future<Question> addQuestion(
         onStatus?.call(RequestStatus.success, '成功删除 $deletedCount 条答案');
         _updateStatus(RequestStatus.success, '成功删除 $deletedCount 条答案');
       } else if (response.statusCode == 401) {
-        throw TokenExpiredException('未登录或登录已过期');
+        throw TokenExpired('未登录或登录已过期');
       } else if (response.statusCode == 403) {
-        throw Exception('无权限删除这些答案');
+        throw '无权限删除这些答案';
       } else {
-        throw Exception('批量删除答案失败: ${response.statusCode}');
+        throw '批量删除答案失败: ${response.statusCode}';
       }
     } catch (e) {
-      final errorMsg = '批量删除答案失败: $e';
+      final errorMsg = e.toString();
       onStatus?.call(RequestStatus.error, errorMsg);
       _updateStatus(RequestStatus.error, errorMsg);
-      throw Exception(errorMsg);
+      rethrow;
     }
   }
 }

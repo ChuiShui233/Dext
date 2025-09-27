@@ -6,6 +6,7 @@ class Survey {
   final int surveyType;
   final int surveyStatus;
   final int totalTimes;
+  final int? perUserLimit; // 单用户提交上限（空/0 为不限）
   final int projectId; // 关键字段：问卷所属项目ID
   final String? deadline;
   final String createTime;
@@ -19,6 +20,7 @@ class Survey {
     required this.surveyType,
     required this.surveyStatus,
     required this.totalTimes,
+    this.perUserLimit,
     required this.projectId, // 必须包含
     this.deadline,
     required this.createTime,
@@ -33,6 +35,7 @@ class Survey {
     int? surveyType,
     int? surveyStatus,
     int? totalTimes,
+    int? perUserLimit,
     int? projectId,
     String? deadline,
     String? createTime,
@@ -46,6 +49,7 @@ class Survey {
       surveyType: surveyType ?? this.surveyType,
       surveyStatus: surveyStatus ?? this.surveyStatus,
       totalTimes: totalTimes ?? this.totalTimes,
+      perUserLimit: perUserLimit ?? this.perUserLimit,
       projectId: projectId ?? this.projectId, // 包含项目ID
       deadline: deadline ?? this.deadline,
       createTime: createTime ?? this.createTime,
@@ -62,6 +66,7 @@ class Survey {
       surveyType: json['surveyType'] as int? ?? 0,
       surveyStatus: json['surveyStatus'] as int? ?? 0,
       totalTimes: json['totalTimes'] as int? ?? 0,
+      perUserLimit: json['per_user_limit'] as int? ?? json['perUserLimit'] as int?,
       projectId: json['projectId'] as int? ?? json['project_id'] as int? ?? 0,
       deadline: json['deadline'] as String?,
       createTime: json['createTime'] as String? ?? '',
@@ -78,6 +83,7 @@ class Survey {
       'surveyType': surveyType,
       'surveyStatus': surveyStatus,
       'totalTimes': totalTimes,
+      'per_user_limit': perUserLimit,
       'project_id': projectId, // 修改为 project_id
       'deadline': deadline,
       'createTime': createTime,

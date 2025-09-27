@@ -33,7 +33,7 @@ class RotatingText extends StatefulWidget {
   });
 
   @override
-  _RotatingTextState createState() => _RotatingTextState();
+  State<RotatingText> createState() => _RotatingTextState();
 }
 
 class _RotatingTextState extends State<RotatingText>
@@ -191,7 +191,7 @@ class AnimatedTextElement extends StatefulWidget {
   });
 
   @override
-  _AnimatedTextElementState createState() => _AnimatedTextElementState();
+  State<AnimatedTextElement> createState() => _AnimatedTextElementState();
 }
 
 class _AnimatedTextElementState extends State<AnimatedTextElement> {

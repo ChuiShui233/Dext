@@ -76,5 +76,10 @@
         "xtree": "cpp",
         "xutility": "cpp"
     },
-    "cmake.ignoreCMakeListsMissing": true
+    "cmake.ignoreCMakeListsMissing": true,
+
+    "files.autoSave": "afterDelay",
+    "dart.flutterHotReloadOnSave": "all",
+
+    "dart.mcpServer": true
 }

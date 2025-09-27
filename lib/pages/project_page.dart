@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
@@ -36,6 +37,13 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
   
   // 自动刷新定时器
   Timer? _autoRefreshTimer;
+  
+  // 分页相关
+  final int _itemsPerPage = 10;
+  int _currentPage = 1;
+  int _totalPages = 1;
+  int _totalItems = 0;
+  FPaginationController _paginationController = FPaginationController(pages: 1);
 
   @override
   void initState() {
@@ -50,9 +58,10 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
+    _paginationController.dispose();
     _refreshController.dispose();
-    _autoRefreshTimer?.cancel();
+    _stopAutoRefresh();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -80,6 +89,24 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
   void _stopAutoRefresh() {
     _autoRefreshTimer?.cancel();
   }
+
+  // 分页处理方法
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final value = PageStorage.maybeOf(context)?.readState(context) ?? 0;
+    _paginationController.page = value;
+  }
+
+  void _handlePageChange(int page) {
+    if (_currentPage != page + 1) { // FPagination uses 0-based indexing
+      setState(() {
+        _currentPage = page + 1; // Convert to 1-based for API
+      });
+      _loadProjects();
+    }
+  }
+
 
   // 下拉刷新回调
   void _onRefresh() async {
@@ -144,19 +171,30 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
     }
     
     try {
-      final projects = await _apiService.getProjects();
+      final paginatedResponse = await _apiService.getProjectsPaginated(
+        page: _currentPage,
+        pageSize: _itemsPerPage,
+      );
       if (!mounted) return;
       
       setState(() {
-        _projects = projects;
+        _projects = paginatedResponse.items;
+        _totalPages = paginatedResponse.totalPages;
+        _totalItems = paginatedResponse.total;
         _isLoading = false;
       });
+      
+      // 更新分页控制器
+      _paginationController.dispose();
+      _paginationController = FPaginationController(pages: _totalPages > 0 ? _totalPages : 1);
+      // 同步当前页码到分页控制器（转换为0-based）
+      _paginationController.page = (_currentPage - 1).clamp(0, (_totalPages - 1).clamp(0, double.infinity).toInt());
     } catch (e) {
       if (!mounted) return;
       
       setState(() => _isLoading = false);
       
-      if (!silent) {
+      if (!silent && context.mounted) {
         showFToast(
           context: context,
           alignment:FToastAlignment.bottomRight,
@@ -255,6 +293,7 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
               try {
                 await _apiService.createProject(newProject);
                 if (!mounted) return;
+                if (!context.mounted) return;
                 Navigator.pop(context);
                 // 触发下拉刷新动画
                 WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -262,6 +301,7 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                 });
               } catch (e) {
                 if (!mounted) return;
+                if (!context.mounted) return;
                 showFToast(
                   context: context,
                   alignment:FToastAlignment.bottomRight,
@@ -359,12 +399,14 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
 
               try {
                 await _apiService.updateProject(updatedProject);
+                if (!context.mounted) return;
                 Navigator.pop(context);
                 // 触发下拉刷新动画
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _refreshController.requestRefresh();
                 });
               } catch (e) {
+                if (!context.mounted) return;
                 showFToast(
                   context: context,
                   alignment:FToastAlignment.bottomRight,
@@ -491,6 +533,7 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
           });
         }
         
+        if (!mounted) return;
         showFToast(
           context: context,
           alignment: FToastAlignment.bottomRight,
@@ -512,6 +555,7 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
           ),
         );
       } catch (e) {
+        if (!mounted) return;
         showFToast(
           context: context,
           alignment: FToastAlignment.bottomRight,
@@ -538,14 +582,16 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
         final frameState = context.findAncestorStateOfType<FramePageState>();
         if (frameState != null) {
           frameState.handleTabChange(0);
-          return false;
+        } else {
+          Navigator.of(context).maybePop();
         }
-        return true;
       },
       child: Scaffold(
         body: Stack(
@@ -669,169 +715,212 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                                 ],
                               ),
                             )
-                          : SmartRefresher(
-                              controller: _refreshController,
-                              onRefresh: _onRefresh,
-                              enablePullDown: true,
-                              enablePullUp: false,
-                              header: const ClassicHeader(
-                                refreshStyle: RefreshStyle.Follow,
-                                textStyle: TextStyle(color: Colors.grey),
-                                iconPos: IconPosition.top,
-                              ),
-                              child: ListView.builder(
-                                itemCount: _projects.length,
-                                itemBuilder: (context, index) {
-                                  final project = _projects[index];
-                                  final isSelected = _selectedProjectIds.contains(project.id);
-                                  
-                                  Widget cardContent = Card(
-                                    margin: const EdgeInsets.all(8.0),
-                                    elevation: 2,
-                                    color: Theme.of(context).brightness == Brightness.dark 
-                                      ? Colors.transparent
-                                      : Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      side: BorderSide(
-                                        color: Theme.of(context).brightness == Brightness.dark 
-                                          ? Colors.white.withValues(alpha: 0.1)
-                                          : Colors.black.withValues(alpha: 0.1),
-                                        width: 1,
-                                      ),
+                          : Column(
+                              children: [
+                                Expanded(
+                                  child: ScrollConfiguration(
+                                    behavior: ScrollConfiguration.of(context).copyWith(
+                                      scrollbars: false,
+                                      dragDevices: const {
+                                        PointerDeviceKind.touch,
+                                        PointerDeviceKind.mouse,
+                                        PointerDeviceKind.trackpad,
+                                        PointerDeviceKind.stylus,
+                                      },
                                     ),
-                                    child: ListTile(
-                                      title: Text(
-                                        project.projectName,
-                                        style: TextStyle(
-                                          color: Theme.of(context).brightness == Brightness.dark 
-                                            ? Colors.white 
-                                            : Colors.black87,
-                                          fontWeight: FontWeight.w500,
-                                        ),
+                                    child: SmartRefresher(
+                                      controller: _refreshController,
+                                      onRefresh: _onRefresh,
+                                      enablePullDown: true,
+                                      enablePullUp: false,
+                                      physics: const BouncingScrollPhysics(
+                                        parent: AlwaysScrollableScrollPhysics(),
                                       ),
-                                      subtitle: Text(
-                                        project.projectDescription,
-                                        style: TextStyle(
-                                          color: Theme.of(context).brightness == Brightness.dark 
-                                            ? Colors.white70 
-                                            : Colors.black54,
-                                        ),
+                                      header: const ClassicHeader(
+                                        refreshStyle: RefreshStyle.Follow,
+                                        textStyle: TextStyle(color: Colors.grey),
+                                        iconPos: IconPosition.top,
                                       ),
-                                      trailing: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          FButton(
-                                            onPress: () => _openProjectSurveys(project),
-                                            child: Icon(
-                                              Icons.assignment_outlined,
-                                              size: 20,
-                                              color: Theme.of(context).brightness == Brightness.dark 
-                                                ? Colors.black.withValues(alpha: 0.6)
-                                                : Colors.white.withValues(alpha: 0.7),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          FButton(
-                                            onPress: () => _showEditProjectDialog(project),
-                                            child: Icon(
-                                              Icons.edit,
-                                              size: 20,
-                                              color: Theme.of(context).brightness == Brightness.dark 
-                                                ? Colors.black.withValues(alpha: 0.6)
-                                                : Colors.white.withValues(alpha: 0.7),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          FButton(
-                                            onPress: () async {
-                                              final confirm = await showAdaptiveDialog<bool>(
-                                                context: context,
-                                                builder: (context) => FDialog(
-                                                  direction: Axis.horizontal,
-                                                  title: const Text('确认删除'),
-                                                  body: const Text('确定要删除这个项目吗？此操作不可撤销。'),
-                                                  actions: [
-                                                    FButton(
-                                                      style: FButtonStyle.outline,
-                                                      onPress: () => Navigator.of(context).pop(false),
-                                                      child: const Text('取消'),
+                                      child: ListView.builder(
+                                        itemCount: _projects.length,
+                                        itemBuilder: (context, index) {
+                                          final project = _projects[index];
+                                          final isSelected = _selectedProjectIds.contains(project.id);
+                                  
+                                                Widget cardContent = Card(
+                                                  margin: const EdgeInsets.all(8.0),
+                                                  elevation: 2,
+                                                  color: Theme.of(context).brightness == Brightness.dark 
+                                                    ? Colors.transparent
+                                                    : Colors.white,
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius: BorderRadius.circular(12),
+                                                    side: BorderSide(
+                                                      color: Theme.of(context).brightness == Brightness.dark 
+                                                        ? Colors.white.withValues(alpha: 0.1)
+                                                        : Colors.black.withValues(alpha: 0.1),
+                                                      width: 1,
                                                     ),
-                                                    FButton(
-                                                      style: FButtonStyle.destructive,
-                                                      onPress: () => Navigator.of(context).pop(true),
-                                                      child: const Text('删除'),
-                                                    ),
-                                                  ],
-                                                ),
-                                              );
-
-                                              if (confirm == true) {
-                                                try {
-                                                  await _apiService.deleteProject(project.id);
-                                                  // 触发下拉刷新动画
-                                                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                                                    _refreshController.requestRefresh();
-                                                  });
-                                                } catch (e) {
-                                                  showFToast(
-                                                    context: context,
-                                                    alignment:FToastAlignment.bottomRight,
-                                                    title: const Text('删除失败'),
-                                                    description: Text('删除项目失败: $e'),
-                                                    suffixBuilder: (context, entry, _) => IntrinsicHeight(
-                                                      child: FButton(
-                                                        style: context.theme.buttonStyles.primary.copyWith(
-                                                          contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                                                            textStyle: FWidgetStateMap.all(
-                                                              context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                        onPress: entry.dismiss,
-                                                        child: const Text('关闭'),
+                                                  ),
+                                                  child: ListTile(
+                                                    title: Text(
+                                                      project.projectName,
+                                                      style: TextStyle(
+                                                        color: Theme.of(context).brightness == Brightness.dark 
+                                                          ? Colors.white 
+                                                          : Colors.black87,
+                                                        fontWeight: FontWeight.w500,
                                                       ),
                                                     ),
+                                                    subtitle: Text(
+                                                      project.projectDescription,
+                                                      style: TextStyle(
+                                                        color: Theme.of(context).brightness == Brightness.dark 
+                                                          ? Colors.white70 
+                                                          : Colors.black54,
+                                                      ),
+                                                    ),
+                                                    trailing: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        FButton(
+                                                          onPress: () => _openProjectSurveys(project),
+                                                          child: Icon(
+                                                            Icons.assignment_outlined,
+                                                            size: 20,
+                                                            color: Theme.of(context).brightness == Brightness.dark 
+                                                              ? Colors.black.withValues(alpha: 0.6)
+                                                              : Colors.white.withValues(alpha: 0.7),
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 8),
+                                                        FButton(
+                                                          onPress: () => _showEditProjectDialog(project),
+                                                          child: Icon(
+                                                            Icons.edit,
+                                                            size: 20,
+                                                            color: Theme.of(context).brightness == Brightness.dark 
+                                                              ? Colors.black.withValues(alpha: 0.6)
+                                                              : Colors.white.withValues(alpha: 0.7),
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 8),
+                                                        FButton(
+                                                          onPress: () async {
+                                                            final confirm = await showAdaptiveDialog<bool>(
+                                                              context: context,
+                                                              builder: (context) => FDialog(
+                                                                direction: Axis.horizontal,
+                                                                title: const Text('确认删除'),
+                                                                body: const Text('确定要删除这个项目吗？此操作不可撤销。'),
+                                                                actions: [
+                                                                  FButton(
+                                                                    style: FButtonStyle.outline,
+                                                                    onPress: () => Navigator.of(context).pop(false),
+                                                                    child: const Text('取消'),
+                                                                  ),
+                                                                  FButton(
+                                                                    style: FButtonStyle.destructive,
+                                                                    onPress: () => Navigator.of(context).pop(true),
+                                                                    child: const Text('删除'),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            );
+
+                                                            if (confirm == true) {
+                                                              try {
+                                                                await _apiService.deleteProject(project.id);
+                                                                WidgetsBinding.instance.addPostFrameCallback((_) {
+                                                                  _refreshController.requestRefresh();
+                                                                });
+                                                              } catch (e) {
+                                                                if (!context.mounted) return;
+                                                                showFToast(
+                                                                  context: context,
+                                                                  alignment:FToastAlignment.bottomRight,
+                                                                  title: const Text('删除失败'),
+                                                                  description: Text('删除项目失败: $e'),
+                                                                );
+                                                              }
+                                                            }
+                                                          },
+                                                          child: Icon(
+                                                            Icons.delete,
+                                                            size: 20,
+                                                            color: Theme.of(context).brightness == Brightness.dark 
+                                                              ? Colors.red.shade300
+                                                              : Colors.red.shade700,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                );
+
+                                                // 如果处于多选模式，用MultiSelectItem包装
+                                                if (_isMultiSelectMode) {
+                                                  cardContent = MultiSelectItem(
+                                                    id: project.id,
+                                                    isSelected: isSelected,
+                                                    onSelectionChanged: _onProjectSelectionChanged,
+                                                    child: cardContent,
                                                   );
                                                 }
-                                              }
-                                            },
-                                            child: Icon(
-                                              Icons.delete,
-                                              size: 20,
-                                              color: Theme.of(context).brightness == Brightness.dark 
-                                                ? Colors.red.shade300
-                                                : Colors.red.shade700,
-                                            ),
-                                          ),
-                                        ],
+
+                                          return Padding(
+                                            padding: const EdgeInsets.all(8.0),
+                                            child: cardContent,
+                                          );
+                                        },
                                       ),
                                     ),
-                                  );
-
-                                  // 如果处于多选模式，用MultiSelectItem包装
-                                  if (_isMultiSelectMode) {
-                                    cardContent = MultiSelectItem(
-                                      id: project.id,
-                                      isSelected: isSelected,
-                                      onSelectionChanged: _onProjectSelectionChanged,
-                                      child: cardContent,
-                                    );
-                                  }
-
-                                  return Padding(
-                                    padding: const EdgeInsets.all(8.0),
-                                    child: cardContent,
-                                  );
-                                },
-                              ),
+                                  ),
+                                ),
+                                // 添加分页组件
+                                if (_totalPages > 1)
+                                  _buildFPagination(context, _totalPages),
+                              ],
                             ),
                   ),
               ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFPagination(BuildContext context, int totalPages) {
+    return Container(
+      margin: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: Theme.of(context).brightness == Brightness.dark
+            ? Colors.white.withValues(alpha: 0.04)
+            : Colors.white.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.06),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            '共 $_totalItems 个项目，第 $_currentPage / $_totalPages 页',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
+          ),
+          FPagination(
+            controller: _paginationController,
+            onChange: _handlePageChange,
+          ),
+        ],
       ),
     );
   }

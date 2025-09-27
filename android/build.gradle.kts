@@ -4,9 +4,10 @@ import org.gradle.api.Task
 import org.gradle.api.execution.TaskExecutionListener
 import org.gradle.api.tasks.TaskState
 import org.gradle.kotlin.dsl.extra
+import com.android.build.gradle.LibraryExtension
 
 buildscript {
-    extra["kotlin_version"] = "1.9.22"
+    extra["kotlin_version"] = "2.1.0"
     repositories {
         google()
         mavenCentral()
@@ -36,5 +37,17 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+    }
+}
+
+// Inject namespace for legacy Android library modules that miss it (AGP 8+ requirement)
+subprojects {
+    if (name == "uni_links") {
+        plugins.withId("com.android.library") {
+            // Configure the Android Library extension to set the required namespace
+            extensions.configure<LibraryExtension>("android") {
+                namespace = "name.avioli.unilinks"
+            }
+        }
     }
 }

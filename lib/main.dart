@@ -1,7 +1,8 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:dext/models/user.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, PlatformDispatcher;
+import 'package:flutter/foundation.dart' show kIsWeb, PlatformDispatcher, kDebugMode;
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:forui/forui.dart';
@@ -113,6 +114,24 @@ Future<void> _initDesktopWindowAndTray() async {
 }
 
 void main() async {
+  if (kDebugMode) {
+    
+    FlutterError.onError = (FlutterErrorDetails details) {
+      if (details.exception.toString().contains('SocketException') ||
+          details.exception.toString().contains('Connection refused')) {
+        return;
+      }
+      FlutterError.presentError(details);
+    };
+    
+    PlatformDispatcher.instance.onError = (error, stack) {
+      if (error.toString().contains('SocketException') ||
+          error.toString().contains('Connection refused')) {
+        return true;
+      }
+      return false;
+    };
+  }
   WidgetsFlutterBinding.ensureInitialized();
 
   // 桌面窗口管理
@@ -158,6 +177,8 @@ class _YuMeng233AppState extends State<YuMeng233App>
     _updateThemeMode();
     _handleInitialUrl();
     _startClipboardListening();
+    // 注册全局 401 处理：自动跳转登录并提示“登录已过期”
+    ApiService.onUnauthorized = _handleUnauthorized401;
   }
 
   @override
@@ -199,6 +220,47 @@ class _YuMeng233AppState extends State<YuMeng233App>
     });
   }
 
+  // 全局401处理：防抖，清理并回到登录
+  bool _handlingUnauthorized = false;
+  Future<void> _handleUnauthorized401() async {
+    if (_handlingUnauthorized) return;
+    _handlingUnauthorized = true;
+    try {
+      // 只有在用户已经登录的情况下才处理401（登录过期）
+      final hasToken = _token != null && _tokenExpiry != null;
+      
+      // 清理本地令牌
+      await _storage.delete(key: 'auth_token');
+      await _storage.delete(key: 'token_expiry');
+      if (!mounted) return;
+      setState(() {
+        _token = null;
+        _tokenExpiry = null;
+      });
+
+      // 只有在之前已登录的情况下才显示登录过期提示
+      if (hasToken) {
+        final ctx = _navigatorKey.currentContext;
+        if (ctx != null && ctx.mounted) {
+          showFToast(
+            context: ctx,
+            title: const Text('登录已过期，请重新登录'),
+          );
+        }
+      }
+
+      // 只有在已登录状态下才导航回登录页面
+      if (hasToken) {
+        final nav = _navigatorKey.currentState;
+        nav?.pushNamedAndRemoveUntil('/', (route) => false);
+      }
+    } finally {
+      Future.delayed(const Duration(milliseconds: 800), () {
+        _handlingUnauthorized = false;
+      });
+    }
+  }
+
   Future<void> _checkAuthStatus() async {
     final token = await _storage.read(key: 'auth_token');
     final expiry = await _storage.read(key: 'token_expiry');
@@ -235,7 +297,8 @@ class _YuMeng233AppState extends State<YuMeng233App>
       _tokenExpiry = null;
     });
     // 显式导航到登录页面
-    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+    final nav = _navigatorKey.currentState;
+    nav?.pushNamedAndRemoveUntil('/', (route) => false);
   }
 
   @override
@@ -245,7 +308,6 @@ class _YuMeng233AppState extends State<YuMeng233App>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final surveyId = _pendingSurveyId!;
         _pendingSurveyId = null; // 清除待处理状态
-        print('Web URL调试: 开始执行跳转，ID = $surveyId');
         _navigateToPublicSurvey(surveyId);
       });
     }
@@ -266,6 +328,14 @@ class _YuMeng233AppState extends State<YuMeng233App>
               debugShowCheckedModeBanner: false,
               initialRoute: '/',
               onGenerateRoute: _onGenerateRoute,
+              scrollBehavior: const MaterialScrollBehavior().copyWith(
+                dragDevices: {
+                  PointerDeviceKind.touch,
+                  PointerDeviceKind.mouse,
+                  PointerDeviceKind.trackpad,
+                  PointerDeviceKind.stylus,
+                },
+              ),
               builder: (context, child) {
                 return ColoredBox(
                   color: Theme.of(context).scaffoldBackgroundColor,
@@ -454,16 +524,15 @@ class _YuMeng233AppState extends State<YuMeng233App>
       final apiService = ApiService(authToken: token);
       return await apiService.getProjects();
     } catch (e) {
-      if (e is SocketException) {
-        throw Exception('网络连接失败，请检查网络设置');
-      } else if (e is HttpException) {
-        throw Exception('服务器连接失败，请稍后重试');
+      if (e.toString().contains('Socket') || e.toString().contains('网络')) {
+        throw '网络连接失败，请检查网络设置';
+      } else if (e.toString().contains('Http') || e.toString().contains('HTTP')) {
+        throw '服务器连接失败，请稍后重试';
       } else {
-        throw Exception('获取项目失败: $e');
+        throw '获取项目失败: $e';
       }
     }
   }
-
   /// 处理初始URL和深度链接
   void _handleInitialUrl() async {
     try {
@@ -475,7 +544,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
         _handleMobileDeepLink();
       }
     } catch (e) {
-      print('处理初始URL失败: $e');
+      debugPrint('处理初始URL失败: $e');
     }
   }
 
@@ -484,17 +553,16 @@ class _YuMeng233AppState extends State<YuMeng233App>
     if (kIsWeb) {
       try {
         final surveyId = UrlHandler.instance.getWebUrlParameter('id');
-        print('Web URL调试: 获取到的surveyId = $surveyId');
+
         
         if (surveyId != null && surveyId.isNotEmpty) {
-          print('Web URL调试: 准备跳转到问卷页面，ID = $surveyId');
           // 保存surveyId，在build完成后处理
           _pendingSurveyId = surveyId;
         } else {
-          print('Web URL调试: surveyId为空或null');
+
         }
       } catch (e) {
-        print('Web URL解析失败: $e');
+        debugPrint('Web URL解析失败: $e');
       }
     }
   }
@@ -514,10 +582,10 @@ class _YuMeng233AppState extends State<YuMeng233App>
         linkStream?.listen((String link) {
           _processDeepLink(link);
         }, onError: (err) {
-          print('深度链接监听错误: $err');
+          debugPrint('深度链接监听错误: $err');
         });
       } catch (e) {
-        print('深度链接处理失败: $e');
+        debugPrint('深度链接处理失败: $e');
       }
     }
   }
@@ -534,29 +602,27 @@ class _YuMeng233AppState extends State<YuMeng233App>
         });
       }
     } catch (e) {
-      print('深度链接解析失败: $e');
+      debugPrint('深度链接解析失败: $e');
     }
   }
 
   /// 启动剪切板监听
   void _startClipboardListening() {
-    if (!kIsWeb) {
-      ClipboardService.instance.startListening(
-        onSurveyIdDetected: (surveyId) {
-          // 确保在主线程中显示Toast
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            final context = _navigatorKey.currentContext;
-            if (context != null && mounted) {
-              ClipboardService.showSurveyToast(
-                context,
-                surveyId,
-                () => _navigateToPublicSurvey(surveyId),
-              );
-            }
-          });
-        },
-      );
-    }
+    ClipboardService.instance.startListening(
+      onSurveyIdDetected: (surveyId) {
+        // 确保在主线程中显示Toast
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final context = _navigatorKey.currentContext;
+          if (context != null && mounted) {
+            ClipboardService.showSurveyToast(
+              context,
+              surveyId,
+              () => _navigateToPublicSurvey(surveyId),
+            );
+          }
+        });
+      },
+    );
   }
 
   /// 导航到公开问卷页面

@@ -1,15 +1,15 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'dart:developer' as developer;
 
-// 条件导入 - Web和非Web平台分别导入不同实现
 import 'url_handler_web.dart' if (dart.library.io) 'url_handler_stub.dart';
-import 'package:uni_links/uni_links.dart';
+import 'package:app_links/app_links.dart';
 
 class UrlHandler {
   static UrlHandler? _instance;
   static UrlHandler get instance => _instance ??= UrlHandler._();
   
   UrlHandler._();
+  final AppLinks _appLinks = AppLinks();
 
   /// 获取Web平台的URL参数
   String? getWebUrlParameter(String paramName) {
@@ -28,8 +28,15 @@ class UrlHandler {
   Future<String?> getInitialDeepLink() async {
     if (kIsWeb) return null;
     
+    // 检查是否为桌面平台（Windows、macOS、Linux）
+    if (defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux) {
+      return null;
+    }
+    
     try {
-      return await getInitialLink();
+      return await _appLinks.getInitialAppLinkString();
     } catch (e) {
       developer.log('获取初始深度链接失败: $e');
       return null;
@@ -40,8 +47,15 @@ class UrlHandler {
   Stream<String>? getDeepLinkStream() {
     if (kIsWeb) return null;
     
+    // 检查是否为桌面平台（Windows、macOS、Linux）
+    if (defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux) {
+      return null;
+    }
+    
     try {
-      return linkStream.where((link) => link != null).cast<String>();
+      return _appLinks.stringLinkStream;
     } catch (e) {
       developer.log('监听深度链接失败: $e');
       return null;

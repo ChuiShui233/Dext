@@ -16,7 +16,7 @@ typedef StatusCallback = void Function(RequestStatus status, String? message);
 class ApiCore {
   ApiCore({this.authToken});
 
-  static const String baseUrl = 'http://127.0.0.1:11222';
+  static const String baseUrl = 'http://192.168.1.6:11222';
   static const Duration timeoutDuration = Duration(seconds: 15);
 
   String? authToken;
@@ -98,7 +98,7 @@ class ApiCore {
           }
           break;
         default:
-          throw Exception('不支持的HTTP方法: $method');
+          throw '不支持的HTTP方法: $method';
       }
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -171,7 +171,7 @@ class ApiCore {
 
       return response;
     } catch (e) {
-      final msg = e is TimeoutException ? '请求超时，请检查您的网络连接。' : '请求失败: $e';
+      final msg = e.toString().contains('Timeout') ? '请求超时，请检查您的网络连接。' : '请求失败: $e';
       onStatus?.call(RequestStatus.error, msg);
       updateStatus(RequestStatus.error, msg);
       rethrow;

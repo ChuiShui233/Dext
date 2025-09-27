@@ -24,22 +24,20 @@ dependencies:
   fast_rsa: ^3.8.5
   flutter:
     sdk: flutter
-  flutter_secure_storage: ^9.2.4
+  flutter_secure_storage: ^10.0.0-beta.4
   forui: ^0.12.0
   http: ^1.1.0
   layout: ^1.0.5
-  window_manager: ^0.3.8
+  window_manager: ^0.5.0
   tray_manager: ^0.2.3
   url_launcher: ^6.2.5
   flutter_localizations:
     sdk: flutter
-  # permission_handler: ^10.2.0 
-  # shared_preferences: ^2.0.12
-  # qr_flutter: ^4.0.0
   file_picker: ^10.1.9 
   path_provider: ^2.1.1
   image_picker: ^1.0.4
   video_player: ^2.10.0
+  video_player_win: ^3.2.0
   radio_player: ^2.1.0
   pull_to_refresh: ^2.0.0
   flutter_staggered_grid_view: ^0.7.0
@@ -52,8 +50,12 @@ dependencies:
   flutter_launcher_icons: ^0.13.1
   provider: ^6.1.5+1
   http_parser: ^4.1.2
-  uni_links: ^0.5.1
+  app_links: ^3.5.0
   clipboard_watcher: ^0.2.0
+  pointycastle: ^4.0.0
+  desktop_drop: ^0.6.1
+  oauth2_client: ^4.2.0
+  flutter_speed_dial: ^7.0.0
 
 dev_dependencies:
   flutter_test:
@@ -64,18 +66,12 @@ dev_dependencies:
   # 查看该文件以了解如何停用特定的 lint 规则以及激活其他 lint 规则。
   flutter_lints: ^5.0.0
 
-# 有关此文件中通用 Dart 部分的信息，可以查看以下页面：https://dart.dev/tools/pub/pubspec
-
-# 以下部分特定于 Flutter 包。
 flutter:
 
   uses-material-design: true
   assets:
     - assets/images/
     - assets/fonts/
-    - packages/fast_rsa/web/assets/worker.js
-    - packages/fast_rsa/web/assets/wasm_exec.js
-    - packages/fast_rsa/web/assets/rsa.wasm
     
   fonts:
     - family: PingFangSC

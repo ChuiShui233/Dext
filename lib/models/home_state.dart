@@ -51,7 +51,7 @@ class HomeState extends ChangeNotifier {
       _tokenExpiry = newExpiry;
       notifyListeners();
       _setupTokenRefresh();
-    } on TokenExpiredException {
+    } on TokenExpired {
       // 令牌已过期，需要重新登录
       _handleLogout();
     } catch (e) {

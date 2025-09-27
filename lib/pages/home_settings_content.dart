@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:forui/forui.dart';
 import '../services/api_service.dart';
 import '../models/user.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 
 class HomeSettingsContent extends StatefulWidget {
@@ -45,27 +46,52 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('获取用户信息失败: $e')),
+        showFToast(
+          context: context,
+          title: Text('获取用户信息失败: $e'),
         );
       }
     }
   }
 
   Future<void> _changeAvatar() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+      );
 
-    if (pickedFile != null) {
-      try {
+      if (result != null && result.files.isNotEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('正在上传头像...')),
+          showFToast(
+            context: context,
+            title: const Text('正在上传头像...'),
           );
         }
 
-        final file = File(pickedFile.path);
-        final avatarUrl = await widget.apiService.uploadAvatar(imageFile: file);
+        final file = result.files.first;
+        String avatarUrl;
+
+        // Web平台使用字节数据，移动端使用文件路径
+        if (kIsWeb) {
+          if (file.bytes != null && file.name.isNotEmpty) {
+            avatarUrl = await widget.apiService.uploadAvatarUniversal(
+              imageBytes: file.bytes!,
+              fileName: file.name,
+            );
+          } else {
+            throw '无法获取图片数据';
+          }
+        } else {
+          if (file.path != null) {
+            final imageFile = File(file.path!);
+            avatarUrl = await widget.apiService.uploadAvatarUniversal(
+              imageFile: imageFile,
+            );
+          } else {
+            throw '无法获取文件路径';
+          }
+        }
 
         setState(() {
           _currentUser = _currentUser?.copyWith(avatarUrl: avatarUrl);
@@ -75,16 +101,18 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
         widget.userNotifier?.value = _currentUser;
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('头像上传成功')),
+          showFToast(
+            context: context,
+            title: const Text('头像上传成功'),
           );
         }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('头像上传失败: $e')),
-          );
-        }
+      }
+    } catch (e) {
+      if (mounted) {
+        showFToast(
+          context: context,
+          title: Text('头像上传失败: $e'),
+        );
       }
     }
   }
@@ -94,6 +122,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
     final theme = Theme.of(context);
 
     return Scaffold(
+      backgroundColor: Colors.transparent,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -118,11 +147,11 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: theme.cardColor,
+        color: theme.cardColor.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 20,
             offset: const Offset(0, 4),
           ),
@@ -138,7 +167,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: theme.colorScheme.primary.withOpacity(0.2),
+                    color: theme.colorScheme.primary.withValues(alpha: 0.2),
                     width: 3,
                   ),
                 ),
@@ -177,14 +206,14 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
                       color: theme.colorScheme.primary,
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: theme.cardColor,
+                        color: theme.cardColor.withValues(alpha: 0.6),
                         width: 2,
                       ),
                     ),
                     child: Icon(
                       Icons.camera_alt,
                       size: 16,
-                      color: theme.cardColor,
+                      color: theme.cardColor.withValues(alpha: 0.6),
                     ),
                   ),
                 ),
@@ -205,7 +234,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
             _currentUser?.email ?? 'user@example.com',
             style: TextStyle(
               fontSize: 14,
-              color: theme.colorScheme.onSurface.withOpacity(0.6),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
             ),
           ),
         ],
@@ -262,20 +291,20 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
           leading: Icon(Icons.person_outline, color: theme.colorScheme.primary),
           title: const Text('修改头像'),
           trailing: Icon(Icons.arrow_forward_ios,
-              size: 16, color: theme.colorScheme.onSurface.withOpacity(0.3)),
+              size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
           onTap: _changeAvatar,
         ),
         Divider(
           height: 1,
           thickness: 1,
-          color: theme.dividerColor.withOpacity(0.1),
+          color: theme.dividerColor.withValues(alpha: 0.1),
         ),
         _buildNoHighlightListTile(
           leading: Icon(Icons.logout, color: theme.colorScheme.error),
           title: Text('退出登录',
               style: TextStyle(color: theme.colorScheme.error)),
           trailing: Icon(Icons.arrow_forward_ios,
-              size: 16, color: theme.colorScheme.onSurface.withOpacity(0.3)),
+              size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
           onTap: () => _confirmLogout(context, widget.onLogout),
         ),
       ],
@@ -293,17 +322,17 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
           title: const Text('版本'),
           trailing: Text('1.0.0',
               style: TextStyle(
-                  color: theme.colorScheme.onSurface.withOpacity(0.5))),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5))),
         ),
         Divider(
           height: 1,
           thickness: 1,
-          color: theme.dividerColor.withOpacity(0.1),
+          color: theme.dividerColor.withValues(alpha: 0.1),
         ),
         _buildNoHighlightListTile(
           title: const Text('隐私政策'),
           trailing: Icon(Icons.arrow_forward_ios,
-              size: 16, color: theme.colorScheme.onSurface.withOpacity(0.3)),
+              size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
           onTap: () {},
         ),
       ],
@@ -319,11 +348,11 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
 
     return Container(
       decoration: BoxDecoration(
-        color: theme.cardColor,
+        color: theme.cardColor.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 20,
             offset: const Offset(0, 4),
           ),

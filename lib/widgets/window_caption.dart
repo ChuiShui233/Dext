@@ -78,7 +78,7 @@ class _WindowCaptionState extends State<WindowCaption> with WindowListener {
             icon: FIcons.x,
             onPressed: () => windowManager.close(),
             color: iconColor,
-            hoverColor: Colors.red.withOpacity(0.1),
+            hoverColor: Colors.red.withValues(alpha: 0.1),
           ),
         ],
       ),
@@ -109,7 +109,7 @@ class _CaptionIconButton extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onPressed,
-          hoverColor: hoverColor ?? Colors.grey.withOpacity(0.1),
+          hoverColor: hoverColor ?? Colors.grey.withValues(alpha: 0.1),
           borderRadius: BorderRadius.zero, // 方角
           child: Center(
             child: Icon(icon, color: color, size: 16),

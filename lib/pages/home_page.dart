@@ -7,8 +7,8 @@ import '../models/user.dart';
 import 'home_main_content.dart';
 import 'home_history_content.dart';
 import 'home_settings_content.dart';
+import '../widgets/frosted_glass_background.dart';
 
-// 定義不同斷點下的內容邊距值
 final contentPadding = LayoutValue(
   xs: const EdgeInsets.all(16),
   sm: const EdgeInsets.all(20),
@@ -16,7 +16,6 @@ final contentPadding = LayoutValue(
   lg: const EdgeInsets.all(30),
 );
 
-// 定義不同斷點下的組件間距
 final sectionSpacing = LayoutValue(
   xs: 20.0,
   sm: 30.0,
@@ -24,7 +23,6 @@ final sectionSpacing = LayoutValue(
   lg: 50.0,
 );
 
-// 定義側邊欄顯示邏輯
 final showSidebarInDrawer = LayoutValue(xs: true, md: false);
 final showSidebarInline = LayoutValue(xs: false, md: true);
 
@@ -61,14 +59,25 @@ class HomePage extends StatelessWidget {
     final bool showDesktopLayout = showSidebarInline.resolve(context);
     final EdgeInsets padding = contentPadding.resolve(context);
 
+    Widget dashboardContent = FutureBuilder<Map<String, int>>(
+      future: apiService.getAnalyticsOverview(),
+      builder: (context, snapshot) {
+        final totals = snapshot.data ?? const {'totalViews': 0, 'totalSubmits': 0};
+        return HomeMainContent(
+          projectCount: projectCount,
+          surveyCount: surveyCount,
+          totalViews: totals['totalViews'] ?? 0,
+          totalSubmits: totals['totalSubmits'] ?? 0,
+          onProjectTap: onProjectTap,
+          onSurveyTap: onSurveyTap,
+          fetchTrend: (range) => apiService.getSubmitTrend(range: range),
+        );
+      },
+    );
+
     final contents = [
-      HomeMainContent(
-        projectCount: projectCount,
-        surveyCount: surveyCount,
-        onProjectTap: onProjectTap,
-        onSurveyTap: onSurveyTap,
-      ),
-      const HomeHistoryContent(),
+      dashboardContent,
+      HomeHistoryContent(apiService: apiService),
       HomeSettingsContent(
         onLogout: onLogout,
         onThemeModeChange: onThemeModeChange,
@@ -87,7 +96,17 @@ class HomePage extends StatelessWidget {
       drawer: isMobileOrTablet ? _buildDrawer(context) : null,
       body: Stack(
         children: [
+          // 全局毛玻璃渐变背景（包含底部导航栏区域）
+          const FrostedGlassBackground(
+            count: 8,
+            blurSigma: 120,
+            blobOpacity: 0.5,
+            animated: true,
+            vignette: true,
+          ),
           Scaffold(
+            backgroundColor: Colors.transparent,
+            extendBody: true,
             bottomNavigationBar: !showDesktopLayout ? BottomNavigationBar(
               currentIndex: currentIndex,
               onTap: (index) {
@@ -98,17 +117,22 @@ class HomePage extends StatelessWidget {
                 BottomNavigationBarItem(icon: Icon(FIcons.clock), label: '历史记录'),
                 BottomNavigationBarItem(icon: Icon(FIcons.settings), label: '设置'),
               ],
-              backgroundColor: Theme.of(context).colorScheme.surface,
+              backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0.6),
+              elevation: 0,
             ) : null,
             body: LayoutBuilder(
               builder: (context, constraints) {
-                return Padding(
-                  padding: padding,
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    switchInCurve: Curves.fastOutSlowIn,
-                    switchOutCurve: Curves.fastOutSlowIn.flipped,
-                    child: contents[currentIndex],
+                return SafeArea(
+                  top: isMobileOrTablet, // 只在移动端添加顶部安全区域
+                  bottom: false, // 不添加底部安全区域，因为有底部导航栏
+                  child: Padding(
+                    padding: padding,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      switchInCurve: Curves.fastOutSlowIn,
+                      switchOutCurve: Curves.fastOutSlowIn.flipped,
+                      child: contents[currentIndex],
+                    ),
                   ),
                 );
               },

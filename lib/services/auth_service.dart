@@ -3,9 +3,9 @@ import 'package:http/http.dart' as http;
 
 import 'core/api_core.dart';
 
-class TokenExpiredException implements Exception {
+class TokenExpired {
   final String message;
-  TokenExpiredException(this.message);
+  TokenExpired(this.message);
   @override
   String toString() => message;
 }
@@ -42,7 +42,7 @@ class AuthService {
       };
     }
     final data = json.decode(resp.body);
-    throw Exception(data['message'] ?? data['error'] ?? '登录失败');
+    throw data['message'] ?? data['error'] ?? '登录失败';
   }
 
   Future<void> register({
@@ -66,7 +66,7 @@ class AuthService {
 
     if (resp.statusCode != 201) {
       final data = json.decode(resp.body);
-      throw Exception(data['message'] ?? data['error'] ?? '注册失败');
+      throw data['message'] ?? data['error'] ?? '注册失败';
     }
   }
 
@@ -82,9 +82,9 @@ class AuthService {
       return data['token'] as String;
     } else if (resp.statusCode == 401) {
       final msg = '认证令牌已失效，请重新登录';
-      throw TokenExpiredException(msg);
+      throw TokenExpired(msg);
     } else {
-      throw Exception('刷新认证token失败: ${resp.statusCode}');
+      throw '刷新认证token失败: ${resp.statusCode}';
     }
   }
 
@@ -124,7 +124,7 @@ class AuthService {
       final Map<String, dynamic> data = json.decode(resp.body);
       return data['token'] as String;
     }
-    throw Exception('重新登录失败: ${resp.statusCode}');
+    throw '重新登录失败: ${resp.statusCode}';
   }
 
   Future<void> logout() async {
@@ -136,7 +136,7 @@ class AuthService {
       },
     );
     if (resp.statusCode != 200) {
-      throw Exception('注销失败: ${resp.body}');
+      throw '注销失败: ${resp.body}';
     }
   }
 }

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/survey.dart';
 import '../models/survey_stats.dart';
 import '../models/question.dart';
+import '../models/paginated_response.dart';
 import 'core/api_core.dart';
 
 class SurveyService {
@@ -69,6 +70,42 @@ class SurveyService {
     return false;
   }
 
+  Future<PaginatedResponse<Survey>> getSurveysPaginated({
+    int page = 1,
+    int pageSize = 10,
+    String? search,
+    String? type,
+    StatusCallback? onStatus,
+  }) async {
+    onStatus?.call(RequestStatus.loading, '正在获取问卷列表...');
+    core.updateStatus(RequestStatus.loading, '正在获取问卷列表...');
+
+    final queryParams = <String, String>{
+      'page': page.toString(),
+      'pageSize': pageSize.toString(),
+    };
+    if (search != null && search.isNotEmpty) {
+      queryParams['search'] = search;
+    }
+    if (type != null && type.isNotEmpty) {
+      queryParams['type'] = type;
+    }
+
+    final uri = Uri.parse('${ApiCore.baseUrl}/api/survey/list').replace(queryParameters: queryParams);
+    final resp = await core.httpRequest('GET', uri.toString(), onStatus: onStatus);
+    
+    if (resp.statusCode == 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      final paginatedResponse = PaginatedResponse.fromJson(body, (json) => Survey.fromJson(json));
+      
+      onStatus?.call(RequestStatus.success, '问卷列表获取成功');
+      core.updateStatus(RequestStatus.success, '问卷列表获取成功');
+      
+      return paginatedResponse;
+    }
+    throw '获取问卷列表失败: ${resp.statusCode}';
+  }
+
   Future<List<Survey>> _refreshSurveys(
     SharedPreferences prefs,
     String cacheKey, {
@@ -81,7 +118,7 @@ class SurveyService {
       prefs.setString(cacheKey, json.encode(body));
       return body.map<Survey>((j) => Survey.fromJson(j)).toList();
     }
-    throw Exception('获取问卷列表失败: ${resp.statusCode}');
+    throw '获取问卷列表失败: ${resp.statusCode}';
   }
 
   Future<Survey> createSurvey(Survey survey, {StatusCallback? onStatus}) async {
@@ -90,7 +127,7 @@ class SurveyService {
       await _clearSurveyListCache();
       return Survey.fromJson(json.decode(resp.body));
     }
-    throw Exception('创建问卷失败: ${resp.statusCode}');
+    throw '创建问卷失败: ${resp.statusCode}';
   }
 
   Future<Survey> updateSurvey(Survey survey, {StatusCallback? onStatus}) async {
@@ -99,7 +136,7 @@ class SurveyService {
       await _clearSurveyListCache();
       return Survey.fromJson(json.decode(resp.body));
     }
-    throw Exception('更新问卷失败: ${resp.statusCode}');
+    throw '更新问卷失败: ${resp.statusCode}';
   }
 
   Future<void> deleteSurvey(int id, {StatusCallback? onStatus}) async {
@@ -108,7 +145,7 @@ class SurveyService {
       await _clearSurveyRelatedCache(id);
       return;
     }
-    throw Exception('删除问卷失败: ${resp.statusCode}');
+    throw '删除问卷失败: ${resp.statusCode}';
   }
 
   Future<void> batchDeleteSurveys(List<int> ids, {StatusCallback? onStatus}) async {
@@ -119,7 +156,7 @@ class SurveyService {
       }
       return;
     }
-    throw Exception('批量删除问卷失败: ${resp.statusCode}');
+    throw '批量删除问卷失败: ${resp.statusCode}';
   }
 
   Future<void> _clearSurveyListCache() async {
@@ -153,7 +190,7 @@ class SurveyService {
     };
     final resp = await core.httpRequest('PUT', '${ApiCore.baseUrl}/api/survey/$surveyId/background', data: data, onStatus: onStatus);
     if (resp.statusCode != 200) {
-      throw Exception('更新问卷背景失败: ${resp.statusCode}');
+      throw '更新问卷背景失败: ${resp.statusCode}';
     }
   }
 
@@ -162,7 +199,7 @@ class SurveyService {
     if (resp.statusCode == 200) {
       return json.decode(resp.body) as Map<String, dynamic>;
     }
-    throw Exception('获取问卷背景失败: ${resp.statusCode}');
+    throw '获取问卷背景失败: ${resp.statusCode}';
   }
 
   // ===== Questions (skeleton for future phases) =====
@@ -229,7 +266,7 @@ class SurveyService {
       prefs.setString(cacheKey, json.encode(body));
       return body.map<Question>((j) => Question.fromJson(j)).toList();
     }
-    throw Exception('获取问卷问题列表失败: ${resp.statusCode}');
+    throw '获取问卷问题列表失败: ${resp.statusCode}';
   }
 
   // ===== Stats (skeleton for future phases) =====
@@ -238,7 +275,7 @@ class SurveyService {
     if (resp.statusCode == 200) {
       return SurveyStats.fromJson(json.decode(resp.body));
     }
-    throw Exception('获取问卷统计信息失败: ${resp.statusCode}');
+    throw '获取问卷统计信息失败: ${resp.statusCode}';
   }
 
   Future<List<SurveyStats>> getAllSurveyStats({StatusCallback? onStatus}) async {
@@ -305,6 +342,6 @@ class SurveyService {
       }
       return [];
     }
-    throw Exception('获取问卷统计信息失败: ${resp.statusCode}');
+    throw '获取问卷统计信息失败: ${resp.statusCode}';
   }
 }

@@ -45,8 +45,8 @@ final ThemeData lightTheme = ThemeData(
   hoverColor: Colors.transparent,
   colorScheme: ColorScheme.light(
     surface: const Color.fromARGB(248, 255, 255, 255),
-    primary: Colors.black.withOpacity(0.87),
-    secondary: Colors.black.withOpacity(0.6),
+    primary: Colors.black.withValues(alpha: 0.87),
+    secondary: Colors.black.withValues(alpha: 0.6),
     onPrimary: Colors.white,
     onSecondary: Colors.white,
   ),
@@ -57,13 +57,13 @@ final ThemeData lightTheme = ThemeData(
   ),
   navigationRailTheme: NavigationRailThemeData(
     backgroundColor: Colors.transparent,
-    indicatorColor: Colors.black.withOpacity(0.87),
+    indicatorColor: Colors.black.withValues(alpha: 0.87),
     indicatorShape: RoundedRectangleBorder(
       borderRadius: BorderRadius.all(Radius.circular(15)),
     ),
   ),
   dividerTheme: DividerThemeData(
-    color: Colors.black.withOpacity(0.12),
+    color: Colors.black.withValues(alpha: 0.12),
   ),
 );
 
@@ -79,8 +79,8 @@ final ThemeData darkTheme = ThemeData(
   hoverColor: Colors.transparent,
   colorScheme: ColorScheme.dark(
     surface: const Color(0xFF121212),
-    primary: Colors.white.withOpacity(0.87),
-    secondary: Colors.white.withOpacity(0.6),
+    primary: Colors.white.withValues(alpha: 0.87),
+    secondary: Colors.white.withValues(alpha: 0.6),
     onPrimary: Colors.black,
     onSecondary: Colors.black,
   ),
@@ -91,12 +91,12 @@ final ThemeData darkTheme = ThemeData(
   ),
   navigationRailTheme: NavigationRailThemeData(
     backgroundColor: Colors.transparent,
-    indicatorColor: Colors.white.withOpacity(0.87),
+    indicatorColor: Colors.white.withValues(alpha: 0.87),
     indicatorShape: RoundedRectangleBorder(
       borderRadius: BorderRadius.all(Radius.circular(15)),
     ),
   ),
   dividerTheme: DividerThemeData(
-    color: Colors.white.withOpacity(0.12),
+    color: Colors.white.withValues(alpha: 0.12),
   ),
 );

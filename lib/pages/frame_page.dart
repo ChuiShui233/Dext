@@ -243,8 +243,8 @@ Widget _buildSidebarHeader(BuildContext context) {
     decoration: BoxDecoration(
       gradient: LinearGradient(
         colors: [
-          Theme.of(context).colorScheme.primary.withOpacity(0),
-            Theme.of(context).colorScheme.primary.withOpacity(0),
+          Theme.of(context).colorScheme.primary.withValues(alpha: 0),
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0),
         ],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
@@ -288,7 +288,7 @@ Widget _buildSidebarHeader(BuildContext context) {
                     Text(
                       '管理平台',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
                     ),
                   ],
@@ -300,7 +300,7 @@ Widget _buildSidebarHeader(BuildContext context) {
           FDivider(
             style: FDividerStyle(
               padding: EdgeInsets.zero,
-              color: Theme.of(context).dividerColor.withOpacity(0.5),
+              color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
             ),
           ),
         ],
@@ -321,8 +321,8 @@ Widget _buildSidebarHeader(BuildContext context) {
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
           color: Theme.of(context).brightness == Brightness.dark
-              ? Colors.white.withOpacity(0.1)
-              : Colors.black.withOpacity(0.1),
+              ? Colors.white.withValues(alpha: 0.1)
+              : Colors.black.withValues(alpha: 0.1),
           width: 1,
         ),
       ),
@@ -337,7 +337,7 @@ Widget _buildSidebarHeader(BuildContext context) {
                     decoration: BoxDecoration(
                       color: _currentUser?.avatarUrl != null 
                           ? Colors.transparent 
-                          : Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                          : Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: (_currentUser?.avatarUrl?.isNotEmpty ?? false)
@@ -377,7 +377,7 @@ Widget _buildSidebarHeader(BuildContext context) {
                         Text(
                           _currentUser?.email ?? '啥也没有捏',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),

@@ -1,13 +1,16 @@
 // file: edit_question_page.dart
 
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import 'package:forui/forui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import '../models/question.dart';
 import '../services/api_service.dart';
 import '../main.dart' show isDesktop;
+import '../components/video_player_widget.dart';
 
 
 // ###########################################################################
@@ -31,6 +34,11 @@ class EditQuestionPage extends StatefulWidget {
 }
 
 class _EditQuestionPageState extends State<EditQuestionPage> {
+  // 自定义评级文本开关与输入
+  bool _enableRatingLabels = false;
+  final TextEditingController _ratingLabelsController = TextEditingController();
+  // 按星星数量生成的标签输入框控制器（1..stars）
+  final List<TextEditingController> _perStarLabelCtrls = [];
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _minValueController = TextEditingController();
@@ -38,6 +46,8 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
   final _initialValueController = TextEditingController();
   final _minLabelController = TextEditingController();
   final _maxLabelController = TextEditingController();
+  final _midLabelController = TextEditingController();
+  final _starsCountController = TextEditingController();
 
   late final ApiService _apiService;
   late QuestionType _selectedType;
@@ -46,15 +56,40 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
   final Map<int, int> _jumpLogic = {};
   bool _required = true;
   bool _isLoading = false;
+  
+  // 上传进度管理
+  final Map<String, double> _uploadProgress = {}; // 文件名 -> 进度(0.0-1.0)
+  final Map<String, bool> _uploadingFiles = {}; // 文件名 -> 是否正在上传
+  final Map<String, bool> _cancelledUploads = {}; // 文件名 -> 是否已取消
 
-  // 滑块相关属性
+  // 评级题（原滑块）相关属性
   double _minValue = 0.0;
   double _maxValue = 100.0;
   double _initialValue = 50.0;
   String _minLabel = '最小值';
+  String _midLabel = '一般';
   String _maxLabel = '最大值';
+  int _starsCount = 5;
+  bool _allowHalf = true;
+  String _ratingStyle = 'star'; // star | crumb
+  String _ratingIcon = 'star'; // star | favorite | circle | heart 等（用于 star 风格）
 
   List<Question> _allQuestions = [];
+
+  // 保证按当前星数生成足够的标签输入框控制器
+  void _ensurePerStarLabelCtrls(int stars) {
+    if (_perStarLabelCtrls.length < stars) {
+      for (int i = _perStarLabelCtrls.length; i < stars; i++) {
+        _perStarLabelCtrls.add(TextEditingController());
+      }
+    } else if (_perStarLabelCtrls.length > stars) {
+      // 多余的先dispose再移除
+      for (int i = stars; i < _perStarLabelCtrls.length; i++) {
+        _perStarLabelCtrls[i].dispose();
+      }
+      _perStarLabelCtrls.removeRange(stars, _perStarLabelCtrls.length);
+    }
+  }
 
   @override
   void initState() {
@@ -81,12 +116,50 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
       }
       _required = widget.question!.required;
 
-      if (_selectedType == QuestionType.slider && _options.length >= 5) {
-        _minValue = double.tryParse(_options[0].text) ?? 0.0;
-        _maxValue = double.tryParse(_options[1].text) ?? 100.0;
-        _initialValue = double.tryParse(_options[2].text) ?? 50.0;
-        _minLabel = _options[3].text;
-        _maxLabel = _options[4].text;
+      if (_selectedType == QuestionType.slider) {
+        if (_options.length >= 5) {
+          _minValue = double.tryParse(_options[0].text) ?? 0.0;
+          _maxValue = double.tryParse(_options[1].text) ?? 100.0;
+          _initialValue = double.tryParse(_options[2].text) ?? 50.0;
+          _minLabel = _options[3].text;
+          _maxLabel = _options[4].text;
+          _midLabel = _options.length >= 6 ? (_options[5].text.isNotEmpty ? _options[5].text : '一般') : '一般';
+        }
+        if (_options.length >= 10) {
+          _starsCount = int.tryParse(_options[9].text) ?? 5;
+          if (_starsCount < 1) _starsCount = 1;
+          if (_starsCount > 10) _starsCount = 10;
+        }
+        // 样式/图标/半星 从后端 options 读取，驱动前端多选框/开关初始值
+        if (_options.length >= 7) {
+          final v = _options[6].text;
+          if (v == 'star' || v == 'crumb') _ratingStyle = v;
+        }
+        if (_options.length >= 8) {
+          final v = _options[7].text;
+          if (v.isNotEmpty) _ratingIcon = v;
+        }
+        if (_options.length >= 9) {
+          _allowHalf = _options[8].text.toLowerCase() == 'true';
+        }
+        // 加载自定义评级标签（第11项，JSON），根据星数生成输入框并回填
+        if (_options.length >= 11) {
+          final raw = _options[10].text.trim();
+          if (raw.isNotEmpty) {
+            try {
+              final Map<String, dynamic> m = jsonDecode(raw);
+              if (m.isNotEmpty) {
+                _enableRatingLabels = true;
+                _ensurePerStarLabelCtrls(_starsCount);
+                for (int i = 0; i < _starsCount; i++) {
+                  final key = (i + 1).toString();
+                  final val = m[key]?.toString() ?? '';
+                  if (val.isNotEmpty) _perStarLabelCtrls[i].text = val;
+                }
+              }
+            } catch (_) {}
+          }
+        }
       }
     }
 
@@ -95,16 +168,22 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
     _initialValueController.text = _initialValue.toStringAsFixed(2);
     _minLabelController.text = _minLabel;
     _maxLabelController.text = _maxLabel;
+    _midLabelController.text = _midLabel;
+    _starsCountController.text = _starsCount.toString();
   }
 
   @override
   void dispose() {
+    _ratingLabelsController.dispose();
+    for (final c in _perStarLabelCtrls) { c.dispose(); }
     _titleController.dispose();
     _minValueController.dispose();
     _maxValueController.dispose();
     _initialValueController.dispose();
     _minLabelController.dispose();
     _maxLabelController.dispose();
+    _midLabelController.dispose();
+    _starsCountController.dispose();
     super.dispose();
   }
 
@@ -196,14 +275,85 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
         type: FileType.media,
         allowMultiple: true,
       );
-
+      
       if (result != null && result.files.isNotEmpty) {
         for (final file in result.files) {
-          if (file.path != null) {
-            final url = await _apiService.uploadMedia(widget.surveyId, file.path!);
+          final fileName = file.name;
+          
+          // 标记文件开始上传
+          setState(() {
+            _uploadingFiles[fileName] = true;
+            _uploadProgress[fileName] = 0.0;
+          });
+          
+          try {
+            String url;
+            
+            // Web平台使用字节数据，移动端使用文件路径
+            if (kIsWeb) {
+              if (file.bytes != null && file.name.isNotEmpty) {
+                url = await _apiService.uploadMediaUniversal(
+                  widget.surveyId,
+                  fileBytes: file.bytes!,
+                  fileName: file.name,
+                  onProgress: (uploaded, total) {
+                    if (mounted && !(_cancelledUploads[fileName] ?? false)) {
+                      setState(() {
+                        _uploadProgress[fileName] = uploaded / total;
+                      });
+                    }
+                  },
+                );
+              } else {
+                continue; // 跳过无效文件
+              }
+            } else {
+              if (file.path != null) {
+                url = await _apiService.uploadMediaUniversal(
+                  widget.surveyId,
+                  filePath: file.path!,
+                  onProgress: (uploaded, total) {
+                    if (mounted && !(_cancelledUploads[fileName] ?? false)) {
+                      setState(() {
+                        _uploadProgress[fileName] = uploaded / total;
+                      });
+                    }
+                  },
+                );
+              } else {
+                continue; // 跳过无效文件
+              }
+            }
+            
+            // 检查是否已取消
+            if (_cancelledUploads[fileName] ?? false) {
+              // 上传已取消，清理状态
+              setState(() {
+                _uploadingFiles.remove(fileName);
+                _uploadProgress.remove(fileName);
+                _cancelledUploads.remove(fileName);
+              });
+              continue;
+            }
+            
+            // 上传完成
             setState(() {
               _mediaUrls.add(url);
+              _uploadingFiles.remove(fileName);
+              _uploadProgress.remove(fileName);
             });
+          } catch (e) {
+            // 上传失败或取消，清理状态
+            setState(() {
+              _uploadingFiles.remove(fileName);
+              _uploadProgress.remove(fileName);
+              _cancelledUploads.remove(fileName);
+            });
+            
+            // 如果不是取消操作，则重新抛出错误
+            if (!(_cancelledUploads[fileName] ?? false)) {
+              rethrow;
+            }
           }
         }
       }
@@ -213,10 +363,75 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
     }
   }
 
-  Future<void> _deleteMedia(String url) async {
+  void _cancelUpload(String fileName) {
     setState(() {
-      _mediaUrls.remove(url);
+      _cancelledUploads[fileName] = true;
+      _uploadingFiles.remove(fileName);
+      _uploadProgress.remove(fileName);
     });
+    _showSuccessToast('已取消上传: $fileName');
+  }
+
+  Future<void> _deleteMedia(String url) async {
+    // 显示删除确认弹窗
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认删除'),
+        content: const Text('确定要删除这个媒体文件吗？此操作无法撤销。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        // 从URL中提取文件名
+        final uri = Uri.parse(url);
+        final pathSegments = uri.pathSegments;
+        String? fileName;
+        
+        if (pathSegments.isNotEmpty) {
+          fileName = pathSegments.last;
+        }
+        
+        if (fileName != null && fileName.isNotEmpty) {
+          // 通过文件名删除媒体文件
+          await _apiService.deleteMediaFileByName(
+            widget.surveyId,
+            fileName,
+          );
+          
+          // 从本地列表中移除
+          setState(() {
+            _mediaUrls.remove(url);
+          });
+          
+          _showSuccessToast('媒体文件删除成功');
+        } else {
+          // 如果无法提取文件名，只从本地移除
+          setState(() {
+            _mediaUrls.remove(url);
+          });
+          _showSuccessToast('媒体文件已从本地移除');
+        }
+      } catch (e) {
+        // 删除失败时显示错误信息，但仍从本地移除
+        setState(() {
+          _mediaUrls.remove(url);
+        });
+        _showErrorToast('删除媒体文件时出错，但已从本地移除', e.toString());
+      }
+    }
   }
 
   Future<void> _setJumpLogic(QuestionOption option) async {
@@ -257,26 +472,42 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
       List<QuestionOption> finalOptions;
 
       if (_selectedType == QuestionType.slider) {
-        final minValue = double.parse(_minValueController.text);
-        final maxValue = double.parse(_maxValueController.text);
-        final initialValue = double.parse(_initialValueController.text);
+        // 固定区间 0..10，初始值固定为 5；中间标签固定为“一般”。仅保存左右标签与样式配置
         final minLabel = _minLabelController.text;
+        final midLabel = _midLabelController.text.isNotEmpty ? _midLabelController.text : '一般';
         final maxLabel = _maxLabelController.text;
-
-        if (minValue >= maxValue) {
-          throw Exception('最小值必须小于最大值');
-        }
-        if (initialValue < minValue || initialValue > maxValue) {
-          throw Exception('初始值必须在最小值和最大值之间');
-        }
+        final parsedStars = int.tryParse(_starsCountController.text.trim());
+        final starsCount = (parsedStars ?? _starsCount).clamp(1, 10);
 
         finalOptions = [
-          QuestionOption(id: 1, text: minValue.toString()),
-          QuestionOption(id: 2, text: maxValue.toString()),
-          QuestionOption(id: 3, text: initialValue.toString()),
+          QuestionOption(id: 1, text: '0'),
+          QuestionOption(id: 2, text: '10'),
+          QuestionOption(id: 3, text: '5'),
           QuestionOption(id: 4, text: (minLabel).isNotEmpty ? minLabel : '最小值'),
           QuestionOption(id: 5, text: (maxLabel).isNotEmpty ? maxLabel : '最大值'),
+          QuestionOption(id: 6, text: midLabel),
+          QuestionOption(id: 7, text: _ratingStyle),
+          QuestionOption(id: 8, text: _ratingIcon),
+          QuestionOption(id: 9, text: _allowHalf.toString()),
+          QuestionOption(id: 10, text: starsCount.toString()),
         ];
+
+        // 自定义标签（按星数 1..N 生成，留空则跳过），存入第 11 项（索引10）
+        if (_enableRatingLabels) {
+          _ensurePerStarLabelCtrls(starsCount);
+          final Map<String, String> map = {};
+          for (int i = 0; i < starsCount; i++) {
+            final key = (i + 1).toString();
+            final val = _perStarLabelCtrls[i].text.trim();
+            if (val.isNotEmpty) {
+              map[key] = val;
+            }
+          }
+          if (map.isNotEmpty) {
+            final jsonStr = jsonEncode(map);
+            finalOptions.add(QuestionOption(id: 11, text: jsonStr));
+          }
+        }
       } else {
         finalOptions = _options;
       }
@@ -315,6 +546,29 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
       context: context,
       alignment: FToastAlignment.bottomRight,
       title: Text(title),
+      description: Text(message),
+      suffixBuilder: (context, entry, _) => IntrinsicHeight(
+        child: FButton(
+          style: context.theme.buttonStyles.primary.copyWith(
+            contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+              textStyle: FWidgetStateMap.all(
+                context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
+              ),
+            ),
+          ),
+          onPress: entry.dismiss,
+          child: const Text('关闭'),
+        ),
+      ),
+    );
+  }
+
+  void _showSuccessToast(String message) {
+    showFToast(
+      context: context,
+      alignment: FToastAlignment.bottomRight,
+      title: Text('成功'),
       description: Text(message),
       suffixBuilder: (context, entry, _) => IntrinsicHeight(
         child: FButton(
@@ -374,7 +628,7 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
                   ),
                   const SizedBox(height: 16),
                   if (_selectedType == QuestionType.slider)
-                    _buildSliderSettings()
+                    _buildRatingSettings()
                   else
                     _buildOptionsSettings(),
                   const SizedBox(height: 16),
@@ -399,71 +653,128 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
     );
   }
 
-  Widget _buildSliderSettings() {
+  Widget _buildRatingSettings() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        FTextFormField(
-          controller: _minValueController,
-          label: const Text('最小值'),
-          hint: '请输入最小值',
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          autovalidateMode: AutovalidateMode.onUserInteraction,
-          validator: (value) => (value == null || double.tryParse(value) == null) ? '请输入有效的数字' : null,
-          onEditingComplete: () => setState(() {}),
-        ),
-        const SizedBox(height: 16),
-        FTextFormField(
-          controller: _maxValueController,
-          label: const Text('最大值'),
-          hint: '请输入最大值',
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          autovalidateMode: AutovalidateMode.onUserInteraction,
-          validator: (value) => (value == null || double.tryParse(value) == null) ? '请输入有效的数字' : null,
-          onEditingComplete: () => setState(() {}),
-        ),
-        const SizedBox(height: 16),
-        FTextFormField(
-          controller: _initialValueController,
-          label: const Text('初始值'),
-          hint: '请输入初始值',
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          autovalidateMode: AutovalidateMode.onUserInteraction,
-          validator: (value) => (value == null || double.tryParse(value) == null) ? '请输入有效的数字' : null,
-          onEditingComplete: () => setState(() {}),
-        ),
-        const SizedBox(height: 16),
-        FTextFormField(
-          label: const Text('最小值标签'),
-          hint: '请输入最小值标签',
-          controller: _minLabelController,
-          onEditingComplete: () => setState(() {}),
-        ),
-        const SizedBox(height: 16),
-        FTextFormField(
-          label: const Text('最大值标签'),
-          hint: '请输入最大值标签',
-          controller: _maxLabelController,
-          onEditingComplete: () => setState(() {}),
-        ),
-        const SizedBox(height: 16),
-        FSlider(
-          label: Text('当前值: ${_initialValueController.text}'),
-          description: Text('范围: ${_minLabelController.text} - ${_maxLabelController.text}'),
-          controller: FContinuousSliderController(
-            selection: FSliderSelection(
-              max: (() {
-                final min = double.tryParse(_minValueController.text) ?? 0.0;
-                final max = double.tryParse(_maxValueController.text) ?? 100.0;
-                final init = double.tryParse(_initialValueController.text) ?? 50.0;
-                return max > min ? ((init - min) / (max - min)).clamp(0.0, 1.0) : 0.0;
-              })(),
+        // 数值区间固定为 0..10，初始值固定为 5（中间），这里移除数值编辑项
+        Row(children: [
+          Expanded(
+            child: FTextFormField(
+              label: const Text('左侧标签'),
+              hint: '如 不推荐',
+              controller: _minLabelController,
+              onEditingComplete: () => setState(() {}),
             ),
           ),
-          marks: [
-            FSliderMark(value: 0, label: Text(_minLabelController.text)),
-            FSliderMark(value: 1, label: Text(_maxLabelController.text)),
-          ],
+          const SizedBox(width: 12),
+          Expanded(
+            child: FTextFormField(
+              label: const Text('中间标签'),
+              hint: '如 一般',
+              controller: _midLabelController,
+              onEditingComplete: () => setState(() { _midLabel = _midLabelController.text; }),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: FTextFormField(
+              label: const Text('右侧标签'),
+              hint: '如 强烈推荐',
+              controller: _maxLabelController,
+              onEditingComplete: () => setState(() {}),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 16),
+        Row(children: [
+          Expanded(
+            child: FSelect<String>(
+              label: const Text('表现样式'),
+              hint: '选择评级的可视样式',
+              initialValue: _ratingStyle,
+              format: (v) => v == 'star' ? '星星 (建议)' : '面包屑',
+              onChange: (v) => setState(() { if (v != null) _ratingStyle = v; }),
+              children: [
+                FSelectItem('星星 (建议)', 'star'),
+                FSelectItem('面包屑', 'crumb'),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: FSelect<String>(
+              label: const Text('图标（星星样式）'),
+              hint: '仅当样式为星星时生效',
+              initialValue: _ratingIcon,
+              format: (v) => v,
+              onChange: (v) => setState(() { if (v != null) _ratingIcon = v; }),
+              children: [
+                FSelectItem('star', 'star'),
+                FSelectItem('favorite', 'favorite'),
+                FSelectItem('circle', 'circle'),
+                FSelectItem('heart_broken', 'heart_broken'),
+              ],
+            ),
+          ),
+        ]),
+        const SizedBox(height: 16),
+        Row(children: [
+          Expanded(
+            child: FTextFormField(
+              label: const Text('星星数量'),
+              hint: '1-10，默认 5',
+              controller: _starsCountController,
+              keyboardType: TextInputType.number,
+              onEditingComplete: () {
+                final n = int.tryParse(_starsCountController.text.trim()) ?? _starsCount;
+                setState(() {
+                  _starsCount = n.clamp(1, 10);
+                  _starsCountController.text = _starsCount.toString();
+                  _ensurePerStarLabelCtrls(_starsCount);
+                });
+              },
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: FSwitch(
+              label: const Text('允许半星'),
+              value: _allowHalf,
+              onChange: (v) => setState(() { _allowHalf = v; }),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 16),
+        FSwitch(
+          label: const Text('启用自定义评级文本'),
+          description: const Text('为 0.5 步进的分值定义显示文本；未设置的分值将使用默认数值'),
+          value: _enableRatingLabels,
+          onChange: (v) => setState(() {
+            _enableRatingLabels = v;
+            if (v) _ensurePerStarLabelCtrls(_starsCount);
+          }),
         ),
+        if (_enableRatingLabels) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: List.generate(_starsCount, (i) {
+              final idx = i + 1;
+              _ensurePerStarLabelCtrls(_starsCount);
+              return SizedBox(
+                width: 220,
+                child: FTextFormField(
+                  label: Text('分值 $idx 文本(可留空)'),
+                  controller: _perStarLabelCtrls[i],
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 4),
+          const Text('说明：根据星星数量(1..N)提供对应的文本输入，留空则使用默认数值。'),
+        ],
       ],
     );
   }
@@ -576,45 +887,181 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: _mediaUrls.map((url) {
-            Widget mediaIcon;
-            if (url.toLowerCase().endsWith('.jpg') || url.toLowerCase().endsWith('.jpeg') || url.toLowerCase().endsWith('.png')) {
-              mediaIcon = CachedNetworkImage(
+          children: [
+            // 显示已上传的媒体文件
+            ..._mediaUrls.map((url) {
+            Widget mediaWidget;
+            final isImage = url.toLowerCase().endsWith('.jpg') || 
+                           url.toLowerCase().endsWith('.jpeg') || 
+                           url.toLowerCase().endsWith('.png') ||
+                           url.toLowerCase().endsWith('.gif');
+            final isVideo = url.toLowerCase().endsWith('.mp4') || 
+                           url.toLowerCase().endsWith('.avi') || 
+                           url.toLowerCase().endsWith('.mov') ||
+                           url.toLowerCase().endsWith('.webm');
+            final isAudio = url.toLowerCase().endsWith('.mp3') || 
+                           url.toLowerCase().endsWith('.wav') || 
+                           url.toLowerCase().endsWith('.aac');
+
+            if (isImage) {
+              mediaWidget = CachedNetworkImage(
                 imageUrl: url,
                 fit: BoxFit.cover,
-                progressIndicatorBuilder: (context, url, progress) => Center(child: CircularProgressIndicator(value: progress.progress)),
+                progressIndicatorBuilder: (context, url, progress) => 
+                    Center(child: CircularProgressIndicator(value: progress.progress)),
                 errorWidget: (context, url, error) => const Icon(Icons.error),
               );
-            } else if (url.toLowerCase().endsWith('.mp4')) {
-              mediaIcon = const Center(child: Icon(Icons.video_file, size: 40));
-            } else if (url.toLowerCase().endsWith('.mp3')) {
-              mediaIcon = const Center(child: Icon(Icons.audio_file, size: 40));
+            } else if (isVideo) {
+              mediaWidget = VideoPlayerWidget(
+                videoUrl: url,
+                width: 200,
+                height: 150,
+                autoPlay: false,
+                showControls: true,
+              );
+            } else if (isAudio) {
+              mediaWidget = const Center(child: Icon(Icons.audio_file, size: 40));
             } else {
-              mediaIcon = const Center(child: Icon(Icons.file_present, size: 40));
+              mediaWidget = const Center(child: Icon(Icons.file_present, size: 40));
             }
 
             return Stack(
               children: [
                 Container(
-                  width: 100,
-                  height: 100,
+                  width: isVideo ? 200 : 100,
+                  height: isVideo ? 150 : 100,
                   decoration: BoxDecoration(
                     border: Border.all(color: Colors.grey),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: ClipRRect(borderRadius: BorderRadius.circular(7), child: mediaIcon),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(7), 
+                    child: mediaWidget,
+                  ),
                 ),
                 Positioned(
-                  top: -12,
-                  right: -12,
-                  child: IconButton(
-                    icon: const Icon(Icons.cancel, color: Colors.red),
-                    onPressed: () => _deleteMedia(url),
+                  top: 4,
+                  right: 4,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: InkWell(
+                      onTap: () => _deleteMedia(url),
+                      borderRadius: BorderRadius.circular(4),
+                      child: const Padding(
+                        padding: EdgeInsets.all(4),
+                        child: Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ],
             );
-          }).toList(),
+            }),
+            // 显示正在上传的文件进度
+            ..._uploadingFiles.keys.map((fileName) {
+              final progress = _uploadProgress[fileName] ?? 0.0;
+              final isImage = fileName.toLowerCase().endsWith('.jpg') || 
+                             fileName.toLowerCase().endsWith('.jpeg') || 
+                             fileName.toLowerCase().endsWith('.png') ||
+                             fileName.toLowerCase().endsWith('.gif');
+              final isVideo = fileName.toLowerCase().endsWith('.mp4') || 
+                             fileName.toLowerCase().endsWith('.avi') || 
+                             fileName.toLowerCase().endsWith('.mov') ||
+                             fileName.toLowerCase().endsWith('.webm');
+              
+              return Container(
+                width: isVideo ? 200 : 100,
+                height: isVideo ? 150 : 100,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey),
+                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.grey.shade100,
+                ),
+                child: Stack(
+                  children: [
+                    // 文件类型图标
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            isImage ? Icons.image : 
+                            isVideo ? Icons.video_file : 
+                            Icons.audio_file,
+                            size: 30,
+                            color: Colors.grey.shade600,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            fileName.length > 15 
+                                ? '${fileName.substring(0, 12)}...'
+                                : fileName,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey.shade600,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                    // 进度条
+                    Positioned(
+                      bottom: 8,
+                      left: 8,
+                      right: 8,
+                      child: Column(
+                        children: [
+                          LinearProgressIndicator(
+                            value: progress,
+                            backgroundColor: Colors.grey.shade300,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Theme.of(context).primaryColor,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${(progress * 100).toInt()}%',
+                            style: const TextStyle(fontSize: 10),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // 取消按钮
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: InkWell(
+                          onTap: () => _cancelUpload(fileName),
+                          borderRadius: BorderRadius.circular(4),
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
         ),
         const SizedBox(height: 8),
         FButton(
@@ -630,7 +1077,7 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
     switch (type) {
       case QuestionType.singleChoice: return '单选题';
       case QuestionType.multipleChoice: return '多选题';
-      case QuestionType.slider: return '滑块题';
+      case QuestionType.slider: return '评级题';
       case QuestionType.matrix: return '矩阵题';
     }
   }
@@ -687,9 +1134,32 @@ class _AddOptionDialogState extends State<AddOptionDialog> {
 
     try {
       final result = await FilePicker.platform.pickFiles(type: FileType.media);
-      if (result != null && result.files.single.path != null) {
-        final filePath = result.files.single.path!;
-        final url = await widget.apiService.uploadMedia(widget.surveyId, filePath);
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.single;
+        String url;
+        
+        // Web平台使用字节数据，移动端使用文件路径
+        if (kIsWeb) {
+          if (file.bytes != null && file.name.isNotEmpty) {
+            url = await widget.apiService.uploadMediaUniversal(
+              widget.surveyId,
+              fileBytes: file.bytes!,
+              fileName: file.name,
+            );
+          } else {
+            throw '无法获取文件数据';
+          }
+        } else {
+          if (file.path != null) {
+            url = await widget.apiService.uploadMediaUniversal(
+              widget.surveyId,
+              filePath: file.path!,
+            );
+          } else {
+            throw '无法获取文件路径';
+          }
+        }
+        
         if (mounted) {
           setState(() {
             _mediaUrl = url;
@@ -780,12 +1250,25 @@ class _AddOptionDialogState extends State<AddOptionDialog> {
                 ),
               ),
               Positioned(
-                top: -12,
-                right: -12,
-                child: IconButton(
-                  icon: const Icon(Icons.cancel, color: Colors.red),
-                  onPressed: _removeMedia,
-                  tooltip: '移除媒体文件',
+                top: 4,
+                right: 4,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: InkWell(
+                    onTap: _removeMedia,
+                    borderRadius: BorderRadius.circular(4),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],

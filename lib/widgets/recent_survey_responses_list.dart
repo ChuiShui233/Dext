@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import '../services/api_service.dart';
 
 class RecentSurveyResponsesList extends StatefulWidget {
-  const RecentSurveyResponsesList({super.key});
+  /// 当在桌面端需要与图表卡片等高时，传入一个固定高度以启用内部滚动
+  final double? fixedHeight;
+
+  const RecentSurveyResponsesList({super.key, this.fixedHeight});
 
   @override
   State<RecentSurveyResponsesList> createState() => _RecentSurveyResponsesListState();
@@ -29,47 +30,12 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
         errorMessage = '';
       });
 
-      // Get auth token from SharedPreferences
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token');
-      
-      if (token == null) {
-        setState(() {
-          errorMessage = '未登录，请先登录';
-          isLoading = false;
-        });
-        return;
-      }
-
-      final response = await http.get(
-        Uri.parse('http://127.0.0.1:11222/api/survey/recent-submissions'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['submissions'] != null) {
-          setState(() {
-            submissions = (data['submissions'] as List)
-                .map((item) => RecentSubmission.fromJson(item))
-                .toList();
-            isLoading = false;
-          });
-        } else {
-          setState(() {
-            submissions = [];
-            isLoading = false;
-          });
-        }
-      } else {
-        setState(() {
-          errorMessage = '服务器错误: ${response.statusCode}';
-          isLoading = false;
-        });
-      }
+      final api = ApiService();
+      final list = await api.getRecentSubmissions();
+      setState(() {
+        submissions = list.map((e) => RecentSubmission.fromJson(e)).toList();
+        isLoading = false;
+      });
     } catch (e) {
       setState(() {
         errorMessage = '加载失败: $e';
@@ -83,13 +49,13 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: isDark ? theme.colorScheme.surface : Colors.white,
+        color: isDark ? theme.colorScheme.surface.withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: isDark ? theme.colorScheme.outline.withOpacity(0.2) : Colors.grey[200]!,
+          color: isDark ? theme.colorScheme.outline.withValues(alpha: 0.2) : Colors.grey[200]!,
         ),
       ),
       child: Column(
@@ -110,74 +76,21 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
                 '共 ${submissions.length} 个回复',
                 style: TextStyle(
                   fontSize: 12,
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 24),
-          
-          // 内容区域
-          if (isLoading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(32.0),
-                child: CircularProgressIndicator(),
-              ),
-            )
-          else if (errorMessage.isNotEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: Column(
-                  children: [
-                    Icon(FIcons.check, color: theme.colorScheme.onSurface.withOpacity(0.4), size: 48),
-                    const SizedBox(height: 16),
-                    Text(
-                      errorMessage,
-                      style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6)),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    FButton(
-                      onPress: _loadRecentSubmissions,
-                      child: const Text('重试'),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else if (submissions.isEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: Column(
-                  children: [
-                    Icon(FIcons.messageSquare, color: theme.colorScheme.onSurface.withOpacity(0.4), size: 48),
-                    const SizedBox(height: 16),
-                    Text(
-                      '暂无回复记录',
-                      style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6)),
-                    ),
-                  ],
-                ),
-              ),
-            )
+          if (widget.fixedHeight == null)
+            _buildBodyStatic(theme)
           else
-            // 问卷回复记录列表
-            ...submissions.asMap().entries.map((entry) {
-              final index = entry.key;
-              final submission = entry.value;
-              return Column(
-                children: [
-                  if (index > 0) const SizedBox(height: 16),
-                  _buildResponseItem(submission),
-                ],
-              );
-            }),
+            SizedBox(height: widget.fixedHeight, child: _buildBodyScrollable(theme)),
         ],
       ),
     );
+
+    return card;
   }
 
   Widget _buildResponseItem(RecentSubmission submission) {
@@ -190,7 +103,7 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
         CircleAvatar(
           radius: 20,
           backgroundColor: isDark 
-              ? theme.colorScheme.surfaceVariant 
+              ? theme.colorScheme.surfaceContainerHighest 
               : Colors.grey[200],
           backgroundImage: submission.avatarUrl != null 
               ? NetworkImage(submission.avatarUrl!)
@@ -226,7 +139,7 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
               Text(
                 submission.surveyName,
                 style: TextStyle(
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   fontSize: 12,
                 ),
               ),
@@ -236,12 +149,133 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
         Text(
           submission.timeAgo,
           style: TextStyle(
-            color: theme.colorScheme.onSurface.withOpacity(0.5),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
             fontSize: 12,
           ),
         ),
       ],
     );
+  }
+
+  // 静态（不滚动）内容：移动端或未指定高度时使用
+  Widget _buildBodyStatic(ThemeData theme) {
+    if (isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    } else if (errorMessage.isNotEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            children: [
+              Icon(FIcons.check, color: theme.colorScheme.onSurface.withValues(alpha: 0.4), size: 48),
+              const SizedBox(height: 16),
+              Text(
+                errorMessage,
+                style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FButton(
+                onPress: _loadRecentSubmissions,
+                child: const Text('重试'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else if (submissions.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            children: [
+              Icon(FIcons.messageSquare, color: theme.colorScheme.onSurface.withValues(alpha: 0.4), size: 48),
+              const SizedBox(height: 16),
+              Text(
+                '暂无回复记录',
+                style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      return Column(
+        children: [
+          ...submissions.asMap().entries.map((entry) {
+            final index = entry.key;
+            final submission = entry.value;
+            return Column(
+              children: [
+                if (index > 0) const SizedBox(height: 16),
+                _buildResponseItem(submission),
+              ],
+            );
+          })
+        ],
+      );
+    }
+  }
+
+  // 可滚动内容：当提供 fixedHeight 时，使用 ListView 以避免溢出
+  Widget _buildBodyScrollable(ThemeData theme) {
+    if (isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    } else if (errorMessage.isNotEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(FIcons.check, color: theme.colorScheme.onSurface.withValues(alpha: 0.4), size: 48),
+              const SizedBox(height: 16),
+              Text(
+                errorMessage,
+                style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FButton(
+                onPress: _loadRecentSubmissions,
+                child: const Text('重试'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else if (submissions.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(FIcons.messageSquare, color: theme.colorScheme.onSurface.withValues(alpha: 0.4), size: 48),
+              const SizedBox(height: 16),
+              Text(
+                '暂无回复记录',
+                style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      return ListView.separated(
+        padding: EdgeInsets.zero,
+        itemBuilder: (context, index) => _buildResponseItem(submissions[index]),
+        separatorBuilder: (context, index) => const SizedBox(height: 16),
+        itemCount: submissions.length,
+      );
+    }
   }
 }
 

@@ -25,12 +25,12 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace "com.wucode.Dext"
-    compileSdk 36  // 使用数字类型而非 compileSdkVersion
+    compileSdk 36
 
     defaultConfig {
         applicationId "com.wucode.Dext"
-        minSdkVersion 23    // 更新为 23 以满足 radio_player 插件的要求  flutter.minSdkVersion 
-        targetSdk 35 // 使用数字类型而非 targetSdkVersion
+        minSdkVersion flutter.minSdkVersion    // flutter.minSdkVersion 
+        targetSdk 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
     }

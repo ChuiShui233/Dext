@@ -3,14 +3,19 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  app_links
   clipboard_watcher
+  desktop_drop
+  desktop_webview_window
   fast_rsa
   file_selector_windows
   flutter_secure_storage_windows
-  screen_retriever
+  screen_retriever_windows
   tray_manager
   url_launcher_windows
+  video_player_win
   window_manager
+  window_to_front
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
