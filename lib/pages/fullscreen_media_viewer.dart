@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:video_player/video_player.dart';
 import 'package:forui/forui.dart';
+import '../services/config.dart';
 
 class FullscreenMediaViewer extends StatefulWidget {
   final String mediaUrl;
@@ -160,9 +161,9 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
 
   String get _currentMediaUrl {
     if (widget.allMediaUrls != null && widget.allMediaUrls!.isNotEmpty) {
-      return widget.allMediaUrls![_currentIndex];
+      return toAbsoluteUrl(widget.allMediaUrls![_currentIndex]);
     }
-    return widget.mediaUrl;
+    return toAbsoluteUrl(widget.mediaUrl);
   }
 
   bool _isImage(String url) {

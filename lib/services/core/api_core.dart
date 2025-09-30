@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../crypto_service.dart';
@@ -16,7 +17,8 @@ typedef StatusCallback = void Function(RequestStatus status, String? message);
 class ApiCore {
   ApiCore({this.authToken});
 
-  static const String baseUrl = 'http://192.168.1.6:11222';
+  // 使用集中配置的 API 基地址
+  static const String baseUrl = apiBaseUrl;
   static const Duration timeoutDuration = Duration(seconds: 15);
 
   String? authToken;
@@ -54,6 +56,11 @@ class ApiCore {
       'data': data,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     });
+  }
+
+  /// 更新认证令牌
+  void updateAuthToken(String? token) {
+    authToken = token;
   }
 
   Map<String, String> get headers => {

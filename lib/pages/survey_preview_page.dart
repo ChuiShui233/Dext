@@ -10,6 +10,7 @@ import '../components/glass_card.dart';
 import '../widgets/question_display_widget.dart';
 import 'fullscreen_media_viewer.dart';
 import '../widgets/frosted_glass_background.dart';
+import '../services/config.dart';
 
 class SurveyPreviewPage extends StatefulWidget {
   final Survey survey;
@@ -85,8 +86,8 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
                     decoration: BoxDecoration(
                       image: DecorationImage(
                         image: NetworkImage(isWide
-                            ? (_desktopBackground ?? '')
-                            : (_mobileBackground ?? '')),
+                            ? toAbsoluteUrl(_desktopBackground)
+                            : toAbsoluteUrl(_mobileBackground)),
                         fit: BoxFit.cover,
                         onError: (_, __) {},
                       ),

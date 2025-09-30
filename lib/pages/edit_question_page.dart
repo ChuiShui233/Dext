@@ -11,6 +11,7 @@ import '../models/question.dart';
 import '../services/api_service.dart';
 import '../widgets/frosted_glass_background.dart';
 import '../components/video_player_widget.dart';
+import '../services/config.dart';
 
 
 // ###########################################################################
@@ -815,7 +816,7 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
                           child: CachedNetworkImage(
-                            imageUrl: option.mediaUrl!,
+                            imageUrl: toAbsoluteUrl(option.mediaUrl!),
                             height: 100,
                             width: double.infinity,
                             fit: BoxFit.cover,
@@ -896,21 +897,22 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
             // 显示已上传的媒体文件
             ..._mediaUrls.map((url) {
             Widget mediaWidget;
-            final isImage = url.toLowerCase().endsWith('.jpg') || 
-                           url.toLowerCase().endsWith('.jpeg') || 
-                           url.toLowerCase().endsWith('.png') ||
-                           url.toLowerCase().endsWith('.gif');
-            final isVideo = url.toLowerCase().endsWith('.mp4') || 
-                           url.toLowerCase().endsWith('.avi') || 
-                           url.toLowerCase().endsWith('.mov') ||
-                           url.toLowerCase().endsWith('.webm');
-            final isAudio = url.toLowerCase().endsWith('.mp3') || 
-                           url.toLowerCase().endsWith('.wav') || 
-                           url.toLowerCase().endsWith('.aac');
+            final absUrl = toAbsoluteUrl(url);
+            final isImage = absUrl.toLowerCase().endsWith('.jpg') || 
+                           absUrl.toLowerCase().endsWith('.jpeg') || 
+                           absUrl.toLowerCase().endsWith('.png') ||
+                           absUrl.toLowerCase().endsWith('.gif');
+            final isVideo = absUrl.toLowerCase().endsWith('.mp4') || 
+                           absUrl.toLowerCase().endsWith('.avi') || 
+                           absUrl.toLowerCase().endsWith('.mov') ||
+                           absUrl.toLowerCase().endsWith('.webm');
+            final isAudio = absUrl.toLowerCase().endsWith('.mp3') || 
+                           absUrl.toLowerCase().endsWith('.wav') || 
+                           absUrl.toLowerCase().endsWith('.aac');
 
             if (isImage) {
               mediaWidget = CachedNetworkImage(
-                imageUrl: url,
+                imageUrl: absUrl,
                 fit: BoxFit.cover,
                 progressIndicatorBuilder: (context, url, progress) => 
                     Center(child: CircularProgressIndicator(value: progress.progress)),
@@ -918,7 +920,7 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
               );
             } else if (isVideo) {
               mediaWidget = VideoPlayerWidget(
-                videoUrl: url,
+                videoUrl: absUrl,
                 width: 200,
                 height: 150,
                 autoPlay: false,
@@ -953,7 +955,7 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: InkWell(
-                      onTap: () => _deleteMedia(url),
+                      onTap: () => _deleteMedia(absUrl),
                       borderRadius: BorderRadius.circular(4),
                       child: const Padding(
                         padding: EdgeInsets.all(4),
@@ -1193,9 +1195,10 @@ class _AddOptionDialogState extends State<AddOptionDialog> {
   }
 
   Widget _buildMediaPreview(String url) {
-    if (url.toLowerCase().endsWith('.jpg') || url.toLowerCase().endsWith('.jpeg') || url.toLowerCase().endsWith('.png')) {
+    final absUrl = toAbsoluteUrl(url);
+    if (absUrl.toLowerCase().endsWith('.jpg') || absUrl.toLowerCase().endsWith('.jpeg') || absUrl.toLowerCase().endsWith('.png')) {
       return CachedNetworkImage(
-        imageUrl: url,
+        imageUrl: absUrl,
         fit: BoxFit.cover,
         progressIndicatorBuilder: (context, url, progress) => Center(child: CircularProgressIndicator(value: progress.progress)),
         errorWidget: (context, url, error) => const Icon(Icons.error),

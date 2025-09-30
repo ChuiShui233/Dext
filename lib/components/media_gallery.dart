@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../components/video_player_widget.dart';
+import '../services/config.dart';
 
 /// 通用媒体画廊：支持图片/视频/音频/其他文件的缩略图展示
 /// - onOpen 可选：提供时点击缩略图会回调 (index, url, all)
@@ -30,7 +31,8 @@ class MediaGallery extends StatelessWidget {
       children: mediaUrls.asMap().entries.map((entry) {
         final index = entry.key;
         final url = entry.value;
-        final lower = url.toLowerCase();
+        final absUrl = toAbsoluteUrl(url);
+        final lower = absUrl.toLowerCase();
         final isImage = lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.gif') || lower.endsWith('.webp');
         final isVideo = lower.endsWith('.mp4') || lower.endsWith('.avi') || lower.endsWith('.mov') || lower.endsWith('.webm');
         final isAudio = lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.aac');
@@ -41,7 +43,7 @@ class MediaGallery extends StatelessWidget {
 
         if (isImage) {
           mediaWidget = CachedNetworkImage(
-            imageUrl: url,
+            imageUrl: absUrl,
             fit: BoxFit.cover,
             placeholder: (context, _) => const Center(child: CircularProgressIndicator()),
             errorWidget: (context, _, __) => Container(color: Colors.grey.shade200, child: const Icon(Icons.error)),
@@ -52,12 +54,12 @@ class MediaGallery extends StatelessWidget {
             w = vs.width;
             h = vs.height;
             mediaWidget = VideoPlayerWidget(
-              videoUrl: url,
+              videoUrl: absUrl,
               width: vs.width,
               height: vs.height,
               autoPlay: false,
               showControls: true,
-              onOpen: onOpen == null ? null : () => onOpen!(index, url, mediaUrls),
+              onOpen: onOpen == null ? null : () => onOpen!(index, absUrl, mediaUrls.map(toAbsoluteUrl).toList()),
               showFullscreenButton: onOpen != null,
             );
           } else {
@@ -114,7 +116,7 @@ class MediaGallery extends StatelessWidget {
         // 视频启用播放器时由内部按钮处理，避免手势冲突。
         if (onOpen != null && (!isVideo || (isVideo && !enableVideoPlayer))) {
           thumb = GestureDetector(
-            onTap: () => onOpen!(index, url, mediaUrls),
+            onTap: () => onOpen!(index, absUrl, mediaUrls.map(toAbsoluteUrl).toList()),
             child: thumb,
           );
         }

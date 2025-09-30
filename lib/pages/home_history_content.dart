@@ -130,7 +130,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
         Expanded(
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -455,6 +455,21 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
                 _buildStatusBadge(surveyStatus, isDark),
               ],
             ),
+            const SizedBox(height: 8),
+            if ((item['description'] ?? '').toString().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  (item['description'] ?? '') as String,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? Colors.white.withValues(alpha: 0.7) : Colors.black54,
+                    height: 1.4,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             const SizedBox(height: 12),
             Wrap(
               spacing: 16,

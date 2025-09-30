@@ -117,6 +117,132 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
     }
   }
 
+  Future<void> _showUpdateUsernameDialog(BuildContext context) async {
+    final usernameController = TextEditingController(text: _currentUser?.username ?? '');
+    bool isLoading = false;
+
+    return showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => FDialog(
+          title: const Text('修改用户名'),
+          body: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('请输入新的用户名（3-12位字母数字）'),
+              const SizedBox(height: 16),
+              FTextField(
+                controller: usernameController,
+                label: const Text('用户名'),
+                hint: '输入新用户名',
+                maxLength: 12,
+                enabled: !isLoading,
+              ),
+              if (isLoading) ...[
+                const SizedBox(height: 16),
+                const Row(
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    SizedBox(width: 8),
+                    Text('正在更新用户名...'),
+                  ],
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            FButton(
+              style: FButtonStyle.outline,
+              onPress: isLoading ? null : () => Navigator.of(context).pop(),
+              child: const Text('取消'),
+            ),
+            FButton(
+              onPress: isLoading ? null : () async {
+                final newUsername = usernameController.text.trim();
+                
+                // 验证用户名格式
+                if (newUsername.isEmpty) {
+                  showFToast(
+                    context: context,
+                    title: const Text('用户名不能为空'),
+                  );
+                  return;
+                }
+                
+                if (newUsername.length < 3 || newUsername.length > 12) {
+                  showFToast(
+                    context: context,
+                    title: const Text('用户名长度必须在3-12位之间'),
+                  );
+                  return;
+                }
+                
+                if (!RegExp(r'^[a-zA-Z0-9]+$').hasMatch(newUsername)) {
+                  showFToast(
+                    context: context,
+                    title: const Text('用户名只能包含字母和数字'),
+                  );
+                  return;
+                }
+                
+                if (newUsername == _currentUser?.username) {
+                  showFToast(
+                    context: context,
+                    title: const Text('新用户名与当前用户名相同'),
+                  );
+                  return;
+                }
+
+                setState(() {
+                  isLoading = true;
+                });
+
+                try {
+                  await widget.apiService.updateUsername(
+                    newUsername: newUsername,
+                  );
+                  
+                  // 用户名更新成功后，重新获取用户信息确保数据一致性
+                  await _fetchUserData();
+                  
+                  // 通知其他组件用户数据已更新
+                  widget.userNotifier?.value = _currentUser;
+                  
+                  if (context.mounted) {
+                    Navigator.of(context).pop();
+                    showFToast(
+                      context: context,
+                      title: const Text('用户名更新成功'),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    showFToast(
+                      context: context,
+                      title: Text('用户名更新失败: $e'),
+                    );
+                  }
+                } finally {
+                  if (mounted) {
+                    setState(() {
+                      isLoading = false;
+                    });
+                  }
+                }
+              },
+              child: const Text('确认'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -282,6 +408,18 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
           trailing: Icon(Icons.arrow_forward_ios,
               size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
           onTap: _changeAvatar,
+        ),
+        Divider(
+          height: 1,
+          thickness: 1,
+          color: theme.dividerColor.withValues(alpha: 0.1),
+        ),
+        _buildNoHighlightListTile(
+          leading: Icon(Icons.edit_outlined, color: theme.colorScheme.primary),
+          title: const Text('修改用户名'),
+          trailing: Icon(Icons.arrow_forward_ios,
+              size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
+          onTap: () => _showUpdateUsernameDialog(context),
         ),
         Divider(
           height: 1,

@@ -13,6 +13,7 @@ import '../main.dart' show isDesktop;
 import '../utils/date_format.dart';
 import 'dart:ui' as ui;
 import '../widgets/frosted_glass_background.dart';
+import '../services/config.dart';
 
 class SurveyResultsPage extends StatefulWidget {
   final String token;
@@ -512,8 +513,18 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
         apiService.getSurveyQuestions(widget.survey.id),
       ]);
 
-      final results = futures[0] as List<SurveyResult>;
-      final questions = futures[1] as List<Question>;
+      // 安全地处理返回的数据
+      final resultsData = futures[0];
+      final questionsData = futures[1];
+
+      // 确保数据类型正确
+      final List<SurveyResult> results = resultsData is List<SurveyResult> 
+          ? resultsData 
+          : <SurveyResult>[];
+      
+      final List<Question> questions = questionsData is List<Question>
+          ? questionsData
+          : <Question>[];
 
       setState(() {
         _results = results;
@@ -527,7 +538,14 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
       });
     } catch (e) {
       setState(() {
-        _errorMessage = '加载数据失败: $e';
+        // 检查是否是空数据的情况
+        if (e.toString().contains('Null') && e.toString().contains('List')) {
+          _errorMessage = '暂无答案提交';
+          _results = [];
+          _questions = [];
+        } else {
+          _errorMessage = '加载数据失败: $e';
+        }
         _isLoading = false;
       });
     }
@@ -1115,7 +1133,9 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                     decoration: BoxDecoration(
                       image: DecorationImage(
                         image: CachedNetworkImageProvider(
-                          isWide ? (_desktopBackground ?? '') : (_mobileBackground ?? ''),
+                          isWide
+                              ? toAbsoluteUrl(_desktopBackground)
+                              : toAbsoluteUrl(_mobileBackground),
                         ),
                         fit: BoxFit.cover,
                         onError: (_, __) {},
@@ -1226,9 +1246,10 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                                       child: Column(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Icon(
-                                            Icons.inbox_outlined,
-                                            size: 64,
+                                          Image.asset(
+                                            'assets/images/loading.gif',
+                                            width: 64,
+                                            height: 64,
                                             color: isDark ? Colors.white54 : Colors.grey,
                                           ),
                                           const SizedBox(height: 16),
@@ -1242,7 +1263,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                                           ),
                                           const SizedBox(height: 8),
                                           Text(
-                                            '还没有人填写这份问卷',
+                                            '还没有人填写这份问卷哦~',
                                             style: TextStyle(
                                               fontSize: 14,
                                               color: isDark ? Colors.white70 : Colors.grey[600],

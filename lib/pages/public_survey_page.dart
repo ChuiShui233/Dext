@@ -12,6 +12,7 @@ import '../components/glass_card.dart';
 import '../widgets/question_display_widget.dart';
 import 'fullscreen_media_viewer.dart';
 import '../widgets/frosted_glass_background.dart';
+import '../services/config.dart';
 
 class PublicSurveyPage extends StatefulWidget {
   final String surveyUID;
@@ -28,6 +29,7 @@ class PublicSurveyPage extends StatefulWidget {
 class _PublicSurveyPageState extends State<PublicSurveyPage> {
   late ApiService _apiService;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  final ScrollController _scrollController = ScrollController();
   
   String surveyName = '';
   String description = '';
@@ -49,6 +51,13 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
   void initState() {
     super.initState();
     _initializeAndLoad();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _apiService.dispose();
+    super.dispose();
   }
 
   Future<void> _initializeAndLoad() async {
@@ -191,21 +200,22 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
   }
 
   // 更新单选题答案
-  void _updateSingleChoiceAnswer(int questionId, String selectedOption, int optionIndex) {
+  void _updateSingleChoiceAnswer(int questionId, String option, int optionIndex) {
     setState(() {
-      // 清除该问题的所有选项状态
-      final questionOptions = questions.firstWhere((q) => q.id == questionId).options;
-      for (int i = 0; i < questionOptions.length; i++) {
+      // 清除该题的所有选项状态
+      for (int i = 0; i < questions.firstWhere((q) => q.id == questionId).options.length; i++) {
         _optionStates[_getOptionKey(questionId, i)] = false;
       }
-      
-      // 设置选中的选项状态
+      // 设置当前选项为选中
       _optionStates[_getOptionKey(questionId, optionIndex)] = true;
       
       // 更新答案并重算可见问题
-      _runtime?.setAnswerSingle(questionId, selectedOption);
+      _runtime?.setAnswerSingle(questionId, option);
       _runtime?.recomputeVisible();
     });
+    
+    // 自动滚动到底部
+    _scrollToBottom();
   }
 
   // 更新多选题答案
@@ -218,6 +228,37 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
       _runtime?.toggleMultiple(questionId, option, !isSelected);
       _runtime?.recomputeVisible();
     });
+    
+    // 自动滚动到底部
+    _scrollToBottom();
+  }
+
+  // 自动滚动到底部
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
+  }
+
+  // 检查是否所有必答题都已回答
+  bool _areAllRequiredQuestionsAnswered() {
+    if (_runtime == null) return false;
+    
+    for (final question in questions.where((q) => _runtime!.visibleQuestionIds.contains(q.id))) {
+      if (question.required) {
+        final answer = _runtime!.answers[question.id];
+        if (answer == null || answer.isEmpty) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
 
@@ -305,13 +346,30 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
         isSubmitting = false;
       });
       
-      if (mounted) {
-        showFToast(
-          context: context,
-          alignment: FToastAlignment.bottomRight,
-          title: const Text('提交失败'),
-          description: Text('提交失败: $e'),
-        );
+      final errorStr = e.toString();
+      if (errorStr.contains('403') || errorStr.contains('权限') || errorStr.contains('禁止')) {
+        // 403错误：跳转到错误提示界面
+        setState(() {
+          errorMessage = '您可能没有权限提交此问卷或者达到提交次数限制';
+        });
+      } else if (errorStr.contains('404') || errorStr.contains('不存在')) {
+        setState(() {
+          errorMessage = '问卷不存在或已被删除';
+        });
+      } else if (errorStr.contains('网络') || errorStr.contains('连接')) {
+        setState(() {
+          errorMessage = '网络连接失败，请检查网络设置';
+        });
+      } else {
+        // 其他错误：显示Toast提示
+        if (mounted) {
+          showFToast(
+            context: context,
+            alignment: FToastAlignment.bottomRight,
+            title: const Text('提交失败'),
+            description: Text('提交失败: $e'),
+          );
+        }
       }
     }
   }
@@ -333,8 +391,8 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
                     decoration: BoxDecoration(
                       image: DecorationImage(
                         image: NetworkImage(isWide
-                            ? (_desktopBackground ?? '')
-                            : (_mobileBackground ?? '')),
+                            ? toAbsoluteUrl(_desktopBackground)
+                            : toAbsoluteUrl(_mobileBackground)),
                         fit: BoxFit.cover,
                         onError: (_, __) {},
                       ),
@@ -389,7 +447,12 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.error_outline, size: 64, color: Colors.red[400]),
+              Image.asset(
+                'assets/images/loading.gif',
+                width: 64,
+                height: 64,
+                color: Colors.red[400],
+              ),
               const SizedBox(height: 16),
               Text(
                 errorMessage!,
@@ -401,7 +464,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
               ),
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: _loadSurvey,
+                onPressed: () => Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue[600],
                   foregroundColor: Colors.white,
@@ -410,7 +473,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                child: const Text('重试'),
+                child: const Text('返回主界面'),
               ),
             ],
           ),
@@ -471,6 +534,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
     final visible = questions.where((q) => _runtime?.visibleQuestionIds.contains(q.id) ?? false).toList();
 
     return ListView(
+      controller: _scrollController,
       padding: const EdgeInsets.all(16),
       children: [
         // 问卷信息卡片
@@ -503,26 +567,51 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
         const SizedBox(height: 16),
 
         // 问题列表（仅渲染可见题）
-        ...visible.map((q) => _buildGlassCard(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: QuestionDisplayWidget(
-                  question: q,
-                  mode: QuestionDisplayMode.interactive,
-                  optionStates: _optionStates,
-                  selectedAnswers: _runtime?.answers[q.id] ?? [],
-                  hoverRatings: _hoverRatings,
-                  onSingleChoiceChanged: _updateSingleChoiceAnswer,
-                  onMultipleChoiceChanged: _updateMultipleChoiceAnswer,
-                  onRatingChanged: (questionId, value) {
-                    _runtime?.setAnswerSingle(questionId, value);
-                    _runtime?.recomputeVisible();
-                    setState(() {});
-                  },
-                  onMediaOpen: (url, all, index) => _openFullscreenViewer(url, all, index),
-                ),
-              ),
-            )),
+        ...visible.asMap().entries.map((entry) {
+          final index = entry.key;
+          final q = entry.value;
+          return AnimatedContainer(
+            duration: Duration(milliseconds: 300 + (index * 100)),
+            curve: Curves.easeOutBack,
+            child: TweenAnimationBuilder<double>(
+              duration: Duration(milliseconds: 500 + (index * 150)),
+              tween: Tween(begin: 0.0, end: 1.0),
+              curve: Curves.easeOutQuart,
+              builder: (context, value, child) {
+                return Transform.translate(
+                  offset: Offset(0, 30 * (1 - value)),
+                  child: Opacity(
+                    opacity: value,
+                    child: Transform.scale(
+                      scale: 0.8 + (0.2 * value),
+                      child: _buildGlassCard(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: QuestionDisplayWidget(
+                            question: q,
+                            mode: QuestionDisplayMode.interactive,
+                            optionStates: _optionStates,
+                            selectedAnswers: _runtime?.answers[q.id] ?? [],
+                            hoverRatings: _hoverRatings,
+                            onSingleChoiceChanged: _updateSingleChoiceAnswer,
+                            onMultipleChoiceChanged: _updateMultipleChoiceAnswer,
+                            onRatingChanged: (questionId, value) {
+                              _runtime?.setAnswerSingle(questionId, value);
+                              _runtime?.recomputeVisible();
+                              setState(() {});
+                              _scrollToBottom();
+                            },
+                            onMediaOpen: (url, all, index) => _openFullscreenViewer(url, all, index),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+        }),
 
         if (_runtime?.ended == true)
           _buildGlassCard(
@@ -542,44 +631,48 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
             ),
           ),
         
-        // 提交按钮
-        _buildGlassCard(
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: ElevatedButton(
-              onPressed: isSubmitting ? null : _submitAnswers,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isDark ? Colors.blue[600] : Colors.blue[700],
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 0,
-              ),
-              child: isSubmitting
-                  ? const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        ),
-                        SizedBox(width: 12),
-                        Text('提交中...', style: TextStyle(fontSize: 16)),
-                      ],
-                    )
-                  : const Text(
-                      '提交问卷',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        // 提交按钮 - 只在答完所有必答题后显示
+        if (_areAllRequiredQuestionsAnswered())
+          _buildGlassCard(
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Opacity(
+                opacity: 0.8, // 半透明效果
+                child: ElevatedButton(
+                  onPressed: isSubmitting ? null : _submitAnswers,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isDark ? Colors.blue[600] : Colors.blue[700],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    elevation: 0,
+                  ),
+                  child: isSubmitting
+                      ? const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            ),
+                            SizedBox(width: 12),
+                            Text('提交中...', style: TextStyle(fontSize: 16)),
+                          ],
+                        )
+                      : const Text(
+                          '提交问卷',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                ),
+              ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -643,9 +736,4 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
     }
   }
 
-  @override
-  void dispose() {
-    _apiService.dispose();
-    super.dispose();
-  }
 }

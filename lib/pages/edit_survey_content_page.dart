@@ -15,6 +15,7 @@ import '../main.dart' show isDesktop;
 import '../widgets/frosted_glass_background.dart';
 import 'edit_question_page.dart';
 import 'survey_preview_page.dart';
+import '../services/config.dart';
 
 
 
@@ -434,6 +435,7 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
   Widget _buildBackgroundCard() {
   final isCurrentDesktop = _isDesktopPreview;
   final currentImage = isCurrentDesktop ? _desktopBackground : _mobileBackground;
+  final absImage = toAbsoluteUrl(currentImage ?? '');
   final isDark = Theme.of(context).brightness == Brightness.dark;
   const double bottomHeight = 70; // 底部模糊/半透明容器高度
   const double minHeight = 150; // 最小高度，确保有足够空间显示按钮
@@ -506,7 +508,7 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                           maxScale: 4.0,
                           boundaryMargin: const EdgeInsets.all(50),
                           child: CachedNetworkImage(
-                            imageUrl: currentImage,
+                            imageUrl: absImage,
                             fit: BoxFit.contain,
                             progressIndicatorBuilder: (context, url, progress) =>
                                 Center(child: CircularProgressIndicator(value: progress.progress)),

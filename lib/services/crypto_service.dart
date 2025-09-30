@@ -141,6 +141,11 @@ O5BNvaOmpC2jMYWf0NfHRX9RIobjMknwGwIDAQAB
 
   // 获取当前会话密钥
   SessionKey? get currentSessionKey => _currentSessionKey;
+  
+  // 清除当前会话密钥
+  void clearSessionKey() {
+    _currentSessionKey = null;
+  }
 }
 
 // 会话密钥类

@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:http/http.dart' as http;
+import 'config.dart';
 import '/services/crypto_service.dart';
 import 'core/api_core.dart' as core;
 import 'auth_service.dart';
@@ -36,7 +37,7 @@ typedef StatusCallback = core.StatusCallback;
 typedef ProgressCallback = core.ProgressCallback;
 
 class ApiService {
-  static const String baseUrl = 'http://192.168.1.6:11222';  //127.0.0.1:11222
+  static const String baseUrl = apiBaseUrl;
   static const Duration timeoutDuration = Duration(seconds: 15);
   // 全局401未授权处理回调（由应用在启动时注册）
   static VoidCallback? onUnauthorized;
@@ -2905,6 +2906,68 @@ Future<Question> addQuestion(
         throw '无权限删除这些答案';
       } else {
         throw '批量删除答案失败: ${response.statusCode}';
+      }
+    } catch (e) {
+      final errorMsg = e.toString();
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
+    }
+  }
+
+  /// 更新用户名
+  Future<Map<String, dynamic>> updateUsername({
+    required String newUsername,
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在更新用户名...');
+      _updateStatus(RequestStatus.loading, '正在更新用户名...');
+
+      // 使用加密请求，后端 DecryptMiddleware 要求 PUT 必须加密
+      final response = await _encryptedRequest(
+        'PUT',
+        '$baseUrl/api/user/username',
+        {
+          'newUsername': newUsername,
+        },
+        onStatus: onStatus,
+      );
+
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+        onStatus?.call(RequestStatus.success, '用户名更新成功');
+        _updateStatus(RequestStatus.success, '用户名更新成功');
+        
+        // 如果返回了新的token，更新本地存储的token
+        if (responseData['token'] != null) {
+          final newToken = responseData['token'];
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('auth_token', newToken);
+          authToken = newToken;
+          
+          // 同步更新核心服务的token
+          _core.updateAuthToken(newToken);
+          
+          // 强制清除加密服务的会话密钥，确保使用新token重新建立会话
+          _cryptoService.clearSessionKey();
+          
+          // 通知数据更新，触发UI刷新
+          _dataUpdateController.add({
+            'type': 'token_updated',
+            'data': {'newUsername': responseData['newUsername']},
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          });
+        }
+        
+        return responseData;
+      } else if (response.statusCode == 400) {
+        final errorData = json.decode(response.body);
+        throw errorData['error'] ?? '用户名格式错误';
+      } else if (response.statusCode == 401) {
+        throw TokenExpired('未登录或登录已过期');
+      } else {
+        throw '更新用户名失败: ${response.statusCode}';
       }
     } catch (e) {
       final errorMsg = e.toString();

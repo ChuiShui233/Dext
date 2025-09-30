@@ -4,6 +4,7 @@ import '../models/question.dart';
 import '../components/glass_card.dart';
 import '../components/media_gallery.dart';
 import '../pages/fullscreen_media_viewer.dart';
+import '../services/config.dart';
 
 /// 问题显示模式
 enum QuestionDisplayMode {
@@ -271,13 +272,14 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
 
   Widget _buildOptionMedia(String mediaUrl) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final absUrl = toAbsoluteUrl(mediaUrl);
     
     return GestureDetector(
       onTap: () {
         if (widget.onMediaOpen != null) {
-          widget.onMediaOpen!(mediaUrl, [mediaUrl], 0);
+          widget.onMediaOpen!(absUrl, [absUrl], 0);
         } else {
-          _defaultMediaOpen(0, mediaUrl, [mediaUrl]);
+          _defaultMediaOpen(0, absUrl, [absUrl]);
         }
       },
       child: Container(
@@ -293,7 +295,7 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
           child: Stack(
             children: [
               CachedNetworkImage(
-                imageUrl: mediaUrl,
+                imageUrl: absUrl,
                 fit: BoxFit.cover,
                 placeholder: (context, url) => const Center(
                   child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
