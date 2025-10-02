@@ -12,6 +12,7 @@ import '../components/glass_card.dart';
 import '../widgets/question_display_widget.dart';
 import 'fullscreen_media_viewer.dart';
 import '../widgets/frosted_glass_background.dart';
+import '../widgets/top_safe_spacer.dart';
 import '../services/config.dart';
 
 class PublicSurveyPage extends StatefulWidget {
@@ -407,7 +408,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
           // 内容层
           Column(
             children: [
-              const SizedBox(height: 40),
+              const TopSafeSpacer(),
               FHeader.nested(
                 title: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -637,7 +638,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
             child: Padding(
               padding: const EdgeInsets.all(4),
               child: Opacity(
-                opacity: 0.8, // 半透明效果
+                opacity: 0.52, // 半透明效果
                 child: ElevatedButton(
                   onPressed: isSubmitting ? null : _submitAnswers,
                   style: ElevatedButton.styleFrom(

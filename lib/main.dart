@@ -13,6 +13,7 @@ import 'package:tray_manager/tray_manager.dart';
 
 import 'services/url_handler.dart';
 import 'services/clipboard_service.dart';
+import 'utils/network_reachability.dart';
 
 import 'models/project.dart';
 import 'pages/login_page.dart';
@@ -122,7 +123,11 @@ void main() async {
         // 过滤AccessibilityBridge相关日志
         if (message.contains('AccessibilityBridge') ||
             message.contains('Scroll index is out of bounds') ||
-            message.contains('E/AccessibilityBridge')) {
+            message.contains('E/AccessibilityBridge') ||
+            // 过滤高通/厂商图形驱动的无害告警
+            message.contains('qdgralloc') ||
+            message.contains('OplusViewDragTouchViewHelper') ||
+            message.contains('ViewRootImplExtImpl')) {
           return;
         }
         // 过滤网络连接错误
@@ -144,7 +149,8 @@ void main() async {
       // 过滤AccessibilityBridge错误日志
       final errorMessage = details.exception.toString();
       if (errorMessage.contains('AccessibilityBridge') ||
-          errorMessage.contains('Scroll index is out of bounds')) {
+          errorMessage.contains('Scroll index is out of bounds') ||
+          errorMessage.contains('!semantics.parentDataDirty')) {
         return;
       }
       
@@ -162,7 +168,8 @@ void main() async {
       
       // 过滤AccessibilityBridge错误日志
       if (errorString.contains('AccessibilityBridge') ||
-          errorString.contains('Scroll index is out of bounds')) {
+          errorString.contains('Scroll index is out of bounds') ||
+          errorString.contains('!semantics.parentDataDirty')) {
         return true;
       }
       
@@ -204,7 +211,11 @@ class _YuMeng233AppState extends State<YuMeng233App>
   int _selectedIndex = 0;
   bool _isRefreshingToken = false;
   String? _pendingSurveyId;
-  
+  // 记录上一次网络状态：'connected' | 'none' | null
+  String? _lastNetworkStatus;
+  // 缓存项目列表，避免重复请求
+  List<Project>? _cachedProjects;
+  bool _isLoadingProjects = false;
 
   @override
   void initState() {
@@ -216,6 +227,23 @@ class _YuMeng233AppState extends State<YuMeng233App>
     _startClipboardListening();
     // 注册全局 401 处理：自动跳转登录并提示“登录已过期”
     ApiService.onUnauthorized = _handleUnauthorized401;
+    // 监听网络状态：每次从“有网/未知”切换到“无网”时提示一次
+    NetworkReachability().connectNetworkFunc(connectNetWorkBlock: (status) {
+      final prev = _lastNetworkStatus;
+      _lastNetworkStatus = status;
+      if (status == 'none' && prev != 'none') {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final ctx = appNavigatorKey.currentContext ?? context;
+          if (ctx.mounted) {
+            showFToast(
+              context: ctx,
+              title: const Text('当前无网络连接'),
+              description: const Text('部分功能将不可用，请检查网络设置。'),
+            );
+          }
+        });
+      }
+    });
   }
 
   @override
@@ -458,54 +486,10 @@ class _YuMeng233AppState extends State<YuMeng233App>
       );
     } else if (settings.name == '/survey/create') {
       return MaterialPageRoute(
-        builder: (context) => FutureBuilder<List<Project>>(
-          future: _fetchProjects(_token ?? ''),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return Scaffold(
-                extendBodyBehindAppBar: true,
-                appBar: AppBar(
-                  backgroundColor: Colors.transparent,
-                  elevation: 0,
-                  toolbarHeight: 0,
-                ),
-                body: const Center(child: CircularProgressIndicator()),
-              );
-            } else if (snapshot.hasError) {
-              return Scaffold(
-                appBar: AppBar(
-                  backgroundColor: Colors.transparent,
-                  elevation: 0,
-                  toolbarHeight: 0,
-                  systemOverlayStyle: _isDark
-                      ? SystemUiOverlayStyle.light
-                      : SystemUiOverlayStyle.dark,
-                  title: const Text('错误'),
-                ),
-                body: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text('加载项目失败: ${snapshot.error}'),
-                      ElevatedButton(
-                        onPressed: () => setState(() {}),
-                        child: const Text('重试'),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            } else if (snapshot.hasData) {
-              return CreateSurveyPage(
-                token: _token ?? '',
-                projects: snapshot.data!,
-              );
-            } else {
-              return const Scaffold(
-                body: Center(child: Text('没有可用的项目')),
-              );
-            }
-          },
+        builder: (context) => _CreateSurveyPageWrapper(
+          token: _token ?? '',
+          fetchProjects: () => _fetchProjects(_token ?? ''),
+          isDark: _isDark,
         ),
       );
     } else if (settings.name?.startsWith('/public/survey/') == true) {
@@ -557,17 +541,25 @@ class _YuMeng233AppState extends State<YuMeng233App>
   }
 
   Future<List<Project>> _fetchProjects(String token) async {
+    if (_cachedProjects != null) return _cachedProjects!;
+    if (_isLoadingProjects) {
+      // 等待正在进行的请求完成
+      while (_isLoadingProjects) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      return _cachedProjects ?? [];
+    }
+    
+    _isLoadingProjects = true;
     try {
       final apiService = ApiService(authToken: token);
-      return await apiService.getProjects();
+      final projects = await apiService.getProjects();
+      _cachedProjects = projects;
+      return projects;
     } catch (e) {
-      if (e.toString().contains('Socket') || e.toString().contains('网络')) {
-        throw '网络连接失败，请检查网络设置';
-      } else if (e.toString().contains('Http') || e.toString().contains('HTTP')) {
-        throw '服务器连接失败，请稍后重试';
-      } else {
-        throw '获取项目失败: $e';
-      }
+      throw Exception('获取项目列表失败: $e');
+    } finally {
+      _isLoadingProjects = false;
     }
   }
   /// 处理初始URL和深度链接
@@ -677,6 +669,107 @@ class _YuMeng233AppState extends State<YuMeng233App>
       } else {
         navigatorState.pushNamed('/public/survey/$surveyId');
       }
+    }
+  }
+}
+
+// 创建问卷页面包装器，避免 FutureBuilder 重复请求
+class _CreateSurveyPageWrapper extends StatefulWidget {
+  final String token;
+  final Future<List<Project>> Function() fetchProjects;
+  final bool isDark;
+
+  const _CreateSurveyPageWrapper({
+    required this.token,
+    required this.fetchProjects,
+    required this.isDark,
+  });
+
+  @override
+  State<_CreateSurveyPageWrapper> createState() => _CreateSurveyPageWrapperState();
+}
+
+class _CreateSurveyPageWrapperState extends State<_CreateSurveyPageWrapper> {
+  List<Project>? _projects;
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProjects();
+  }
+
+  Future<void> _loadProjects() async {
+    try {
+      final projects = await widget.fetchProjects();
+      if (mounted) {
+        setState(() {
+          _projects = projects;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          toolbarHeight: 0,
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    } else if (_error != null) {
+      return Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          toolbarHeight: 0,
+          systemOverlayStyle: widget.isDark
+              ? SystemUiOverlayStyle.light
+              : SystemUiOverlayStyle.dark,
+          title: const Text('错误'),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('加载项目失败: $_error'),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _isLoading = true;
+                    _error = null;
+                  });
+                  _loadProjects();
+                },
+                child: const Text('重试'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else if (_projects != null) {
+      return CreateSurveyPage(
+        token: widget.token,
+        projects: _projects!,
+      );
+    } else {
+      return const Scaffold(
+        body: Center(child: Text('没有可用的项目')),
+      );
     }
   }
 }

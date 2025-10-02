@@ -12,6 +12,8 @@ class MediaGallery extends StatelessWidget {
   final bool enableVideoPlayer; // 为 true 时用 VideoPlayerWidget 渲染视频缩略图
   final bool showVideoOverlay; // 视频覆盖播放图标
   final void Function(int index, String url, List<String> all)? onOpen;
+  // 可选：为需要鉴权的资源提供 token
+  final String? authToken;
 
   const MediaGallery({
     super.key,
@@ -21,6 +23,7 @@ class MediaGallery extends StatelessWidget {
     this.enableVideoPlayer = true,
     this.showVideoOverlay = true,
     this.onOpen,
+    this.authToken,
   });
 
   @override
@@ -44,6 +47,9 @@ class MediaGallery extends StatelessWidget {
         if (isImage) {
           mediaWidget = CachedNetworkImage(
             imageUrl: absUrl,
+            httpHeaders: authToken != null && authToken!.isNotEmpty
+                ? { 'Authorization': 'Bearer ${authToken!}' }
+                : null,
             fit: BoxFit.cover,
             placeholder: (context, _) => const Center(child: CircularProgressIndicator()),
             errorWidget: (context, _, __) => Container(color: Colors.grey.shade200, child: const Icon(Icons.error)),
@@ -59,6 +65,9 @@ class MediaGallery extends StatelessWidget {
               height: vs.height,
               autoPlay: false,
               showControls: true,
+              httpHeaders: authToken != null && authToken!.isNotEmpty
+                  ? { 'Authorization': 'Bearer ${authToken!}' }
+                  : null,
               onOpen: onOpen == null ? null : () => onOpen!(index, absUrl, mediaUrls.map(toAbsoluteUrl).toList()),
               showFullscreenButton: onOpen != null,
             );

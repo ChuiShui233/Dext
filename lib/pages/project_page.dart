@@ -779,80 +779,77 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                                                     : Colors.black54,
                                                 ),
                                               ),
-                                              trailing: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  FButton(
-                                                    onPress: () => _openProjectSurveys(project),
-                                                    child: Icon(
-                                                      Icons.assignment_outlined,
-                                                      size: 20,
-                                                      color: Theme.of(context).brightness == Brightness.dark 
-                                                        ? Colors.black.withValues(alpha: 0.6)
-                                                        : Colors.white.withValues(alpha: 0.7),
+                                              trailing: ConstrainedBox(
+                                                constraints: const BoxConstraints(
+                                                  maxWidth: 160, // 限制 trailing 的最大宽度，避免占满整行
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    IconButton(
+                                                      tooltip: '查看问卷',
+                                                      onPressed: () => _openProjectSurveys(project),
+                                                      icon: const Icon(Icons.assignment_outlined, size: 20),
                                                     ),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  FButton(
-                                                    onPress: () => _showEditProjectDialog(project),
-                                                    child: Icon(
-                                                      Icons.edit,
-                                                      size: 20,
-                                                      color: Theme.of(context).brightness == Brightness.dark 
-                                                        ? Colors.black.withValues(alpha: 0.6)
-                                                        : Colors.white.withValues(alpha: 0.7),
+                                                    IconButton(
+                                                      tooltip: '编辑项目',
+                                                      onPressed: () => _showEditProjectDialog(project),
+                                                      icon: const Icon(Icons.edit, size: 20),
                                                     ),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  FButton(
-                                                    onPress: () async {
-                                                      final confirm = await showAdaptiveDialog<bool>(
-                                                        context: context,
-                                                        builder: (context) => FDialog(
-                                                          direction: Axis.horizontal,
-                                                          title: const Text('确认删除'),
-                                                          body: const Text('确定要删除这个项目吗？此操作不可撤销。'),
-                                                          actions: [
-                                                            FButton(
-                                                              style: FButtonStyle.outline,
-                                                              onPress: () => Navigator.of(context).pop(false),
-                                                              child: const Text('取消'),
-                                                            ),
-                                                            FButton(
-                                                              style: FButtonStyle.destructive,
-                                                              onPress: () => Navigator.of(context).pop(true),
-                                                              child: const Text('删除'),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      );
-
-                                                      if (confirm == true) {
-                                                        try {
-                                                          await _apiService.deleteProject(project.id);
-                                                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                                                            _refreshController.requestRefresh();
-                                                          });
-                                                        } catch (e) {
-                                                          if (!context.mounted) return;
-                                                          showFToast(
-                                                            context: context,
-                                                            alignment:FToastAlignment.bottomRight,
-                                                            title: const Text('删除失败'),
-                                                            description: Text('删除项目失败: $e'),
-                                                          );
+                                                    IconButton(
+                                                      tooltip: '删除项目',
+                                                      onPressed: () async {
+                                                        final confirm = await showAdaptiveDialog<bool>(
+                                                          context: context,
+                                                          builder: (context) => FDialog(
+                                                            direction: Axis.horizontal,
+                                                            title: const Text('确认删除'),
+                                                            body: const Text('确定要删除这个项目吗？此操作不可撤销。'),
+                                                            actions: [
+                                                              FButton(
+                                                                style: FButtonStyle.outline,
+                                                                onPress: () => Navigator.of(context).pop(false),
+                                                                child: const Text('取消'),
+                                                              ),
+                                                              FButton(
+                                                                style: FButtonStyle.destructive,
+                                                                onPress: () => Navigator.of(context).pop(true),
+                                                                child: const Text('删除'),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        );
+                                                        if (confirm == true) {
+                                                          try {
+                                                            await _apiService.deleteProject(project.id);
+                                                            if (!mounted) return;
+                                                            // 强制刷新列表
+                                                            final projects = await _apiService.forceRefreshProjects();
+                                                            if (!mounted) return;
+                                                            setState(() {
+                                                              _projects = projects;
+                                                            });
+                                                            showFToast(
+                                                              context: context,
+                                                              alignment: FToastAlignment.bottomRight,
+                                                              title: const Text('删除成功'),
+                                                              description: Text('已删除项目：${project.projectName}'),
+                                                            );
+                                                          } catch (e) {
+                                                            if (!mounted) return;
+                                                            showFToast(
+                                                              context: context,
+                                                              alignment: FToastAlignment.bottomRight,
+                                                              title: const Text('删除失败'),
+                                                              description: Text('删除项目失败: $e'),
+                                                            );
+                                                          }
                                                         }
-                                                      }
-                                                    },
-                                                    child: Icon(
-                                                      Icons.delete,
-                                                      size: 20,
-                                                      color: Theme.of(context).brightness == Brightness.dark 
-                                                        ? Colors.red.shade300
-                                                        : Colors.red.shade700,
+                                                      },
+                                                      icon: const Icon(Icons.delete_outline, size: 20),
                                                     ),
-                                                  ),
-                                                ],
+                                                  ],
+                                                ),
                                               ),
                                               onTap: _isMultiSelectMode 
                                                 ? () => _onProjectSelectionChanged(project.id, !isSelected)

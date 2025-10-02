@@ -12,6 +12,8 @@ class VideoPlayerWidget extends StatefulWidget {
   final VoidCallback? onOpen;
   // Whether to show the built-in fullscreen button (top-right)
   final bool showFullscreenButton;
+  // Optional HTTP headers for authenticated requests
+  final Map<String, String>? httpHeaders;
 
   const VideoPlayerWidget({
     super.key,
@@ -22,6 +24,7 @@ class VideoPlayerWidget extends StatefulWidget {
     this.showControls = true,
     this.onOpen,
     this.showFullscreenButton = false,
+    this.httpHeaders,
   });
 
   @override
@@ -48,7 +51,10 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
   Future<void> _initializeVideo() async {
     try {
-      _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+      _controller = VideoPlayerController.networkUrl(
+        Uri.parse(widget.videoUrl),
+        httpHeaders: widget.httpHeaders ?? const <String, String>{},
+      );
       await _controller.initialize();
       
       if (mounted) {

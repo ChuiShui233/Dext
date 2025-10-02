@@ -24,6 +24,8 @@ class QuestionDisplayWidget extends StatefulWidget {
   final Function(int questionId, String option, int optionIndex, bool isSelected)? onMultipleChoiceChanged;
   final Function(int questionId, String value)? onRatingChanged;
   final Function(String mediaUrl, List<String> allMediaUrls, int currentIndex)? onMediaOpen;
+  // 可选：受保护媒体需要鉴权
+  final String? authToken;
 
   const QuestionDisplayWidget({
     super.key,
@@ -36,6 +38,7 @@ class QuestionDisplayWidget extends StatefulWidget {
     this.onMultipleChoiceChanged,
     this.onRatingChanged,
     this.onMediaOpen,
+    this.authToken,
   });
 
   @override
@@ -113,6 +116,7 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
               videoItemSize: const Size(240, 180),
               enableVideoPlayer: true,
               showVideoOverlay: true,
+              authToken: widget.authToken,
               onOpen: widget.onMediaOpen != null 
                 ? (index, url, all) => widget.onMediaOpen!(url, all, index)
                 : _defaultMediaOpen,
@@ -296,6 +300,9 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
             children: [
               CachedNetworkImage(
                 imageUrl: absUrl,
+                httpHeaders: (widget.authToken != null && widget.authToken!.isNotEmpty)
+                    ? { 'Authorization': 'Bearer ${widget.authToken!}' }
+                    : null,
                 fit: BoxFit.cover,
                 placeholder: (context, url) => const Center(
                   child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),

@@ -10,6 +10,8 @@ class SurveyActions extends StatelessWidget {
   final String token;
   final ApiService apiService;
   final VoidCallback onSuccess;
+  final bool compact;
+  final bool useRow;
 
   const SurveyActions({
     super.key,
@@ -17,6 +19,8 @@ class SurveyActions extends StatelessWidget {
     required this.token,
     required this.apiService,
     required this.onSuccess,
+    this.compact = false,
+    this.useRow = false,
   });
 
   Future<void> _editSurvey(BuildContext context) async {
@@ -209,11 +213,93 @@ class SurveyActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    if (compact) {
+      // 紧凑模式：仅图标按钮，避免在窄宽度下溢出
+      return Wrap(
+        alignment: WrapAlignment.end,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 4,
+        runSpacing: 4,
+        children: [
+          if (survey.surveyStatus == 1)
+            IconButton(
+              tooltip: '公开链接',
+              icon: const Icon(Icons.link, size: 20),
+              onPressed: () => _showPublicLink(context),
+            ),
+          IconButton(
+            tooltip: '编辑',
+            icon: const Icon(Icons.edit, size: 20),
+            onPressed: () => _editSurvey(context),
+          ),
+          IconButton(
+            tooltip: '删除',
+            icon: const Icon(Icons.delete_outline, size: 20),
+            onPressed: () => _deleteSurvey(context),
+          ),
+        ],
+      );
+    }
+
+    if (useRow) {
+      return FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerRight,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+          if (survey.surveyStatus == 1) ...[
+            FButton(
+              style: FButtonStyle.outline,
+              onPress: () => _showPublicLink(context),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.link, size: 20),
+                  SizedBox(width: 6),
+                  Text('公开链接'),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+          ],
+          FButton(
+            onPress: () => _editSurvey(context),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.edit, size: 20),
+                SizedBox(width: 6),
+                Text('编辑'),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          FButton(
+            style: FButtonStyle.destructive,
+            onPress: () => _deleteSurvey(context),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.delete_outline, size: 20),
+                SizedBox(width: 6),
+                Text('删除'),
+              ],
+            ),
+          ),
+          ],
+        ),
+      );
+    }
+
+    return Wrap(
+      alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 8,
+      runSpacing: 6,
       children: [
         // 如果问卷已发布，显示公开链接按钮
-        if (survey.surveyStatus == 1) ...[
+        if (survey.surveyStatus == 1)
           FButton(
             style: FButtonStyle.outline,
             onPress: () => _showPublicLink(context),
@@ -230,8 +316,6 @@ class SurveyActions extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 8),
-        ],
         FButton(
           onPress: () => _editSurvey(context),
           child: Row(
@@ -249,7 +333,6 @@ class SurveyActions extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(width: 8),
         FButton(
           style: FButtonStyle.destructive,
           onPress: () => _deleteSurvey(context),

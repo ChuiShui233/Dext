@@ -11,6 +11,8 @@ class FullscreenMediaViewer extends StatefulWidget {
   final String? title;
   final List<String>? allMediaUrls;
   final int? currentIndex;
+  // 可选：为受保护资源提供鉴权
+  final String? authToken;
 
   const FullscreenMediaViewer({
     super.key,
@@ -18,6 +20,7 @@ class FullscreenMediaViewer extends StatefulWidget {
     this.title,
     this.allMediaUrls,
     this.currentIndex,
+    this.authToken,
   });
 
 
@@ -389,6 +392,9 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
                                   child: Center(
                                     child: CachedNetworkImage(
                                       imageUrl: currentUrl,
+                                      httpHeaders: (widget.authToken != null && widget.authToken!.isNotEmpty)
+                                          ? { 'Authorization': 'Bearer ${widget.authToken!}' }
+                                          : null,
                                       fit: BoxFit.contain,
                                       placeholder: (context, url) => const Center(
                                         child: CircularProgressIndicator(color: Colors.white),
@@ -418,6 +424,9 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
                                     showControls: true,
                                     parentControlsVisible: false,
                                     onToggleControls: null,
+                                    httpHeaders: (widget.authToken != null && widget.authToken!.isNotEmpty)
+                                        ? { 'Authorization': 'Bearer ${widget.authToken!}' }
+                                        : null,
                                   )
                                 : GestureDetector(
                                     onTap: _toggleControls,
@@ -626,6 +635,8 @@ class _FullscreenVideoPlayer extends StatefulWidget {
   final bool showControls;
   final bool parentControlsVisible;
   final VoidCallback? onToggleControls;
+  // 可选：HTTP 头用于鉴权播放
+  final Map<String, String>? httpHeaders;
 
   const _FullscreenVideoPlayer({
     super.key,
@@ -634,6 +645,7 @@ class _FullscreenVideoPlayer extends StatefulWidget {
     this.showControls = true,
     this.parentControlsVisible = false,
     this.onToggleControls,
+    this.httpHeaders,
   });
 
   @override
@@ -656,6 +668,8 @@ class _FullscreenVideoPlayerState extends State<_FullscreenVideoPlayer> {
   bool _isScrubbing = false;
   // 拖动中的临时进度（0..1），仅在_scrubbing时生效
   double? _scrubFraction;
+  // 记录拖动前是否处于播放状态
+  bool _wasPlayingBeforeScrub = false;
   // 进度条测量用 key
   final GlobalKey _barKey = GlobalKey();
   // 键盘焦点节点
@@ -679,7 +693,10 @@ class _FullscreenVideoPlayerState extends State<_FullscreenVideoPlayer> {
 
   Future<void> _initializeVideo() async {
     try {
-      _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+      _controller = VideoPlayerController.networkUrl(
+        Uri.parse(widget.videoUrl),
+        httpHeaders: widget.httpHeaders ?? const <String, String>{},
+      );
       await _controller.initialize();
       
       if (mounted) {
@@ -1147,6 +1164,11 @@ return KeyboardListener(
       behavior: HitTestBehavior.translucent,
       onTapDown: (details) => _seekByLocalDx(details.localPosition.dx),
       onHorizontalDragStart: (details) {
+        // 记录拖动前的播放状态，并在开始拖动时暂停，保证进度拖动后确实处于暂停态
+        _wasPlayingBeforeScrub = _controller.value.isPlaying;
+        if (_wasPlayingBeforeScrub) {
+          _controller.pause();
+        }
         setState(() {
           _isScrubbing = true;
         });
@@ -1156,6 +1178,7 @@ return KeyboardListener(
       },
       onHorizontalDragEnd: (details) {
         _commitScrub();
+        // 不自动恢复播放，保持暂停，用户手动点击播放（与常见播放器一致）
       },
       onHorizontalDragCancel: () {
         setState(() {

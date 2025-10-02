@@ -1,3 +1,4 @@
+import 'package:dext/services/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:layout/layout.dart';
@@ -23,6 +24,7 @@ class HomeMainContent extends StatelessWidget {
   final VoidCallback onProjectTap;
   final VoidCallback onSurveyTap;
   final FetchTrend? fetchTrend;
+  final ApiService? apiService;
 
   const HomeMainContent({
     super.key,
@@ -33,6 +35,7 @@ class HomeMainContent extends StatelessWidget {
     required this.onProjectTap,
     required this.onSurveyTap,
     this.fetchTrend,
+    this.apiService,
   });
 
   @override
@@ -197,7 +200,7 @@ class HomeMainContent extends StatelessWidget {
                         children: [
                           DashboardChart(fetchTrend: fetchTrend),
                           const SizedBox(height: 24),
-                          const RecentSurveyResponsesList(),
+                          RecentSurveyResponsesList(apiService: apiService),
                         ],
                       );
                     } else {
@@ -220,7 +223,7 @@ class HomeMainContent extends StatelessWidget {
                           // 右侧问卷回复记录
                           Expanded(
                             flex: 1,
-                            child: RecentSurveyResponsesList(fixedHeight: chartHeight),
+                            child: RecentSurveyResponsesList(fixedHeight: chartHeight, apiService: apiService),
                           ),
                         ],
                       );
@@ -260,8 +263,8 @@ class HomeMainContent extends StatelessWidget {
                       label: '填写问卷',
                       backgroundColor: const Color(0xFF121212),
                       foregroundColor: Colors.white,
-                      labelBackgroundColor: Colors.white,
-                      labelStyle: const TextStyle(color: Colors.black87),
+                      labelBackgroundColor: const Color(0xFF121212),
+                      labelStyle: const TextStyle(color: Colors.white),
                       onTap: () {
                         Navigator.push(
                           context,
@@ -276,8 +279,8 @@ class HomeMainContent extends StatelessWidget {
                       label: '管理项目',
                       backgroundColor: const Color(0xFF121212),
                       foregroundColor: Colors.white,
-                      labelBackgroundColor: Colors.white,
-                      labelStyle: const TextStyle(color: Colors.black87),
+                      labelBackgroundColor: const Color(0xFF121212),
+                      labelStyle: const TextStyle(color: Colors.white),
                       onTap: onProjectTap,
                     ),
                     SpeedDialChild(
@@ -285,8 +288,8 @@ class HomeMainContent extends StatelessWidget {
                       label: '管理问卷',
                       backgroundColor: const Color(0xFF121212),
                       foregroundColor: Colors.white,
-                      labelBackgroundColor: Colors.white,
-                      labelStyle: const TextStyle(color: Colors.black87),
+                      labelBackgroundColor: const Color(0xFF121212),
+                      labelStyle: const TextStyle(color: Colors.white),
                       onTap: onSurveyTap,
                     ),
                   ],

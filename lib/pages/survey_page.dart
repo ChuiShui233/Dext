@@ -757,140 +757,161 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                   final remain = (deadlineDt != null && now.isBefore(deadlineDt)) ? deadlineDt.difference(now) : Duration.zero;
                                   
                                   Widget cardContent = GlassCard(
-                                    child: Theme(
-                                      data: Theme.of(context).copyWith(
-                                        dividerColor: Colors.transparent,
-                                      ),
-                                      child: ExpansionTile(
-                                        initiallyExpanded: _isAllExpanded,
-                                        title: Text(
-                                          survey.surveyName,
-                                          style: TextStyle(
-                                            color: Theme.of(context).brightness == Brightness.dark 
-                                              ? Colors.white 
-                                              : Colors.black87,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        subtitle: Text(
-                                          survey.description,
-                                          style: TextStyle(
-                                            color: Theme.of(context).brightness == Brightness.dark 
-                                              ? Colors.white70 
-                                              : Colors.black54,
-                                          ),
-                                        ),
-                                        trailing: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                          decoration: BoxDecoration(
-                                            color: _getStatusColor(survey.surveyStatus).withValues(alpha: 0.1),
-                                            borderRadius: BorderRadius.circular(20),
-                                            border: Border.all(
-                                              color: _getStatusColor(survey.surveyStatus).withValues(alpha: 0.3),
-                                              width: 1,
+                                    child: Stack(
+                                      clipBehavior: Clip.hardEdge,
+                                      children: [
+                                        Padding(
+                                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 64),
+                                          child: Theme(
+                                            data: Theme.of(context).copyWith(
+                                              dividerColor: Colors.transparent,
                                             ),
-                                          ),
-                                          child: Text(
-                                            _getSurveyStatusText(survey.surveyStatus),
-                                            style: TextStyle(
-                                              color: _getStatusColor(survey.surveyStatus),
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ),
-                                        children: [
-                                          Container(
-                                            decoration: BoxDecoration(
-                                              color: Theme.of(context).brightness == Brightness.dark 
-                                                ? Colors.grey.withValues(alpha: 0.05)
-                                                : Colors.grey.withValues(alpha: 0.02),
-                                              borderRadius: const BorderRadius.only(
-                                                bottomLeft: Radius.circular(12),
-                                                bottomRight: Radius.circular(12),
+                                            child: ExpansionTile(
+                                              initiallyExpanded: _isAllExpanded,
+                                              title: Text(
+                                                survey.surveyName,
+                                                style: TextStyle(
+                                                  color: Theme.of(context).brightness == Brightness.dark 
+                                                    ? Colors.white 
+                                                    : Colors.black87,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
                                               ),
-                                            ),
-                                            padding: const EdgeInsets.all(16.0),
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              subtitle: Text(
+                                                survey.description,
+                                                style: TextStyle(
+                                                  color: Theme.of(context).brightness == Brightness.dark 
+                                                    ? Colors.white70 
+                                                    : Colors.black54,
+                                                ),
+                                              ),
+                                              trailing: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                decoration: BoxDecoration(
+                                                  color: _getStatusColor(survey.surveyStatus).withValues(alpha: 0.1),
+                                                  borderRadius: BorderRadius.circular(20),
+                                                  border: Border.all(
+                                                    color: _getStatusColor(survey.surveyStatus).withValues(alpha: 0.3),
+                                                    width: 1,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  _getSurveyStatusText(survey.surveyStatus),
+                                                  style: TextStyle(
+                                                    color: _getStatusColor(survey.surveyStatus),
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ),
                                               children: [
-                                                _buildInfoRow('问卷类型', _getSurveyTypeText(survey.surveyType)),
-                                                const SizedBox(height: 8),
-                                                _buildInfoRow('所属项目', _projects[survey.projectId]?.projectName ?? '未知项目'),
-                                                const SizedBox(height: 8),
-                                                _buildInfoRow('创建时间', DateFormatUtils.formatIsoString(survey.createTime)),
-                                                const SizedBox(height: 8),
-                                                _buildInfoRow('更新时间', DateFormatUtils.formatIsoString(survey.updateTime)),
-                                                if (survey.deadline != null && survey.deadline!.isNotEmpty) ...[
-                                                  const SizedBox(height: 8),
-                                                  _buildInfoRow('截止时间', DateFormatUtils.formatIsoString(survey.deadline!)),
-                                                  const SizedBox(height: 8),
-                                                  Row(
-                                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                Container(
+                                                  decoration: BoxDecoration(
+                                                    color: Theme.of(context).brightness == Brightness.dark 
+                                                      ? Colors.grey.withValues(alpha: 0.05)
+                                                      : Colors.grey.withValues(alpha: 0.02),
+                                                    borderRadius: const BorderRadius.only(
+                                                      bottomLeft: Radius.circular(12),
+                                                      bottomRight: Radius.circular(12),
+                                                    ),
+                                                  ),
+                                                  padding: const EdgeInsets.all(16.0),
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
                                                     children: [
-                                                      Text('倒计时', style: Theme.of(context).textTheme.bodyMedium),
-                                                      Container(
-                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                        decoration: BoxDecoration(
-                                                          color: isExpired
-                                                              ? Colors.red.withValues(alpha: 0.1)
-                                                              : Colors.orange.withValues(alpha: 0.1),
-                                                          borderRadius: BorderRadius.circular(8),
-                                                          border: Border.all(
-                                                            color: isExpired
-                                                              ? Colors.red.withValues(alpha: 0.3)
-                                                              : Colors.orange.withValues(alpha: 0.3),
-                                                          ),
+                                                      _buildInfoRow('问卷类型', _getSurveyTypeText(survey.surveyType)),
+                                                      const SizedBox(height: 8),
+                                                      _buildInfoRow('所属项目', _projects[survey.projectId]?.projectName ?? '未知项目'),
+                                                      const SizedBox(height: 8),
+                                                      _buildInfoRow('创建时间', DateFormatUtils.formatIsoString(survey.createTime)),
+                                                      const SizedBox(height: 8),
+                                                      _buildInfoRow('更新时间', DateFormatUtils.formatIsoString(survey.updateTime)),
+                                                      if (survey.deadline != null && survey.deadline!.isNotEmpty) ...[
+                                                        const SizedBox(height: 8),
+                                                        _buildInfoRow('截止时间', DateFormatUtils.formatIsoString(survey.deadline!)),
+                                                        const SizedBox(height: 8),
+                                                        Row(
+                                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                          children: [
+                                                            Text('倒计时', style: Theme.of(context).textTheme.bodyMedium),
+                                                            Container(
+                                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                              decoration: BoxDecoration(
+                                                                color: isExpired
+                                                                    ? Colors.red.withValues(alpha: 0.1)
+                                                                    : Colors.orange.withValues(alpha: 0.1),
+                                                                borderRadius: BorderRadius.circular(8),
+                                                                border: Border.all(
+                                                                  color: isExpired
+                                                                      ? Colors.red.withValues(alpha: 0.3)
+                                                                      : Colors.orange.withValues(alpha: 0.3),
+                                                                ),
+                                                              ),
+                                                              child: Text(
+                                                                isExpired ? '已到期' : _formatDuration(remain),
+                                                                style: TextStyle(
+                                                                  color: isExpired ? Colors.red : Colors.orange,
+                                                                  fontWeight: FontWeight.w600,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ],
                                                         ),
-                                                        child: Text(
-                                                          isExpired ? '已到期' : _formatDuration(remain),
-                                                          style: TextStyle(
-                                                            color: isExpired ? Colors.red : Colors.orange,
-                                                            fontWeight: FontWeight.w600,
-                                                          ),
-                                                        ),
-                                                      ),
+                                                      ],
+                                                      if (stats != null) ...[
+                                                        const Divider(color: Colors.grey),
+                                                        _buildInfoRow('访问量', stats.viewCount.toString()),
+                                                        const SizedBox(height: 8),
+                                                        _buildInfoRow('提交量', stats.submitCount.toString()),
+                                                        const SizedBox(height: 8),
+                                                        _buildInfoRow('最近访问', DateFormatUtils.formatDateTime(stats.lastViewTime)),
+                                                        const SizedBox(height: 8),
+                                                        _buildInfoRow('最近提交', DateFormatUtils.formatDateTime(stats.lastSubmitTime)),
+                                                        if (stats.submittedUsers.isNotEmpty) ...[
+                                                          const SizedBox(height: 8),
+                                                          _buildInfoRow('提交用户', stats.submittedUsers.join(", ")),
+                                                        ],
+                                                      ],
                                                     ],
                                                   ),
-                                                ],
-                                                if (stats != null) ...[
-                                                  const Divider(color: Colors.grey),
-                                                  _buildInfoRow('访问量', stats.viewCount.toString()),
-                                                  const SizedBox(height: 8),
-                                                  _buildInfoRow('提交量', stats.submitCount.toString()),
-                                                  const SizedBox(height: 8),
-                                                  _buildInfoRow('最近访问', DateFormatUtils.formatDateTime(stats.lastViewTime)),
-                                                  const SizedBox(height: 8),
-                                                  _buildInfoRow('最近提交', DateFormatUtils.formatDateTime(stats.lastSubmitTime)),
-                                                  if (stats.submittedUsers.isNotEmpty) ...[
-                                                    const SizedBox(height: 8),
-                                                    _buildInfoRow('提交用户', stats.submittedUsers.join(", ")),
-                                                  ],
-                                                ],
-                                                const SizedBox(height: 16),
-                                                Row(
-                                                  mainAxisAlignment: MainAxisAlignment.end,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        Positioned(
+                                          left: 0,
+                                          right: 0,
+                                          bottom: 0,
+                                          child: Container(
+                                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                                            alignment: Alignment.centerRight,
+                                            child: FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              alignment: Alignment.centerRight,
+                                              child: Align(
+                                                alignment: Alignment.centerRight,
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
                                                   children: [
                                                     FButton(
                                                       style: FButtonStyle.outline,
                                                       onPress: () => _viewSurveyStats(survey),
                                                       child: Row(
                                                         mainAxisSize: MainAxisSize.min,
-                                                        children: [
-                                                          Icon(
-                                                            Icons.info_outline,
-                                                            size: 20
-                                                          ),
-                                                          const SizedBox(width: 4),
-                                                          const Text('统计'),
+                                                        children: const [
+                                                          Icon(Icons.info_outline, size: 20),
+                                                          SizedBox(width: 6),
+                                                          Text('统计'),
                                                         ],
                                                       ),
                                                     ),
-                                                    const SizedBox(width: 8),
+                                                    const SizedBox(width: 12),
                                                     SurveyActions(
                                                       survey: survey,
                                                       token: widget.token,
                                                       apiService: _apiService,
+                                                      useRow: true,
                                                       onSuccess: () {
                                                         WidgetsBinding.instance.addPostFrameCallback((_) {
                                                           _refreshController.requestRefresh();
@@ -899,11 +920,11 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                                     ),
                                                   ],
                                                 ),
-                                              ],
+                                              ),
                                             ),
                                           ),
-                                        ],
-                                      ),
+                                        ),
+                                      ],
                                     ),
                                   );
 
@@ -918,7 +939,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                   }
 
                                   return Padding(
-                                    padding: const EdgeInsets.all(16.0),
+                                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                                     child: cardContent,
                                   );
                                 },

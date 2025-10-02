@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links
   clipboard_watcher
+  connectivity_plus
   desktop_drop
   desktop_webview_window
   fast_rsa

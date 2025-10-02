@@ -26,7 +26,7 @@ final sectionSpacing = LayoutValue(
 final showSidebarInDrawer = LayoutValue(xs: true, md: false);
 final showSidebarInline = LayoutValue(xs: false, md: true);
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   final int currentIndex;
   final int projectCount;
   final int surveyCount;
@@ -53,42 +53,74 @@ class HomePage extends StatelessWidget {
   });
 
   @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  Map<String, int>? _cachedAnalytics;
+  bool _isLoadingAnalytics = false;
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadAnalytics();
+  }
+  
+  Future<void> _loadAnalytics() async {
+    if (_cachedAnalytics != null || _isLoadingAnalytics) return;
+    
+    setState(() => _isLoadingAnalytics = true);
+    try {
+      final analytics = await widget.apiService.getAnalyticsOverview();
+      if (mounted) {
+        setState(() {
+          _cachedAnalytics = analytics;
+          _isLoadingAnalytics = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _cachedAnalytics = const {'totalViews': 0, 'totalSubmits': 0};
+          _isLoadingAnalytics = false;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final bool isMobileOrTablet = showSidebarInDrawer.resolve(context);
     // 当达到桌面布局断点（md+）时，隐藏底部导航栏（跨平台统一：含 Web/其他端）
     final bool showDesktopLayout = showSidebarInline.resolve(context);
     final EdgeInsets padding = contentPadding.resolve(context);
 
-    Widget dashboardContent = FutureBuilder<Map<String, int>>(
-      future: apiService.getAnalyticsOverview(),
-      builder: (context, snapshot) {
-        final totals = snapshot.data ?? const {'totalViews': 0, 'totalSubmits': 0};
-        return HomeMainContent(
-          projectCount: projectCount,
-          surveyCount: surveyCount,
-          totalViews: totals['totalViews'] ?? 0,
-          totalSubmits: totals['totalSubmits'] ?? 0,
-          onProjectTap: onProjectTap,
-          onSurveyTap: onSurveyTap,
-          fetchTrend: (range) => apiService.getSubmitTrend(range: range),
-        );
-      },
+    final totals = _cachedAnalytics ?? const {'totalViews': 0, 'totalSubmits': 0};
+    Widget dashboardContent = HomeMainContent(
+      projectCount: widget.projectCount,
+      surveyCount: widget.surveyCount,
+      totalViews: totals['totalViews'] ?? 0,
+      totalSubmits: totals['totalSubmits'] ?? 0,
+      onProjectTap: widget.onProjectTap,
+      onSurveyTap: widget.onSurveyTap,
+      fetchTrend: (range) => widget.apiService.getSubmitTrend(range: range),
+      apiService: widget.apiService,
     );
 
     final contents = [
       dashboardContent,
-      HomeHistoryContent(apiService: apiService),
+      HomeHistoryContent(apiService: widget.apiService),
       HomeSettingsContent(
-        onLogout: onLogout,
-        onThemeModeChange: onThemeModeChange,
+        onLogout: widget.onLogout,
+        onThemeModeChange: widget.onThemeModeChange,
         onChangeAvatar: () {
     // 这里写修改头像的逻辑
     if (kDebugMode) {
       print('修改头像');
     }
   },
-        apiService: apiService,
-        userNotifier: userNotifier,
+        apiService: widget.apiService,
+        userNotifier: widget.userNotifier,
       ),
     ];
 
@@ -108,9 +140,9 @@ class HomePage extends StatelessWidget {
             backgroundColor: Colors.transparent,
             extendBody: true,
             bottomNavigationBar: !showDesktopLayout ? BottomNavigationBar(
-              currentIndex: currentIndex,
+              currentIndex: widget.currentIndex,
               onTap: (index) {
-                onTabChanged?.call(index);
+                widget.onTabChanged?.call(index);
               },
               items: const [
                 BottomNavigationBarItem(icon: Icon(FIcons.house), label: '主页'),
@@ -128,7 +160,7 @@ class HomePage extends StatelessWidget {
                     duration: const Duration(milliseconds: 300),
                     switchInCurve: Curves.fastOutSlowIn,
                     switchOutCurve: Curves.fastOutSlowIn.flipped,
-                    child: contents[currentIndex],
+                    child: contents[widget.currentIndex],
                   ),
                 );
               },
@@ -162,9 +194,9 @@ class HomePage extends StatelessWidget {
           ),
           const SizedBox(height: 32),
           BottomNavigationBar(
-            currentIndex: currentIndex,
+            currentIndex: widget.currentIndex,
             onTap: (index) {
-              onTabChanged?.call(index);
+              widget.onTabChanged?.call(index);
             },
             items: const [
               BottomNavigationBarItem(icon: Icon(FIcons.house), label: '主页'),

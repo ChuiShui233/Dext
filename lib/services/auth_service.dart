@@ -128,12 +128,11 @@ class AuthService {
   }
 
   Future<void> logout() async {
-    final resp = await http.post(
-      Uri.parse('${ApiCore.baseUrl}/api/auth/logout'),
-      headers: {
-        'Authorization': core.authToken ?? '',
-        'Content-Type': 'application/json',
-      },
+    // 使用核心 httpRequest，以在存在会话密钥时自动启用 AES 加密
+    final resp = await core.httpRequest(
+      'POST',
+      '${ApiCore.baseUrl}/api/auth/logout',
+      data: const {},
     );
     if (resp.statusCode != 200) {
       throw '注销失败: ${resp.body}';

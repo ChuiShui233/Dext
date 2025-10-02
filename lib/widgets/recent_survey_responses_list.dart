@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import '../services/api_service.dart';
+import '../services/config.dart';
 
 class RecentSurveyResponsesList extends StatefulWidget {
   /// 当在桌面端需要与图表卡片等高时，传入一个固定高度以启用内部滚动
   final double? fixedHeight;
+  /// 传入的 ApiService 实例，避免重复创建
+  final ApiService? apiService;
 
-  const RecentSurveyResponsesList({super.key, this.fixedHeight});
+  const RecentSurveyResponsesList({super.key, this.fixedHeight, this.apiService});
 
   @override
   State<RecentSurveyResponsesList> createState() => _RecentSurveyResponsesListState();
@@ -16,6 +19,7 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
   List<RecentSubmission> submissions = [];
   bool isLoading = true;
   String errorMessage = '';
+  bool _hasLoaded = false;
 
   @override
   void initState() {
@@ -24,23 +28,31 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
   }
 
   Future<void> _loadRecentSubmissions() async {
+    if (_hasLoaded) return;
+    
     try {
       setState(() {
         isLoading = true;
         errorMessage = '';
       });
 
-      final api = ApiService();
+      final api = widget.apiService ?? ApiService();
       final list = await api.getRecentSubmissions();
-      setState(() {
-        submissions = list.map((e) => RecentSubmission.fromJson(e)).toList();
-        isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          submissions = list.map((e) => RecentSubmission.fromJson(e)).toList();
+          isLoading = false;
+          _hasLoaded = true;
+        });
+      }
     } catch (e) {
-      setState(() {
-        errorMessage = '加载失败: $e';
-        isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          errorMessage = '加载失败: $e';
+          isLoading = false;
+          _hasLoaded = true;
+        });
+      }
     }
   }
 
@@ -106,7 +118,7 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
               ? theme.colorScheme.surfaceContainerHighest 
               : Colors.grey[200],
           backgroundImage: submission.avatarUrl != null 
-              ? NetworkImage(submission.avatarUrl!)
+              ? NetworkImage(toAbsoluteUrl(submission.avatarUrl!))
               : null,
           child: submission.avatarUrl == null
               ? Text(

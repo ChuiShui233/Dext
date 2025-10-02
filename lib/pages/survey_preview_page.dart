@@ -163,6 +163,7 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
                                   optionStates: _optionStates,
                                   selectedAnswers: _runtime.answers[q.id] ?? [],
                                   hoverRatings: _hoverRatings,
+                                  authToken: widget.token,
                                   onSingleChoiceChanged: (questionId, selectedOption, optionIndex) {
                                     // 单选：先清空该题的其他选项状态
                                     for (int i = 0; i < q.options.length; i++) {
@@ -252,6 +253,7 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
           title: '问卷媒体',
           allMediaUrls: allMediaUrls,
           currentIndex: currentIndex,
+          authToken: widget.token,
         ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           // 组合动画：缩放 + 淡入 + 轻微位移

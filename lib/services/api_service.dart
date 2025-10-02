@@ -21,6 +21,7 @@ import '../models/user.dart';
 import '../models/survey_result.dart';
 import '../models/paginated_response.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// 令牌过期异常类
 class TokenExpired {
@@ -91,6 +92,22 @@ class ApiService {
         final t = prefs.getString('auth_token');
         if (t != null && t.isNotEmpty) {
           authToken = t;
+          // 同步到核心请求层，保证后续请求带上 Authorization 头
+          _core.updateAuthToken(authToken);
+        }
+        // 如果偏好存储没有，回退到安全存储（应用冷启动常见于此）
+        if ((authToken == null || authToken!.isEmpty)) {
+          try {
+            const storage = FlutterSecureStorage();
+            final st = await storage.read(key: 'auth_token');
+            if (st != null && st.isNotEmpty) {
+              authToken = st;
+              // 回写到 SharedPreferences，便于后续快速加载
+              await prefs.setString('auth_token', st);
+              // 同步到核心请求层
+              _core.updateAuthToken(authToken);
+            }
+          } catch (_) {}
         }
       } catch (_) {}
     }
@@ -328,6 +345,8 @@ class ApiService {
         
         // 持久化并同步内存 token
         authToken = token?.toString();
+        // 同步到核心请求层，避免加密/普通请求缺少 Authorization 头
+        _core.updateAuthToken(authToken);
         try {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('auth_token', authToken ?? '');
@@ -822,13 +841,22 @@ class ApiService {
       final refreshData = {'refresh': true};
       try {
         if (_cryptoService.currentSessionKey != null) {
-          // 使用 _httpRequest，触发 AES 加密；避免递归刷新，禁止自动重试
+          // 优先 AES
           resp = await _httpRequest(
             'POST',
             refreshUrl,
             data: refreshData,
             allowRetry: false,
           );
+          // 若会话丢失导致 401，自动回退到 RSA 重试
+          if (resp.statusCode == 401) {
+            resp = await _encryptedRequest(
+              'POST',
+              refreshUrl,
+              refreshData,
+              allowRetry: false,
+            );
+          }
         } else {
           // 无会话密钥时使用 RSA 加密
           resp = await _encryptedRequest(
@@ -848,6 +876,10 @@ class ApiService {
         final expiresStr = body['expires']?.toString();
         if (newToken != null && newToken.isNotEmpty) {
           authToken = newToken;
+          // 同步到核心请求层
+          _core.updateAuthToken(authToken);
+          // 清空 AES 会话密钥，促使后续请求重新协商
+          _cryptoService.clearSessionKey();
           try {
             final prefs = await SharedPreferences.getInstance();
             await prefs.setString('auth_token', newToken);
@@ -877,6 +909,43 @@ class ApiService {
     authToken = null;
     // rely on ApiService.authToken for headers
     _updateStatus(RequestStatus.success, '已退出登录');
+  }
+
+  /// 严格注销：仅当服务端成功返回时才视为成功，不做本地清理
+  Future<void> logoutStrict({StatusCallback? onStatus}) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在退出登录...');
+      _updateStatus(RequestStatus.loading, '正在退出登录...');
+      // 在有会话密钥时使用 AES，否则回退到 RSA 加密
+      http.Response resp;
+      if (_cryptoService.currentSessionKey != null) {
+        resp = await _httpRequest(
+          'POST',
+          '$baseUrl/api/auth/logout',
+          data: const {},
+          onStatus: onStatus,
+          allowRetry: false,
+        );
+      } else {
+        resp = await _encryptedRequest(
+          'POST',
+          '$baseUrl/api/auth/logout',
+          const {},
+          onStatus: onStatus,
+          allowRetry: false,
+        );
+      }
+      if (resp.statusCode != 200) {
+        throw '注销失败: ${resp.body}';
+      }
+      onStatus?.call(RequestStatus.success, '退出登录成功');
+      _updateStatus(RequestStatus.success, '退出登录成功');
+    } catch (e) {
+      final msg = e.toString();
+      onStatus?.call(RequestStatus.error, msg);
+      _updateStatus(RequestStatus.error, msg);
+      rethrow;
+    }
   }
 
   // 项目相关API（带实时响应）

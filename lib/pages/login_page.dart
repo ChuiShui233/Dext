@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -46,6 +47,8 @@ class _LoginPageState extends State<LoginPage> {
   final _oauthService = OAuthService();
   String? _captchaId;
   String? _captchaImage;
+  // 缓存解码后的验证码字节，避免每次build解码导致闪烁
+  Uint8List? _captchaBytes;
   Timer? _refreshTimer;
 
   @override
@@ -88,10 +91,15 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _fetchCaptcha() async {
     try {
       final captcha = await ApiService().getTextCaptcha();
+      // 预先解码，避免在build中重复base64解码造成重绘抖动
+      final String data = captcha['data'];
+      final String raw = data.startsWith('data:image') ? data.split(',').last : data;
+      final decoded = base64Decode(raw);
       if (!mounted) return;
       setState(() {
         _captchaId = captcha['captchaId'];
-        _captchaImage = captcha['data'];
+        _captchaImage = data;
+        _captchaBytes = decoded;
         _captchaController.clear();
       });
     } catch (e) {
@@ -99,6 +107,7 @@ class _LoginPageState extends State<LoginPage> {
       setState(() {
         _captchaId = null;
         _captchaImage = null;
+        _captchaBytes = null;
       });
       showErrorDialog('获取验证码失败，请检查网络后重试');
     }
@@ -482,26 +491,33 @@ Positioned.fill(
       children: [
         Row(
           children: [
-            if (_captchaImage != null)
+            if (_captchaBytes != null)
               GestureDetector(
                 onTap: _fetchCaptcha,
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  transitionBuilder: (Widget child, Animation<double> animation) {
-                    return FadeTransition(
-                      opacity: animation,
-                      child: child,
-                    );
-                  },
-                  child: Image.memory(
-                    key: ValueKey(_captchaImage),
-                    base64Decode(
-                      _captchaImage!.startsWith('data:image')
-                        ? _captchaImage!.split(',').last
-                        : _captchaImage!
-                    ),
+                child: RepaintBoundary(
+                  child: SizedBox(
                     height: 48,
-                    fit: BoxFit.contain,
+                    width: 120,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      switchInCurve: Curves.easeOut,
+                      switchOutCurve: Curves.easeIn,
+                      layoutBuilder: (currentChild, previousChildren) {
+                        return Stack(
+                          alignment: Alignment.centerLeft,
+                          children: <Widget>[
+                            ...previousChildren,
+                            if (currentChild != null) currentChild,
+                          ],
+                        );
+                      },
+                      child: Image.memory(
+                        _captchaBytes!,
+                        key: ValueKey(_captchaId), // 仅当验证码变更时触发动画
+                        fit: BoxFit.contain,
+                        gaplessPlayback: true,
+                      ),
+                    ),
                   ),
                 ),
               ),

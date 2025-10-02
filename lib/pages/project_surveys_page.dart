@@ -255,74 +255,114 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
                               itemBuilder: (context, index) {
                                 final survey = _surveys[index];
                                 return GlassCard(
-                                  margin: const EdgeInsets.all(8.0),
-                                  child: ListTile(
-                                    title: Text(
-                                      survey.surveyName,
-                                      style: TextStyle(
-                                        color: Theme.of(context).brightness == Brightness.dark 
-                                          ? Colors.white 
-                                          : Colors.black87,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    subtitle: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          survey.description,
-                                          style: TextStyle(
-                                            color: Theme.of(context).brightness == Brightness.dark 
-                                              ? Colors.white70 
-                                              : Colors.black54,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Row(
+                                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  child: Stack(
+                                    clipBehavior: Clip.hardEdge,
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 60), // 底部预留按钮空间
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: _getStatusColor(survey.surveyStatus).withValues(alpha: 0.1),
-                                                borderRadius: BorderRadius.circular(12),
-                                              ),
-                                              child: Text(
-                                                _getSurveyStatusText(survey.surveyStatus),
-                                                style: TextStyle(
-                                                  color: _getStatusColor(survey.surveyStatus),
-                                                  fontSize: 12,
-                                                ),
+                                            Text(
+                                              survey.surveyName,
+                                              style: TextStyle(
+                                                color: Theme.of(context).brightness == Brightness.dark 
+                                                  ? Colors.white 
+                                                  : Colors.black87,
+                                                fontWeight: FontWeight.w500,
+                                                fontSize: 16,
                                               ),
                                             ),
-                                            const SizedBox(width: 8),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                                                borderRadius: BorderRadius.circular(12),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              survey.description,
+                                              style: TextStyle(
+                                                color: Theme.of(context).brightness == Brightness.dark 
+                                                  ? Colors.white70 
+                                                  : Colors.black54,
                                               ),
-                                              child: Text(
-                                                _getSurveyTypeText(survey.surveyType),
-                                                style: TextStyle(
-                                                  color: Theme.of(context).colorScheme.primary,
-                                                  fontSize: 12,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Row(
+                                              children: [
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: _getStatusColor(survey.surveyStatus).withValues(alpha: 0.1),
+                                                    borderRadius: BorderRadius.circular(20),
+                                                    border: Border.all(
+                                                      color: _getStatusColor(survey.surveyStatus).withValues(alpha: 0.3),
+                                                    ),
+                                                  ),
+                                                  child: Text(
+                                                    _getSurveyStatusText(survey.surveyStatus),
+                                                    style: TextStyle(
+                                                      color: _getStatusColor(survey.surveyStatus),
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                  ),
                                                 ),
-                                              ),
+                                                const SizedBox(width: 8),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: (Theme.of(context).brightness == Brightness.dark
+                                                      ? Colors.white.withValues(alpha: 0.05)
+                                                      : Colors.black.withValues(alpha: 0.05)),
+                                                    borderRadius: BorderRadius.circular(12),
+                                                    border: Border.all(
+                                                      color: (Theme.of(context).brightness == Brightness.dark
+                                                        ? Colors.white.withValues(alpha: 0.1)
+                                                        : Colors.black.withValues(alpha: 0.1)),
+                                                    ),
+                                                  ),
+                                                  child: Text(
+                                                    _getSurveyTypeText(survey.surveyType),
+                                                    style: TextStyle(
+                                                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ],
                                         ),
-                                      ],
-                                    ),
-                                    trailing: SurveyActions(
-                                      survey: survey,
-                                      token: widget.token,
-                                      apiService: _apiService,
-                                      onSuccess: () {
-                                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                                          _refreshController.requestRefresh();
-                                        });
-                                      },
-                                    ),
+                                      ),
+                                      // 右下角操作区：使用铺满宽度的底部栏，内部靠右排布，避免越界
+                                      Positioned(
+                                        left: 0,
+                                        right: 0,
+                                        bottom: 0,
+                                        child: Container(
+                                          alignment: Alignment.centerRight,
+                                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                                          child: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            alignment: Alignment.centerRight,
+                                            child: Align(
+                                              alignment: Alignment.centerRight,
+                                              child: SurveyActions(
+                                                survey: survey,
+                                                token: widget.token,
+                                                apiService: _apiService,
+                                                useRow: true,
+                                                onSuccess: () {
+                                                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                                                    _refreshController.requestRefresh();
+                                                  });
+                                                },
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 );
                               },

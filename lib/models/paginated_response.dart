@@ -18,13 +18,13 @@ class PaginatedResponse<T> {
     T Function(Map<String, dynamic>) fromJsonT,
   ) {
     return PaginatedResponse<T>(
-      items: (json['items'] as List<dynamic>)
-          .map((item) => fromJsonT(item as Map<String, dynamic>))
-          .toList(),
-      total: json['total'] as int,
-      page: json['page'] as int,
-      pageSize: json['pageSize'] as int,
-      totalPages: json['totalPages'] as int,
+      items: (json['items'] as List<dynamic>?)
+          ?.map((item) => fromJsonT(item as Map<String, dynamic>))
+          .toList() ?? <T>[],
+      total: json['total'] as int? ?? 0,
+      page: json['page'] as int? ?? 1,
+      pageSize: json['pageSize'] as int? ?? 10,
+      totalPages: json['totalPages'] as int? ?? 0,
     );
   }
 

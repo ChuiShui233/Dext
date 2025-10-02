@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import 'package:layout/layout.dart';
 import '../services/api_service.dart';
@@ -9,6 +10,7 @@ import '../models/user.dart';
 import 'home_page.dart';
 import 'project_page.dart';
 import 'survey_page.dart';
+import '../services/config.dart';
 
 // 定义侧边栏显示逻辑
 final showSidebarInDrawer = LayoutValue(xs: true, md: false);
@@ -46,6 +48,10 @@ class FramePageState extends State<FramePage> {
     // 右侧内容区域的嵌套 Navigator Key（保持跨布局切换的路由栈状态）
     final GlobalKey<NavigatorState> _contentNavigatorKey = GlobalKey<NavigatorState>();
     
+    // 缓存标志，避免重复请求
+    bool _hasLoadedData = false;
+    bool _hasLoadedUser = false;
+    
     @override
   void dispose() {
     widget.userNotifier?.removeListener(_handleUserUpdate);
@@ -72,14 +78,24 @@ class FramePageState extends State<FramePage> {
     }
 
     Future<void> _fetchUserData() async {
+      if (_hasLoadedUser) return;
+      
       try {
         if (widget.apiService != null) {
           final user = await widget.apiService!.getCurrentUserHandler();
-          setState(() {
-            _currentUser = user;
-          });
+          if (mounted) {
+            setState(() {
+              _currentUser = user;
+              _hasLoadedUser = true;
+            });
+          }
         }
       } catch (e) {
+        if (mounted) {
+          setState(() {
+            _hasLoadedUser = true; // 即使失败也标记为已加载
+          });
+        }
         if (kDebugMode) {
           print('获取用户数据失败: $e');
         }
@@ -97,7 +113,7 @@ class FramePageState extends State<FramePage> {
   }
 
   Future<void> _loadData() async {
-    if (widget.apiService == null) return;
+    if (widget.apiService == null || _hasLoadedData) return;
 
     try {
       final projects = await widget.apiService!.getProjects();
@@ -108,13 +124,23 @@ class FramePageState extends State<FramePage> {
       setState(() {
         _projectCount = projects.length;
         _surveyCount = surveys.length;
+        _hasLoadedData = true;
       });
     } catch (e) {
-      // 处理错误
+      if (mounted) {
+        setState(() {
+          _hasLoadedData = true; // 即使失败也标记为已加载，避免重复请求
+        });
+      }
     }
   }
 
   void handleTabChange(int index) {
+    // 如果已经在目标页面，不需要重新导航
+    if (_currentTabIndex == index) {
+      return;
+    }
+    
     // 切换 Tab 时，替换右侧嵌套 Navigator 的根路由，使之进入对应的一级页面
     if (_contentNavigatorKey.currentState != null) {
       _contentNavigatorKey.currentState!.pushAndRemoveUntil(
@@ -137,27 +163,63 @@ class FramePageState extends State<FramePage> {
   void _handleLogout() {
     showDialog(
       context: context,
-      builder: (context) => FDialog(
-        direction: Axis.horizontal,
-        title: const Text('确认退出'),
-        body: const Text('确定要退出当前账号吗？'),
-        actions: [
-          FButton(
-            style: FButtonStyle.outline,
-            intrinsicWidth: true,
-            child: const Text('取消'),
-            onPress: () => Navigator.pop(context),
+      barrierDismissible: false, // 禁止点击遮罩关闭
+      builder: (context) {
+        bool isLoading = false;
+        return StatefulBuilder(
+          builder: (context, setState) => PopScope(
+            canPop: !isLoading, // 加载中阻止返回
+            child: FDialog(
+              direction: Axis.horizontal,
+              title: const Text('确认退出'),
+              body: isLoading
+                  ? const Row(
+                    children: [
+                      SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                      SizedBox(width: 8),
+                      Text('正在退出登录...'),
+                    ],
+                  )
+                  : const Text('确定要退出当前账号吗？'),
+              actions: [
+                FButton(
+                  style: FButtonStyle.outline,
+                  intrinsicWidth: true,
+                  onPress: isLoading ? null : () => Navigator.pop(context),
+                  child: const Text('取消'),
+                ),
+                FButton(
+                  intrinsicWidth: true,
+                  onPress: isLoading
+                      ? null
+                      : () async {
+                          setState(() => isLoading = true);
+                          try {
+                            // 优先使用传入的 apiService
+                            await widget.apiService?.logoutStrict();
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                            }
+                            widget.onLogout();
+                          } catch (e) {
+                            if (context.mounted) {
+                              showFToast(
+                                context: context,
+                                title: const Text('退出失败'),
+                                description: Text(e.toString()),
+                              );
+                            }
+                          } finally {
+                            if (context.mounted) setState(() => isLoading = false);
+                          }
+                        },
+                  child: const Text('确认'),
+                ),
+              ],
+            ),
           ),
-          FButton(
-            intrinsicWidth: true,
-            child: const Text('是的捏'),
-            onPress: () {
-              widget.onLogout();
-              Navigator.pop(context);
-            },
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -180,20 +242,86 @@ class FramePageState extends State<FramePage> {
     );
 
     if (showDesktopLayout) {
-      return PageStorage(
-        bucket: widget.bucket,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSidebar(context),
-            Expanded(child: contentArea),
-          ],
+      return PopScope(
+        canPop: false,
+        onPopInvoked: (didPop) async {
+          if (!didPop) {
+            final shouldPop = await _handleWillPop();
+            if (shouldPop && context.mounted) {
+              Navigator.of(context).pop();
+            }
+          }
+        },
+        child: PageStorage(
+          bucket: widget.bucket,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSidebar(context),
+              Expanded(child: contentArea),
+            ],
+          ),
         ),
       );
     }
 
     // 移动端布局：也使用相同的嵌套 Navigator，保证在布局切换期间不丢失右侧路由状态
-    return contentArea;
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        if (!didPop) {
+          final shouldPop = await _handleWillPop();
+          if (shouldPop && context.mounted) {
+            Navigator.of(context).pop();
+          }
+        }
+      },
+      child: contentArea,
+    );
+  }
+
+  /// 处理系统返回（Android 返回键 / iOS 侧滑返回）
+  /// 优先让右侧嵌套 Navigator 弹栈；
+  /// 如果不能弹栈且当前不在首页 Tab，则回到首页；
+  /// 否则交给系统（可能退出 App / 退出当前页面）。
+  Future<bool> _handleWillPop() async {
+    final nav = _contentNavigatorKey.currentState;
+    if (nav != null && nav.canPop()) {
+      nav.pop();
+      return false; // 已处理返回，不让系统处理
+    }
+    if (_currentTabIndex != 0) {
+      handleTabChange(0);
+      return false;
+    }
+    // 已在首页且无法再返回：弹出确认对话框
+    final shouldExit = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => FDialog(
+        direction: Axis.horizontal,
+        title: const Text('确认退出'),
+        body: const Text('确定要退出应用吗？'),
+        actions: [
+          FButton(
+            style: FButtonStyle.outline,
+            onPress: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FButton(
+            onPress: () => Navigator.pop(context, true),
+            child: const Text('退出'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldExit == true) {
+      // 主动退出应用
+      await SystemNavigator.pop();
+      return false;
+    }
+    return false; // 取消退出
   }
 
   // 根据 Tab 索引构建右侧区域的“根页面”
@@ -344,7 +472,7 @@ Widget _buildSidebarHeader(BuildContext context) {
     ? ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: Image.network(
-          _currentUser!.avatarUrl!,
+          toAbsoluteUrl(_currentUser!.avatarUrl!),
           width: 32,
           height: 32,
           fit: BoxFit.cover,
@@ -1022,27 +1150,62 @@ Widget _buildSidebarHeader(BuildContext context) {
   void _showLogoutConfirmDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => FDialog(
-        direction: Axis.horizontal,
-        title: const Text('确认退出'),
-        body: const Text('确定要退出当前账号吗？'),
-        actions: [
-          FButton(
-            style: FButtonStyle.outline,
-            intrinsicWidth: true,
-            child: const Text('取消'),
-            onPress: () => Navigator.pop(context),
+      barrierDismissible: false, // 禁止点击遮罩关闭
+      builder: (context) {
+        bool isLoading = false;
+        return StatefulBuilder(
+          builder: (context, setState) => PopScope(
+            canPop: !isLoading, // 加载中阻止返回
+            child: FDialog(
+              direction: Axis.horizontal,
+              title: const Text('确认退出'),
+              body: isLoading
+                  ? const Row(
+                      children: [
+                        SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                        SizedBox(width: 8),
+                        Text('正在退出登录...'),
+                      ],
+                    )
+                  : const Text('确定要退出当前账号吗？'),
+              actions: [
+                FButton(
+                  style: FButtonStyle.outline,
+                  intrinsicWidth: true,
+                  onPress: isLoading ? null : () => Navigator.pop(context),
+                  child: const Text('取消'),
+                ),
+                FButton(
+                  intrinsicWidth: true,
+                  onPress: isLoading
+                      ? null
+                      : () async {
+                          setState(() => isLoading = true);
+                          try {
+                            await widget.apiService?.logoutStrict();
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                            }
+                            widget.onLogout();
+                          } catch (e) {
+                            if (context.mounted) {
+                              showFToast(
+                                context: context,
+                                title: const Text('退出失败'),
+                                description: Text(e.toString()),
+                              );
+                            }
+                          } finally {
+                            if (context.mounted) setState(() => isLoading = false);
+                          }
+                        },
+                  child: const Text('确认'),
+                ),
+              ],
+            ),
           ),
-          FButton(
-            intrinsicWidth: true,
-            child: const Text('是的捏'),
-            onPress: () {
-              widget.onLogout();
-              Navigator.pop(context);
-            },
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

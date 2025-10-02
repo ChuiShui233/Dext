@@ -95,13 +95,30 @@ class SurveyService {
     final resp = await core.httpRequest('GET', uri.toString(), onStatus: onStatus);
     
     if (resp.statusCode == 200) {
-      final body = json.decode(resp.body) as Map<String, dynamic>;
-      final paginatedResponse = PaginatedResponse.fromJson(body, (json) => Survey.fromJson(json));
-      
-      onStatus?.call(RequestStatus.success, '问卷列表获取成功');
-      core.updateStatus(RequestStatus.success, '问卷列表获取成功');
-      
-      return paginatedResponse;
+      final dynamic body = json.decode(resp.body);
+      // 兼容两种返回格式：
+      // 1) 非分页：直接返回数组 [ {...}, {...} ]
+      // 2) 分页：返回对象 { items: [...], total: n, page: n, pageSize: n, totalPages: n }
+      if (body is List) {
+        final items = body.map<Survey>((j) => Survey.fromJson(j as Map<String, dynamic>)).toList();
+        final paginated = PaginatedResponse<Survey>(
+          items: items,
+          total: items.length,
+          page: page,
+          pageSize: pageSize,
+          totalPages: items.isEmpty ? 0 : ((items.length + pageSize - 1) ~/ pageSize),
+        );
+        onStatus?.call(RequestStatus.success, '问卷列表获取成功');
+        core.updateStatus(RequestStatus.success, '问卷列表获取成功');
+        return paginated;
+      } else if (body is Map<String, dynamic>) {
+        final paginatedResponse = PaginatedResponse.fromJson(body, (json) => Survey.fromJson(json));
+        onStatus?.call(RequestStatus.success, '问卷列表获取成功');
+        core.updateStatus(RequestStatus.success, '问卷列表获取成功');
+        return paginatedResponse;
+      } else {
+        throw '未知的问卷列表返回格式';
+      }
     }
     throw '获取问卷列表失败: ${resp.statusCode}';
   }

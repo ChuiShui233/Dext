@@ -158,20 +158,13 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
       decoration: BoxDecoration(
         color: isDark 
           ? Colors.white.withValues(alpha: 0.05)
-          : Colors.white.withValues(alpha: 0.7),
+          : Colors.white.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark 
             ? Colors.white.withValues(alpha: 0.1)
             : Colors.black.withValues(alpha: 0.1),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Row(
         children: [
@@ -216,7 +209,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
       decoration: BoxDecoration(
         color: isDark 
           ? Colors.white.withValues(alpha: 0.05)
-          : Colors.white.withValues(alpha: 0.7),
+          : Colors.white.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark 
@@ -328,7 +321,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
         decoration: BoxDecoration(
           color: isDark 
             ? Colors.white.withValues(alpha: 0.05)
-            : Colors.white.withValues(alpha: 0.7),
+            : Colors.white.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isDark 
@@ -422,20 +415,13 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
         decoration: BoxDecoration(
           color: isDark 
             ? Colors.white.withValues(alpha: 0.05)
-            : Colors.white.withValues(alpha: 0.8),
+            : Colors.white.withValues(alpha: 0.6),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isDark 
               ? Colors.white.withValues(alpha: 0.1)
               : Colors.black.withValues(alpha: 0.1),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 20,
-              offset: const Offset(0, 4),
-            ),
-          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -500,8 +486,6 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 SizedBox(
-                  width: 100,
-                  height: 40,
                   child: FButton(
                     onPress: answerId == null ? null : () {
                       Navigator.of(context).push(
@@ -550,46 +534,55 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
       decoration: BoxDecoration(
         color: isDark 
           ? Colors.white.withValues(alpha: 0.05)
-          : Colors.white.withValues(alpha: 0.8),
+          : Colors.white.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark 
             ? Colors.white.withValues(alpha: 0.1)
             : Colors.black.withValues(alpha: 0.1),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: isMobile 
         ? Center(
-            child: FPagination(
-              controller: _paginationController,
-              onChange: _handlePageChange,
-            ),
-          )
-        : Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  '共 $_total 条记录，第 $_page / $totalPages 页',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: isDark ? Colors.white70 : Colors.black54,
-                  ),
-                ),
-              ),
-              FPagination(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: FPagination(
                 controller: _paginationController,
                 onChange: _handlePageChange,
               ),
-            ],
+            ),
+          )
+        : LayoutBuilder(
+            builder: (context, constraints) {
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      '共 $_total 条记录，第 $_page / $totalPages 页',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? Colors.white70 : Colors.black54,
+                      ),
+                    ),
+                  ),
+                  Flexible(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: FPagination(
+                          controller: _paginationController,
+                          onChange: _handlePageChange,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
     );
   }

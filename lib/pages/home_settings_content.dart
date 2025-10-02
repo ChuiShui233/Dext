@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import '../models/user.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
+import '../services/config.dart';
 
 class HomeSettingsContent extends StatefulWidget {
   final VoidCallback onLogout;
@@ -290,7 +291,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
                   child: _currentUser?.avatarUrl != null &&
                           _currentUser!.avatarUrl!.isNotEmpty
                       ? Image.network(
-                          _currentUser!.avatarUrl!,
+                          toAbsoluteUrl(_currentUser!.avatarUrl!),
                           width: 100,
                           height: 100,
                           fit: BoxFit.cover,
@@ -529,6 +530,64 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
   }
 
   void _confirmLogout(BuildContext context, VoidCallback onLogout) {
-    onLogout();
+    showDialog(
+      context: context,
+      barrierDismissible: false, // 禁止点击遮罩关闭，防止交互
+      builder: (context) {
+        bool isLoading = false;
+        return StatefulBuilder(
+          builder: (context, setState) => PopScope(
+            canPop: !isLoading, // 加载中阻止返回
+            child: FDialog(
+              direction: Axis.horizontal,
+              title: const Text('确认退出'),
+              body: isLoading
+                  ? const Row(
+                      children: [
+                        SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                        SizedBox(width: 8),
+                        Text('正在退出登录...')
+                      ],
+                    )
+                  : const Text('确定要退出当前账号吗？'),
+              actions: [
+                FButton(
+                  style: FButtonStyle.outline,
+                  intrinsicWidth: true,
+                  onPress: isLoading ? null : () => Navigator.pop(context),
+                  child: const Text('取消'),
+                ),
+                FButton(
+                  intrinsicWidth: true,
+                  onPress: isLoading
+                      ? null
+                      : () async {
+                          setState(() => isLoading = true);
+                          try {
+                            await widget.apiService.logoutStrict();
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                            }
+                            onLogout(); // 仅在服务端成功后本地登出
+                          } catch (e) {
+                            if (context.mounted) {
+                              showFToast(
+                                context: context,
+                                title: const Text('退出失败'),
+                                description: Text(e.toString()),
+                              );
+                            }
+                          } finally {
+                            if (context.mounted) setState(() => isLoading = false);
+                          }
+                        },
+                  child: const Text('确认'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
