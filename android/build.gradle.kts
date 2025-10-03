@@ -50,4 +50,11 @@ subprojects {
             }
         }
     }
+    if (name == "clipboard_watcher") {
+        plugins.withId("com.android.library") {
+            extensions.configure<LibraryExtension>("android") {
+                namespace = "com.clipboard_watcher"
+            }
+        }
+    }
 }
