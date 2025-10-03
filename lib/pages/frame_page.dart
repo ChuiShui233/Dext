@@ -10,6 +10,7 @@ import '../models/user.dart';
 import 'home_page.dart';
 import 'project_page.dart';
 import 'survey_page.dart';
+import 'public_survey_page.dart';
 import '../services/config.dart';
 
 // 定义侧边栏显示逻辑
@@ -47,6 +48,22 @@ class FramePageState extends State<FramePage> {
     User? _currentUser;
     // 右侧内容区域的嵌套 Navigator Key（保持跨布局切换的路由栈状态）
     final GlobalKey<NavigatorState> _contentNavigatorKey = GlobalKey<NavigatorState>();
+    
+    // 公开方法：在内容区域中打开公开问卷页面
+    void navigateToPublicSurvey(String surveyId) {
+      final nav = _contentNavigatorKey.currentState;
+      if (nav != null) {
+        nav.push(
+          MaterialPageRoute(
+            builder: (context) => _buildPublicSurveyPage(surveyId),
+          ),
+        );
+      }
+    }
+    
+    Widget _buildPublicSurveyPage(String surveyId) {
+      return PublicSurveyPage(surveyUID: surveyId);
+    }
     
     // 缓存标志，避免重复请求
     bool _hasLoadedData = false;
@@ -244,7 +261,7 @@ class FramePageState extends State<FramePage> {
     if (showDesktopLayout) {
       return PopScope(
         canPop: false,
-        onPopInvoked: (didPop) async {
+        onPopInvokedWithResult: (didPop, result) async {
           if (!didPop) {
             final shouldPop = await _handleWillPop();
             if (shouldPop && context.mounted) {
@@ -268,7 +285,7 @@ class FramePageState extends State<FramePage> {
     // 移动端布局：也使用相同的嵌套 Navigator，保证在布局切换期间不丢失右侧路由状态
     return PopScope(
       canPop: false,
-      onPopInvoked: (didPop) async {
+      onPopInvokedWithResult: (didPop, result) async {
         if (!didPop) {
           final shouldPop = await _handleWillPop();
           if (shouldPop && context.mounted) {

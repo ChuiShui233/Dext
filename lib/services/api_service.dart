@@ -824,9 +824,10 @@ class ApiService {
       if (token == null || token.isEmpty) {
         final prefs = await SharedPreferences.getInstance();
         token = prefs.getString('auth_token');
-        if (token != null && token.isNotEmpty) {
+        if (token!.isNotEmpty) {
           authToken = token;
-          // rely on ApiService.authToken for headers
+          // 同步到核心层，确保headers中包含Authorization
+          _core.updateAuthToken(authToken);
         }
       }
       
@@ -834,6 +835,9 @@ class ApiService {
       if (authToken == null || authToken!.isEmpty) {
         return false;
       }
+      
+      // 再次确保token已同步到核心层
+      _core.updateAuthToken(authToken);
       
       // 优先尝试使用 AES（需要已有会话密钥），否则回退到 RSA 加密
       http.Response resp;
@@ -2716,11 +2720,8 @@ Future<Question> addQuestion(
     String? fileName,
     StatusCallback? onStatus,
   }) async {
-    // Web平台使用字节数据
-    if (kIsWeb) {
-      if (imageBytes == null || fileName == null) {
-        throw 'Web平台需要提供图片字节数据和文件名';
-      }
+    // 优先使用字节数据（Web和桌面端）
+    if (imageBytes != null && fileName != null) {
       return uploadAvatarBytes(
         imageBytes: imageBytes,
         fileName: fileName,
@@ -2729,10 +2730,11 @@ Future<Question> addQuestion(
     }
     
     // 移动端使用文件对象
-    if (imageFile == null) {
-      throw '移动端需要提供图片文件';
+    if (imageFile != null) {
+      return uploadAvatar(imageFile: imageFile, onStatus: onStatus);
     }
-    return uploadAvatar(imageFile: imageFile, onStatus: onStatus);
+    
+    throw '需要提供图片字节数据或文件对象';
   }
 
   /// 上传用户头像（移动端使用文件对象）

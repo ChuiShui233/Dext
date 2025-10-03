@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:dext/app_navigator.dart';
@@ -202,6 +203,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
   final _storage = const FlutterSecureStorage();
   final PageStorageBucket _pageStorageBucket = PageStorageBucket();
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  final GlobalKey<FramePageState> _framePageKey = GlobalKey<FramePageState>();
   ThemeMode _themeMode = ThemeMode.system;
   bool _isDark = false;
   final ValueNotifier<User?> userNotifier = ValueNotifier<User?>(null);
@@ -216,6 +218,8 @@ class _YuMeng233AppState extends State<YuMeng233App>
   // 缓存项目列表，避免重复请求
   List<Project>? _cachedProjects;
   bool _isLoadingProjects = false;
+  // 定期刷新令牌的定时器
+  Timer? _tokenRefreshTimer;
 
   @override
   void initState() {
@@ -250,6 +254,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     ClipboardService.instance.stopListening();
+    _tokenRefreshTimer?.cancel();
     super.dispose();
   }
 
@@ -337,6 +342,8 @@ class _YuMeng233AppState extends State<YuMeng233App>
           _token = token;
           _tokenExpiry = expiryDate;
         });
+        // 启动定时刷新令牌（仅在已登录状态下）
+        _startTokenRefreshTimer();
       } else {
         if (!_isRefreshingToken) {
           try {
@@ -354,7 +361,41 @@ class _YuMeng233AppState extends State<YuMeng233App>
     }
   }
 
+  // 启动定时刷新令牌（每10分钟）
+  void _startTokenRefreshTimer() {
+    _tokenRefreshTimer?.cancel();
+    _tokenRefreshTimer = Timer.periodic(const Duration(minutes: 10), (timer) {
+      if (_token != null && _tokenExpiry != null) {
+        _refreshToken();
+      } else {
+        // 如果已登出，停止定时器
+        timer.cancel();
+      }
+    });
+  }
+
+  // 定期刷新令牌
+  Future<void> _refreshToken() async {
+    if (_isRefreshingToken) return;
+    
+    try {
+      _isRefreshingToken = true;
+      final newToken = await ApiService().refreshToken();
+      await _storage.write(key: 'auth_token', value: newToken);
+      // 更新令牌后重新检查状态
+      await _checkAuthStatus();
+    } catch (e) {
+      // 刷新失败时不显示错误，由401处理程序处理
+      debugPrint('定时刷新令牌失败: $e');
+    } finally {
+      _isRefreshingToken = false;
+    }
+  }
+
   Future<void> _handleLogout() async {
+    // 停止定时刷新
+    _tokenRefreshTimer?.cancel();
+    
     await _storage.delete(key: 'auth_token');
     await _storage.delete(key: 'token_expiry');
     setState(() {
@@ -428,6 +469,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
       return MaterialPageRoute(
         builder: (context) => _token != null && _tokenExpiry != null
             ? FramePage(
+                key: _framePageKey,
                 bucket: _pageStorageBucket,
                 selectedIndex: _selectedIndex,
                 onIndexChanged: (index) {
@@ -448,7 +490,9 @@ class _YuMeng233AppState extends State<YuMeng233App>
                     key: 'token_expiry',
                     value: expiry.toIso8601String(),
                   );
-                  _checkAuthStatus();
+                  await _checkAuthStatus();
+                  // 登录成功后启动定时刷新
+                  _startTokenRefreshTimer();
                 },
               ),
       );
@@ -639,35 +683,33 @@ class _YuMeng233AppState extends State<YuMeng233App>
   void _startClipboardListening() {
     ClipboardService.instance.startListening(
       onSurveyIdDetected: (surveyId) {
-        // 确保在主线程中显示Toast
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          final context = _navigatorKey.currentContext;
-          if (context != null && mounted) {
-            ClipboardService.showSurveyToast(
-              context,
-              surveyId,
-              () => _navigateToPublicSurvey(surveyId),
-            );
-          }
-        });
+        final context = appNavigatorKey.currentContext ?? _navigatorKey.currentContext;
+        if (context != null && mounted) {
+          ClipboardService.showSurveyToast(
+            context,
+            surveyId,
+            () => _navigateToPublicSurvey(surveyId),
+          );
+        }
       },
     );
   }
 
   /// 导航到公开问卷页面
   void _navigateToPublicSurvey(String surveyId) {
-    final navigatorState = _navigatorKey.currentState;
-    if (navigatorState != null) {
-      // 在Web平台直接使用MaterialPageRoute避免URL历史记录问题
-      if (kIsWeb) {
+    // 如果用户已登录且在FramePage中，使用FramePage的嵌套导航
+    if (_framePageKey.currentState != null) {
+      _framePageKey.currentState!.navigateToPublicSurvey(surveyId);
+    } else {
+      // 否则使用全局导航
+      final navigatorState = appNavigatorKey.currentState ?? _navigatorKey.currentState;
+      if (navigatorState != null) {
         navigatorState.push(
           MaterialPageRoute(
             builder: (context) => PublicSurveyPage(surveyUID: surveyId),
             settings: RouteSettings(name: '/public/survey/$surveyId'),
           ),
         );
-      } else {
-        navigatorState.pushNamed('/public/survey/$surveyId');
       }
     }
   }

@@ -457,7 +457,7 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
   void _onSelectionChanged(List<int> selectedIds) {
     setState(() {
       _selectedProjectIds = selectedIds;
-      _isMultiSelectMode = selectedIds.isNotEmpty;
+      // 不根据选中项数量自动切换多选模式状态
     });
   }
 
@@ -470,6 +470,13 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
   }
 
   void _onClearSelection() {
+    setState(() {
+      _selectedProjectIds = [];
+      // 保持多选模式
+    });
+  }
+
+  void _exitMultiSelectMode() {
     setState(() {
       _selectedProjectIds = [];
       _isMultiSelectMode = false;
@@ -485,8 +492,50 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
       } else {
         _selectedProjectIds.remove(projectId);
       }
-      _isMultiSelectMode = _selectedProjectIds.isNotEmpty;
     });
+  }
+
+  Widget _buildDeleteButton(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _batchDeleteProjects,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.error.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.error.withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.delete_outline,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '批量删除',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _batchDeleteProjects() async {
@@ -664,24 +713,26 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                     ),
                   ],
                 ),
-                // 多选操作组件
-                if (_isMultiSelectMode && _selectedProjectIds.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: MultiSelectActions(
-                      selectedIds: _selectedProjectIds,
-                      onSelectionChanged: _onSelectionChanged,
-                      onSelectAll: _onSelectAll,
-                      onClearSelection: _onClearSelection,
-                      customActions: [
-                        FButton(
-                          style: FButtonStyle.destructive,
-                          onPress: _batchDeleteProjects,
-                          child: const Text('批量删除'),
-                        ),
-                      ],
-                    ),
-                  ),
+                // 多选操作组件 - 进入多选模式即显示，带高度伸缩动画
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOutCubic,
+                  child: _isMultiSelectMode
+                      ? Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: MultiSelectActions(
+                            selectedIds: _selectedProjectIds,
+                            onSelectionChanged: _onSelectionChanged,
+                            onSelectAll: _onSelectAll,
+                            onClearSelection: _onClearSelection,
+                            onExitMultiSelectMode: _exitMultiSelectMode,
+                            customActions: [
+                              _buildDeleteButton(context),
+                            ],
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
                 Expanded(
                   child: _isLoading
                       ? const Center(child: CircularProgressIndicator())
@@ -762,6 +813,58 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                                               ),
                                             ),
                                             child: ListTile(
+                                              leading: _isMultiSelectMode
+                                                  ? GestureDetector(
+                                                      behavior: HitTestBehavior.opaque,
+                                                      onTap: () => _onProjectSelectionChanged(project.id, !isSelected),
+                                                      child: SizedBox(
+                                                        width: 24,
+                                                        height: 24,
+                                                        child: AnimatedContainer(
+                                                          duration: const Duration(milliseconds: 180),
+                                                          curve: Curves.easeOutCubic,
+                                                          decoration: BoxDecoration(
+                                                            color: isSelected
+                                                                ? (Theme.of(context).brightness == Brightness.dark
+                                                                    ? Colors.white
+                                                                    : Theme.of(context).colorScheme.primary)
+                                                                : Colors.transparent,
+                                                            shape: BoxShape.circle,
+                                                            border: Border.all(
+                                                              color: isSelected
+                                                                  ? (Theme.of(context).brightness == Brightness.dark
+                                                                      ? Colors.white
+                                                                      : Theme.of(context).colorScheme.primary)
+                                                                  : (Theme.of(context).brightness == Brightness.dark
+                                                                      ? Colors.white
+                                                                      : Colors.black.withValues(alpha: 0.25)),
+                                                              width: 2,
+                                                            ),
+                                                          ),
+                                                          alignment: Alignment.center,
+                                                          child: AnimatedSwitcher(
+                                                            duration: const Duration(milliseconds: 150),
+                                                            switchInCurve: Curves.easeOutBack,
+                                                            switchOutCurve: Curves.easeInCubic,
+                                                            transitionBuilder: (child, anim) => FadeTransition(
+                                                              opacity: anim,
+                                                              child: ScaleTransition(scale: anim, child: child),
+                                                            ),
+                                                            child: isSelected
+                                                                ? Icon(
+                                                                    key: const ValueKey('checked'),
+                                                                    Icons.check_rounded,
+                                                                    size: 16,
+                                                                    color: Theme.of(context).brightness == Brightness.dark
+                                                                        ? Colors.black87
+                                                                        : Colors.white,
+                                                                  )
+                                                                : const SizedBox.shrink(key: ValueKey('unchecked')),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    )
+                                                  : null,
                                               title: Text(
                                                 project.projectName,
                                                 style: TextStyle(
@@ -786,19 +889,21 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                                                 child: Row(
                                                   mainAxisSize: MainAxisSize.min,
                                                   children: [
-                                                    IconButton(
-                                                      tooltip: '查看问卷',
-                                                      onPressed: () => _openProjectSurveys(project),
-                                                      icon: const Icon(Icons.assignment_outlined, size: 20),
+                                                    FButton.icon(
+                                                      style: FButtonStyle.outline,
+                                                      onPress: () => _openProjectSurveys(project),
+                                                      child: const Icon(Icons.assignment_outlined, size: 20),
                                                     ),
-                                                    IconButton(
-                                                      tooltip: '编辑项目',
-                                                      onPressed: () => _showEditProjectDialog(project),
-                                                      icon: const Icon(Icons.edit, size: 20),
+                                                    const SizedBox(width: 4),
+                                                    FButton.icon(
+                                                      style: FButtonStyle.outline,
+                                                      onPress: () => _showEditProjectDialog(project),
+                                                      child: const Icon(Icons.edit, size: 20),
                                                     ),
-                                                    IconButton(
-                                                      tooltip: '删除项目',
-                                                      onPressed: () async {
+                                                    const SizedBox(width: 4),
+                                                    FButton.icon(
+                                                      style: FButtonStyle.outline,
+                                                      onPress: () async {
                                                         final confirm = await showAdaptiveDialog<bool>(
                                                           context: context,
                                                           builder: (context) => FDialog(
@@ -820,6 +925,7 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                                                           ),
                                                         );
                                                         if (confirm == true) {
+                                                          final ctx = context;
                                                           try {
                                                             await _apiService.deleteProject(project.id);
                                                             if (!mounted) return;
@@ -829,24 +935,29 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                                                             setState(() {
                                                               _projects = projects;
                                                             });
-                                                            showFToast(
-                                                              context: context,
-                                                              alignment: FToastAlignment.bottomRight,
-                                                              title: const Text('删除成功'),
-                                                              description: Text('已删除项目：${project.projectName}'),
-                                                            );
+                                                            if (mounted) {
+                                                              showFToast(
+                                                                // ignore: use_build_context_synchronously
+                                                                context: ctx,
+                                                                alignment: FToastAlignment.bottomRight,
+                                                                title: const Text('删除成功'),
+                                                                description: Text('已删除项目：${project.projectName}'),
+                                                              );
+                                                            }
                                                           } catch (e) {
-                                                            if (!mounted) return;
-                                                            showFToast(
-                                                              context: context,
-                                                              alignment: FToastAlignment.bottomRight,
-                                                              title: const Text('删除失败'),
-                                                              description: Text('删除项目失败: $e'),
-                                                            );
+                                                            if (mounted) {
+                                                              showFToast(
+                                                                // ignore: use_build_context_synchronously
+                                                                context: ctx,
+                                                                alignment: FToastAlignment.bottomRight,
+                                                                title: const Text('删除失败'),
+                                                                description: Text('删除项目失败: $e'),
+                                                              );
+                                                            }
                                                           }
                                                         }
                                                       },
-                                                      icon: const Icon(Icons.delete_outline, size: 20),
+                                                      child: const Icon(Icons.delete_outline, size: 20),
                                                     ),
                                                   ],
                                                 ),
@@ -856,17 +967,6 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                                                 : () => _openProjectSurveys(project),
                                             ),
                                           );
-
-                                          // 如果处于多选模式，用MultiSelectItem包装
-                                          if (_isMultiSelectMode) {
-                                            return MultiSelectItem(
-                                              id: project.id,
-                                              isSelected: isSelected,
-                                              onSelectionChanged: _onProjectSelectionChanged,
-                                              child: glassCard,
-                                            );
-                                          }
-
                                           return glassCard;
                                         },
                                       ),

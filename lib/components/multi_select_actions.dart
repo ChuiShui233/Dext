@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:forui/forui.dart';
 
 class MultiSelectActions extends StatefulWidget {
   final List<int> selectedIds;
   final Function(List<int>) onSelectionChanged;
   final Function()? onSelectAll;
   final Function()? onClearSelection;
+  final VoidCallback? onExitMultiSelectMode;
   final List<Widget>? customActions;
   final bool showSelectAll;
   final bool showClearSelection;
@@ -18,6 +18,7 @@ class MultiSelectActions extends StatefulWidget {
     required this.onSelectionChanged,
     this.onSelectAll,
     this.onClearSelection,
+    this.onExitMultiSelectMode,
     this.customActions,
     this.showSelectAll = true,
     this.showClearSelection = true,
@@ -49,12 +50,16 @@ class _MultiSelectActionsState extends State<MultiSelectActions> {
   }
 
   void _toggleMultiSelectMode() {
-    setState(() {
-      _isMultiSelectMode = !_isMultiSelectMode;
-      if (!_isMultiSelectMode) {
-        widget.onSelectionChanged([]);
-      }
-    });
+    if (widget.onExitMultiSelectMode != null) {
+      widget.onExitMultiSelectMode!();
+    } else {
+      setState(() {
+        _isMultiSelectMode = !_isMultiSelectMode;
+        if (!_isMultiSelectMode) {
+          widget.onSelectionChanged([]);
+        }
+      });
+    }
   }
 
   void _handleSelectAll() {
@@ -69,123 +74,187 @@ class _MultiSelectActionsState extends State<MultiSelectActions> {
     } else {
       widget.onSelectionChanged([]);
     }
-    // 清除选择后退出多选模式
-    setState(() {
-      _isMultiSelectMode = false;
-    });
+    // 清除选择但保持多选模式
   }
 
   @override
   Widget build(BuildContext context) {
-    // 如果没有选择任何项目，不显示任何内容
-    if (widget.selectedIds.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    // 进入多选模式后即显示操作栏，即使当前未选择任何项目
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
 
-    return Container(
-      height: 46,
-      constraints: const BoxConstraints(maxWidth: double.infinity),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDark 
+          ? Colors.white.withValues(alpha: 0.05)
+          : Colors.black.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: primaryColor.withValues(alpha: 0.15),
+          width: 1,
+        ),
+      ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 选择状态显示
+            // 选择状态显示 - 更现代的徽章样式
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-                  width: 1,
+                gradient: LinearGradient(
+                  colors: [
+                    primaryColor.withValues(alpha: 0.15),
+                    primaryColor.withValues(alpha: 0.1),
+                  ],
                 ),
+                borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.check_circle,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.primary,
+                  Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: primaryColor,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${widget.selectedIds.length}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? Colors.black87 : Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 6),
                   Text(
-                    '已选择 ${widget.selectedIds.length} 项',
+                    '项已选',
                     style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.primary,
+                      fontSize: 13,
+                      color: isDark ? Colors.white : primaryColor,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 12),
             
-            // 全选按钮
+            // 全选按钮 - 圆角胶囊样式
             if (widget.showSelectAll)
-              FButton(
-                style: FButtonStyle.ghost,
-                onPress: _handleSelectAll,
-                child: Text(
-                  widget.selectAllText ?? '全选',
-                  style: const TextStyle(fontSize: 12),
-                ),
+              _buildModernButton(
+                context: context,
+                label: widget.selectAllText ?? '全选',
+                icon: Icons.done_all,
+                onPressed: _handleSelectAll,
               ),
             
             // 清除选择按钮
             if (widget.showClearSelection)
-              FButton(
-                style: FButtonStyle.ghost,
-                onPress: _handleClearSelection,
-                child: Text(
-                  widget.clearSelectionText ?? '清除',
-                  style: const TextStyle(fontSize: 12),
-                ),
+              _buildModernButton(
+                context: context,
+                label: widget.clearSelectionText ?? '清除',
+                icon: Icons.clear_all,
+                onPressed: _handleClearSelection,
               ),
             
             // 自定义操作按钮
-            if (widget.customActions != null) ...[
-              const SizedBox(width: 8),
-              ...widget.customActions!,
-            ],
+            if (widget.customActions != null) ...
+              widget.customActions!.map((action) => 
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: action,
+                ),
+              ),
             
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
             
-            // 退出多选模式按钮
-            FButton(
-              style: FButtonStyle.ghost,
-              onPress: _toggleMultiSelectMode,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.close,
-                    size: 16,
-                    color: Theme.of(context).brightness == Brightness.dark 
-                      ? Colors.white.withValues(alpha: 0.7)
-                      : Colors.black.withValues(alpha: 0.6),
-                  ),
-                  const SizedBox(width: 4),
-                  const Text(
-                    '退出',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ],
+            // 退出多选模式按钮 - 更现代的关闭按钮
+            _buildModernButton(
+              context: context,
+              label: '退出',
+              icon: Icons.close_rounded,
+              onPressed: _toggleMultiSelectMode,
+              isClose: true,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModernButton({
+    required BuildContext context,
+    required String label,
+    required IconData icon,
+    required VoidCallback onPressed,
+    bool isClose = false,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: isClose
+                ? (isDark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.05))
+                : Colors.transparent,
+              borderRadius: BorderRadius.circular(20),
+              border: isClose ? null : Border.all(
+                color: isDark 
+                  ? Colors.white.withValues(alpha: 0.3)
+                  : Colors.black.withValues(alpha: 0.1),
+                width: 1,
               ),
             ),
-            const SizedBox(width: 8),
-          ],
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 16,
+                  color: isDark 
+                    ? Colors.white.withValues(alpha: 0.95)
+                    : Colors.black.withValues(alpha: 0.7),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: isDark 
+                      ? Colors.white.withValues(alpha: 0.95)
+                      : Colors.black.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-// 多选项目组件
-class MultiSelectItem extends StatelessWidget {
+// 多选项目组件 - 现代化圆形复选框
+class MultiSelectItem extends StatefulWidget {
   final int id;
   final bool isSelected;
   final Function(int, bool) onSelectionChanged;
@@ -202,48 +271,108 @@ class MultiSelectItem extends StatelessWidget {
   });
 
   @override
+  State<MultiSelectItem> createState() => _MultiSelectItemState();
+}
+
+class _MultiSelectItemState extends State<MultiSelectItem> 
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
+    );
+    
+    if (widget.isSelected) {
+      _controller.value = 1.0;
+    }
+  }
+
+  @override
+  void didUpdateWidget(MultiSelectItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isSelected != oldWidget.isSelected) {
+      if (widget.isSelected) {
+        _controller.forward();
+      } else {
+        _controller.reverse();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return Stack(
       children: [
         // 为卡片添加左侧内边距，为多选按钮留出空间
         Padding(
           padding: const EdgeInsets.only(left: 52),
-          child: child,
+          child: widget.child,
         ),
-        if (enabled)
+        if (widget.enabled)
           Positioned(
-            left: 16,
+            left: 0,
             top: 0,
             bottom: 0,
-            child: Center(
-              child: GestureDetector(
-                onTap: () => onSelectionChanged(id, !isSelected),
-                child: Container(
+            width: 60,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => widget.onSelectionChanged(widget.id, !widget.isSelected),
+              child: Center(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
                   width: 24,
                   height: 24,
-                  decoration: BoxDecoration(
-                    color: isSelected 
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).brightness == Brightness.dark
-                        ? Colors.white.withValues(alpha: 0.1)
-                        : Colors.black.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
-                      color: isSelected 
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white.withValues(alpha: 0.3)
-                          : Colors.black.withValues(alpha: 0.3),
-                      width: 1,
+                    decoration: BoxDecoration(
+                      color: widget.isSelected 
+                        ? primaryColor
+                        : Colors.transparent,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: widget.isSelected 
+                          ? primaryColor
+                          : isDark
+                            ? Colors.white
+                            : Colors.black.withValues(alpha: 0.25),
+                        width: 2,
+                      ),
+                      boxShadow: widget.isSelected
+                        ? [
+                            BoxShadow(
+                              color: primaryColor.withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              spreadRadius: 0,
+                            ),
+                          ]
+                        : null,
                     ),
+                    child: ScaleTransition(
+                      scale: _scaleAnimation,
+                      child: widget.isSelected
+                          ? Icon(
+                              Icons.check_rounded,
+                              size: 16,
+                              color: isDark ? Colors.black87 : Colors.white,
+                            )
+                          : null,
                   ),
-                  child: isSelected
-                      ? Icon(
-                          Icons.check,
-                          size: 16,
-                          color: Theme.of(context).colorScheme.onPrimary,
-                        )
-                      : null,
                 ),
               ),
             ),

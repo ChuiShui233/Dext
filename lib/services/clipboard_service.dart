@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' as flutter_services;
@@ -41,9 +40,8 @@ class ClipboardService with ClipboardListener {
       await clipboardWatcher.start();
       clipboardWatcher.addListener(this);
       _isListening = true;
-      developer.log('原生剪切板监听已启动');
     } catch (e) {
-      developer.log('启动原生剪切板监听失败: $e');
+      // 静默失败
     }
   }
   
@@ -53,7 +51,7 @@ class ClipboardService with ClipboardListener {
       // 申请剪切板读取权限
       final hasPermission = await _requestWebClipboardPermission();
       if (!hasPermission) {
-        developer.log('Web 剪切板权限申请失败');
+        // 权限申请失败，静默返回
         return;
       }
       
@@ -66,9 +64,8 @@ class ClipboardService with ClipboardListener {
         (_) => _checkWebClipboard(),
       );
       
-      developer.log('Web 剪切板监听已启动');
     } catch (e) {
-      developer.log('启动 Web 剪切板监听失败: $e');
+      // 静默失败
     }
   }
   
@@ -79,7 +76,6 @@ class ClipboardService with ClipboardListener {
     try {
       // 检查是否支持 Clipboard API
       if (!_isClipboardApiSupported()) {
-        developer.log('浏览器不支持 Clipboard API');
         return false;
       }
       
@@ -87,11 +83,9 @@ class ClipboardService with ClipboardListener {
       _webClipboardPermissionGranted = true;
       
       // 尝试读取剪切板以测试权限
-      final testRead = await flutter_services.Clipboard.getData(flutter_services.Clipboard.kTextPlain);
-      developer.log('Web 剪切板权限申请成功: ${testRead?.text?.isNotEmpty ?? false}');
+      await flutter_services.Clipboard.getData(flutter_services.Clipboard.kTextPlain);
       return true;
     } catch (e) {
-      developer.log('Web 剪切板权限申请失败: $e');
       _webClipboardPermissionGranted = false;
       return false;
     }
@@ -112,7 +106,6 @@ class ClipboardService with ClipboardListener {
       final clipboardData = await flutter_services.Clipboard.getData(flutter_services.Clipboard.kTextPlain);
       return clipboardData?.text;
     } catch (e) {
-      developer.log('读取 Web 剪切板失败: $e');
       return null;
     }
   }
@@ -132,11 +125,10 @@ class ClipboardService with ClipboardListener {
       // 检测问卷ID
       final surveyId = UrlHandler.instance.detectSurveyIdFromClipboard(content);
       if (surveyId != null && surveyId.isNotEmpty) {
-        developer.log('Web 平台检测到问卷ID: $surveyId');
         _onSurveyIdDetected?.call(surveyId);
       }
     } catch (e) {
-      developer.log('Web 剪切板检查失败: $e');
+      // 静默失败
     }
   }
   
@@ -157,9 +149,8 @@ class ClipboardService with ClipboardListener {
       _isListening = false;
       _onSurveyIdDetected = null;
       _lastClipboardContent = null;
-      developer.log('剪切板监听已停止');
     } catch (e) {
-      developer.log('停止剪切板监听失败: $e');
+      // 静默失败
     }
   }
   
@@ -173,16 +164,16 @@ class ClipboardService with ClipboardListener {
       
       // 避免重复处理相同内容
       if (content.isEmpty || content == _lastClipboardContent) return;
+      
       _lastClipboardContent = content;
       
       // 检测问卷ID
       final surveyId = UrlHandler.instance.detectSurveyIdFromClipboard(content);
       if (surveyId != null && surveyId.isNotEmpty) {
-        developer.log('检测到问卷ID: $surveyId');
         _onSurveyIdDetected?.call(surveyId);
       }
     } catch (e) {
-      developer.log('处理剪切板变化失败: $e');
+      // 静默失败
     }
   }
   
@@ -203,8 +194,8 @@ class ClipboardService with ClipboardListener {
           minHeight: 0,
         ),
         child: Material(
-          color: FTheme.of(context).colors.muted,
-          elevation: 6,
+          color: Colors.white,
+          elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
             side: BorderSide(color: FTheme.of(context).colors.border),
@@ -238,7 +229,7 @@ class ClipboardService with ClipboardListener {
                     FButton(
                       onPress: () {
                         entry.dismiss();
-                        onOpenSurvey();
+                          onOpenSurvey();
                       },
                       child: const Text('打开'),
                     ),

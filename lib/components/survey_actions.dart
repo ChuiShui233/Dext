@@ -104,6 +104,9 @@ class SurveyActions extends StatelessWidget {
               await Clipboard.setData(ClipboardData(text: publicLink));
               if (!context.mounted) return;
               
+              // 关闭Dialog
+              Navigator.of(context).pop();
+              
               showFToast(
                 context: context,
                 alignment: FToastAlignment.bottomRight,

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -29,19 +28,20 @@ class LoginPage extends StatefulWidget {
   _LoginPageState createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final _captchaController = TextEditingController();
   // 添加焦点控制
   final _usernameFocus = FocusNode();
   final _passwordFocus = FocusNode();
+  final _confirmFocus = FocusNode();
   final _captchaFocus = FocusNode();
   
   bool _isLoading = false;
   bool _isRegistering = false;
   bool _agreeToTerms = false;
-  // 默认使用滑块验证
 
   final _apiService = ApiService();
   final _oauthService = OAuthService();
@@ -49,15 +49,109 @@ class _LoginPageState extends State<LoginPage> {
   String? _captchaImage;
   // 缓存解码后的验证码字节，避免每次build解码导致闪烁
   Uint8List? _captchaBytes;
-  Timer? _refreshTimer;
+  
+  // 品牌展示区域的动画控制器
+  late AnimationController _brandAnimationController;
+  late Animation<double> _titleFadeAnimation;
+  late Animation<Offset> _titleSlideAnimation;
+  late Animation<double> _titleScaleAnimation;
+  late Animation<double> _subtitleFadeAnimation;
+  late Animation<Offset> _subtitleSlideAnimation;
+  late Animation<double> _subtitleScaleAnimation;
+  late Animation<double> _descriptionFadeAnimation;
+  late Animation<Offset> _descriptionSlideAnimation;
+  late Animation<double> _descriptionScaleAnimation;
 
   @override
   void initState() {
     super.initState();
     _fetchCaptcha();
-    // 启动定时任务每10分钟刷新令牌
-    _refreshTimer = Timer.periodic(const Duration(minutes: 10), (timer) {
-      _refreshToken();
+    
+    _brandAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    );
+    
+    // 主标题动画
+    _titleFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _brandAnimationController,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
+      ),
+    );
+    
+    _titleSlideAnimation = Tween<Offset>(
+      begin: const Offset(-0.3, 0),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _brandAnimationController,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeOutCubic),
+      ),
+    );
+    
+    _titleScaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _brandAnimationController,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeOutBack),
+      ),
+    );
+    
+    // 副标题动画
+    _subtitleFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _brandAnimationController,
+        curve: const Interval(0.2, 0.6, curve: Curves.easeOut),
+      ),
+    );
+    
+    _subtitleSlideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.5),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _brandAnimationController,
+        curve: const Interval(0.2, 0.6, curve: Curves.easeOutCubic),
+      ),
+    );
+    
+    _subtitleScaleAnimation = Tween<double>(begin: 0.85, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _brandAnimationController,
+        curve: const Interval(0.2, 0.6, curve: Curves.easeOutBack),
+      ),
+    );
+    
+    // 描述文本
+    _descriptionFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _brandAnimationController,
+        curve: const Interval(0.4, 0.8, curve: Curves.easeOut),
+      ),
+    );
+    
+    _descriptionSlideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _brandAnimationController,
+        curve: const Interval(0.4, 0.8, curve: Curves.easeOutCubic),
+      ),
+    );
+    
+    _descriptionScaleAnimation = Tween<double>(begin: 0.9, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _brandAnimationController,
+        curve: const Interval(0.4, 0.8, curve: Curves.easeOutBack),
+      ),
+    );
+    
+    // 延迟启动
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) {
+        _brandAnimationController.forward();
+      }
     });
   }
 
@@ -65,21 +159,22 @@ class _LoginPageState extends State<LoginPage> {
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     _captchaController.dispose();
     _usernameFocus.dispose();
     _passwordFocus.dispose();
+    _confirmFocus.dispose();
     _captchaFocus.dispose();
-    _refreshTimer?.cancel();
+    _brandAnimationController.dispose();
     super.dispose();
   }
 
   String hashPassword(String password) {
-    // 这里应该使用更安全的密码哈希方法
     return password;
   }
 
   Future<void> _launchPrivacyPolicy() async {
-    final Uri url = Uri.parse('https://wucode.xyz/privacy-policy');
+    final Uri url = Uri.parse('https://cc12.eu.org');
     if (await canLaunchUrl(url)) {
       await launchUrl(url);
     } else {
@@ -91,7 +186,7 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _fetchCaptcha() async {
     try {
       final captcha = await ApiService().getTextCaptcha();
-      // 预先解码，避免在build中重复base64解码造成重绘抖动
+      // 预解码
       final String data = captcha['data'];
       final String raw = data.startsWith('data:image') ? data.split(',').last : data;
       final decoded = base64Decode(raw);
@@ -118,19 +213,6 @@ class _LoginPageState extends State<LoginPage> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('auth_token', token);
     await prefs.setString('token_expiry', expires.toIso8601String());
-  }
-
-  Future<void> _refreshToken() async {
-    try {
-      final newToken = await ApiService().refreshToken();
-      if (!mounted) return;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('auth_token', newToken);
-      // 更新过期时间逻辑可以根据API返回的数据进行调整
-    } catch (e) {
-      if (!mounted) return;
-      showErrorDialog('刷新令牌失败: $e');
-    }
   }
 
   Future<void> _handleLogin() async {
@@ -302,7 +384,6 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-///哈哈不会再分个文件写判断的，千年屎山
   Future<void> _handleRegister() async {
     if (_isLoading || !_agreeToTerms) return;
     if (_usernameController.text.trim().isEmpty || _passwordController.text.trim().isEmpty) {
@@ -319,6 +400,14 @@ class _LoginPageState extends State<LoginPage> {
     }
     if (_passwordController.text.length < 8 || _passwordController.text.length > 64) {
       showErrorDialog('密码长度要在8到64个字符之间哦');
+      return;
+    }
+    if (_confirmPasswordController.text.trim().isEmpty) {
+      showErrorDialog('请再次输入确认密码');
+      return;
+    }
+    if (_passwordController.text != _confirmPasswordController.text) {
+      showErrorDialog('两次输入的密码不一致');
       return;
     }
 
@@ -352,6 +441,7 @@ class _LoginPageState extends State<LoginPage> {
                   _isRegistering = false;
                   _usernameController.clear();
                   _passwordController.clear();
+                  _confirmPasswordController.clear();
                 });
               },
             ),
@@ -396,10 +486,43 @@ Widget build(BuildContext context) {
   final isWide = screenWidth > 800;
   final statusBarHeight = MediaQuery.of(context).padding.top;
 
-  final content = AnimatedSwitcher(
-    duration: const Duration(milliseconds: 250),
-    transitionBuilder: (child, animation) =>
-        FadeTransition(opacity: animation, child: child),
+  final Widget content = AnimatedSwitcher(
+    duration: const Duration(milliseconds: 400),
+    switchInCurve: Curves.easeInOut,
+    switchOutCurve: Curves.easeInOut,
+    transitionBuilder: (child, animation) {
+      // 为淡入淡出添加独立的曲线控制
+      final fadeAnimation = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeInOut,
+      );
+      
+      // 桌面端：淡入淡出 + 缩放
+      if (isWide) {
+        return FadeTransition(
+          opacity: fadeAnimation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.95, end: 1.0).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+            ),
+            child: child,
+          ),
+        );
+      }
+      // 移动端：淡入淡出 + 滑动
+      return FadeTransition(
+        opacity: fadeAnimation,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0.0, 0.1),
+            end: Offset.zero,
+          ).animate(
+            CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+          ),
+          child: child,
+        ),
+      );
+    },
     child: _isRegistering ? _buildRegisterForm() : _buildLoginForm(),
   );
 
@@ -434,11 +557,24 @@ Positioned.fill(
           ),
         ),
       ),
-      // 遮罩
-      if (isDark)
-        Container(
-          color: Colors.black.withValues(alpha: 0.4),
+      // 渐变遮罩
+      Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: isDark
+                ? [
+                    Colors.black.withValues(alpha: 0.3),
+                    Colors.black.withValues(alpha: 0.5),
+                  ]
+                : [
+                    Colors.black.withValues(alpha: 0.1),
+                    Colors.black.withValues(alpha: 0.2),
+                  ],
+          ),
         ),
+      ),
     ],
   ),
 ),
@@ -456,19 +592,155 @@ Positioned.fill(
               width: double.infinity,
             ),
           ),
-        Center(
-          child: SingleChildScrollView(
-            child: isWide
-                ? Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [content],
-                  )
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [content],
+        if (isWide)
+          Positioned.fill(
+            child: Row(
+              children: [
+                // 左侧品牌展示区域
+                Expanded(
+                  child: AnimatedSlide(
+                    duration: const Duration(milliseconds: 600),
+                    curve: Curves.easeInOutCubic,
+                    offset: _isRegistering ? const Offset(-0.5, 0) : Offset.zero,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 500),
+                      opacity: _isRegistering ? 0.0 : 1.0,
+                      curve: Curves.easeInOut,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 80, vertical: 60),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 32),
+                            // 主标题 - 带交错动画
+                            FadeTransition(
+                              opacity: _titleFadeAnimation,
+                              child: SlideTransition(
+                                position: _titleSlideAnimation,
+                                child: ScaleTransition(
+                                  scale: _titleScaleAnimation,
+                                  alignment: Alignment.centerLeft,
+                                  child: ShaderMask(
+                                    shaderCallback: (bounds) => LinearGradient(
+                                      colors: [
+                                        Colors.white,
+                                        Colors.white.withValues(alpha: 0.9),
+                                      ],
+                                    ).createShader(bounds),
+                                    child: const Text(
+                                      'Dext Survey',
+                                      style: TextStyle(
+                                        fontSize: 52,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                        fontFamily: 'PingFangSC',
+                                        letterSpacing: 1,
+                                        height: 1.2,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            FadeTransition(
+                              opacity: _subtitleFadeAnimation,
+                              child: SlideTransition(
+                                position: _subtitleSlideAnimation,
+                                child: ScaleTransition(
+                                  scale: _subtitleScaleAnimation,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    '问卷调查平台',
+                                    style: TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                      fontFamily: 'PingFangSC',
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            FadeTransition(
+                              opacity: _descriptionFadeAnimation,
+                              child: SlideTransition(
+                                position: _descriptionSlideAnimation,
+                                child: ScaleTransition(
+                                  scale: _descriptionScaleAnimation,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    '轻松创建、发布和管理问卷\n实时收集反馈，深入分析数据\n让每一次调查都更有价值',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      color: Colors.white.withValues(alpha: 0.7),
+                                      fontFamily: 'PingFangSC',
+                                      height: 1.8,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
+                ),
+                // 右侧登录表单
+                ClipRect(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(
+                      sigmaX: 20.0,
+                      sigmaY: 20.0,
+                      tileMode: TileMode.clamp,
+                    ),
+                    child: SizedBox(
+                      width: 500,
+                      child: content,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          Positioned.fill(
+            child: ClipRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(
+                  sigmaX: 20.0,
+                  sigmaY: 20.0,
+                  tileMode: TileMode.clamp,
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: isDark
+                          ? [
+                              Colors.black.withValues(alpha: 0.3),
+                              Colors.black.withValues(alpha: 0.4),
+                            ]
+                          : [
+                              Colors.white.withValues(alpha: 0.6),
+                              Colors.white.withValues(alpha: 0.5),
+                            ],
+                    ),
+                  ),
+                  child: Center(
+                    child: SingleChildScrollView(
+                      child: content,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
         Positioned(
           top: isDesktop ? 40 : statusBarHeight + 16,
           right: 16,
@@ -487,389 +759,644 @@ Positioned.fill(
 
 
   Widget _buildCaptchaCard() {
-    return Column(
+    return Row(
       children: [
-        Row(
-          children: [
-            if (_captchaBytes != null)
-              GestureDetector(
-                onTap: _fetchCaptcha,
-                child: RepaintBoundary(
-                  child: SizedBox(
-                    height: 48,
-                    width: 120,
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 200),
-                      switchInCurve: Curves.easeOut,
-                      switchOutCurve: Curves.easeIn,
-                      layoutBuilder: (currentChild, previousChildren) {
-                        return Stack(
-                          alignment: Alignment.centerLeft,
-                          children: <Widget>[
-                            ...previousChildren,
-                            if (currentChild != null) currentChild,
-                          ],
-                        );
-                      },
-                      child: Image.memory(
-                        _captchaBytes!,
-                        key: ValueKey(_captchaId), // 仅当验证码变更时触发动画
-                        fit: BoxFit.contain,
-                        gaplessPlayback: true,
-                      ),
-                    ),
+        if (_captchaBytes != null)
+          GestureDetector(
+            onTap: _fetchCaptcha,
+            child: Container(
+              height: 60,
+              width: 150,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.3),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: RepaintBoundary(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  child: Image.memory(
+                    _captchaBytes!,
+                    key: ValueKey(_captchaId),
+                    fit: BoxFit.fill,
+                    gaplessPlayback: true,
                   ),
                 ),
               ),
-            if (_captchaImage == null)
-             Expanded(
-  child: SizedBox(
-    width: 48,
-    height: 48,
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Builder(
-          builder: (context) {
-            final textColor = Theme.of(context).textTheme.bodyMedium?.color ?? Colors.black;
-            return AnimatedDefaultTextStyle(
-              duration: Duration.zero, // 禁止文字颜色渐变动画
-              style: TextStyle(
-                color: textColor,
-                fontSize: 14,
-              ),
-              child: const Text('获取中...'),
-            );
-          },
-        ),
-        const SizedBox(width: 4),
-        SizedBox(
-          width: 12,
-          height: 12,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        if (_captchaImage == null)
+          Container(
+            height: 60,
+            width: 150,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              color: Colors.white.withValues(alpha: 0.1),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white.withValues(alpha: 0.7),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '加载中',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: FTextField(
+            controller: _captchaController,
+            focusNode: _captchaFocus,
+            label: const Text('验证码'),
+            hint: '请输入验证码',
+            textInputAction: TextInputAction.done,
+            onEditingComplete: () => _isRegistering
+                ? (_isLoading || !_agreeToTerms) ? null : _handleRegister()
+                : _isLoading ? null : _handleLogin(),
           ),
         ),
-      ],
-    ),
-  ),
-),
-
-            const SizedBox(width: 8),
-            Expanded(
-              child: FTextField(
-                controller: _captchaController,
-                focusNode: _captchaFocus,
-                label: const Text('验证码'),
-                hint: '请输入图片中的验证码',
-                textInputAction: TextInputAction.done,
-                onEditingComplete: () => _isRegistering ? 
-                  (_isLoading || !_agreeToTerms) ? null : _handleRegister() : 
-                  _isLoading ? null : _handleLogin(),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
       ],
     );
   }
 
-  Widget _buildLoginForm() {
-  return Container(
-    padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
-    constraints: const BoxConstraints(maxWidth: 430),
-    child: Material(
-      color: Colors.transparent,
-      shape: RoundedSuperellipseBorder(
-        borderRadius: BorderRadius.circular(12.0),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaX: 12.0,
-          sigmaY: 12.0,
-          tileMode: TileMode.clamp,
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            color: CupertinoColors.white.withAlpha(51), // 半透明背景
-            border: Border.all(
-              color: CupertinoDynamicColor.resolve(CupertinoColors.white, context)
-                  .withAlpha(51),
-              width: 0.8,
-            ),
-            borderRadius: BorderRadius.circular(12.0),
+  Widget _buildOAuthButton({
+    required VoidCallback onTap,
+    required IconData icon,
+    required String label,
+    required List<Color> colors,
+  }) {
+    return Container(
+      height: 48,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: colors),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: colors[0].withValues(alpha: 0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
           ),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _isLoading ? null : onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              AnimatedDefaultTextStyle(
-                duration: Duration.zero,
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).textTheme.titleLarge?.color ?? Colors.black,
+              Icon(icon, size: 20, color: Colors.white),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
                   fontFamily: 'PingFangSC',
-                ),
-                child: const Text('登录'),
-              ),
-              const SizedBox(height: 20),
-              FTextField(
-                controller: _usernameController,
-                focusNode: _usernameFocus,
-                label: const Text('用户名'),
-                hint: '请输入用户名',
-                textInputAction: TextInputAction.next,
-                onEditingComplete: () =>
-                    FocusScope.of(context).requestFocus(_passwordFocus),
-              ),
-              const SizedBox(height: 20),
-              FTextField(
-                controller: _passwordController,
-                focusNode: _passwordFocus,
-                label: const Text('密码'),
-                hint: '请输入密码',
-                obscureText: true,
-                textInputAction: TextInputAction.next,
-                onEditingComplete: () =>
-                    FocusScope.of(context).requestFocus(_captchaFocus),
-              ),
-              const SizedBox(height: 20),
-              _buildCaptchaCard(),
-              const SizedBox(height: 20),
-              FButton(
-                onPress: _isLoading ? null : _handleLogin,
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('登录'),
-              ),
-              const SizedBox(height: 20),
-              FButton(
-                style: FButtonStyle.destructive,
-                onPress: _isLoading ? null : () => setState(() => _isRegistering = true),
-                child: const Text('注册'),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(child: Divider(color: Colors.grey.withValues(alpha: 0.5))),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      '或使用第三方登录',
-                      style: TextStyle(
-                        color: Colors.grey.withValues(alpha: 0.8),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                  Expanded(child: Divider(color: Colors.grey.withValues(alpha: 0.5))),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: FButton(
-                      style: FButtonStyle.outline,
-                      onPress: _isLoading ? null : _handleGoogleLogin,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.g_mobiledata,
-                            size: 20,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                          const SizedBox(width: 8),
-                          const Text('Google'),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FButton(
-                      style: FButtonStyle.outline,
-                      onPress: _isLoading ? null : _handleGitHubLogin,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.code,
-                            size: 20,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                          const SizedBox(width: 8),
-                          const Text('GitHub'),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              FButton(
-                style: FButtonStyle.outline,
-                onPress: _isLoading ? null : _handleMicrosoftLogin,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.business,
-                      size: 20,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    const SizedBox(width: 8),
-                    const Text('Microsoft'),
-                  ],
                 ),
               ),
             ],
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
+
+  Widget _buildLoginForm() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWide = screenWidth > 800;
+    
+    final loginContent = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ShaderMask(
+          shaderCallback: (bounds) => LinearGradient(
+            colors: [
+              Theme.of(context).colorScheme.primary,
+              Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+            ],
+          ).createShader(bounds),
+          child: const Text(
+            '欢迎回来',
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              fontFamily: 'PingFangSC',
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '登录以继续使用 Dext',
+          style: TextStyle(
+            fontSize: 14,
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.6)
+                : Colors.black.withValues(alpha: 0.5),
+            fontFamily: 'PingFangSC',
+          ),
+        ),
+        const SizedBox(height: 32),
+        FTextField(
+          controller: _usernameController,
+          focusNode: _usernameFocus,
+          label: const Text('用户名'),
+          hint: '请输入用户名',
+          textInputAction: TextInputAction.next,
+          onEditingComplete: () =>
+              FocusScope.of(context).requestFocus(_passwordFocus),
+        ),
+        const SizedBox(height: 16),
+        FTextField(
+          controller: _passwordController,
+          focusNode: _passwordFocus,
+          label: const Text('密码'),
+          hint: '请输入密码',
+          obscureText: true,
+          textInputAction: TextInputAction.next,
+          onEditingComplete: () =>
+              FocusScope.of(context).requestFocus(_captchaFocus),
+        ),
+        const SizedBox(height: 16),
+        _buildCaptchaCard(),
+        const SizedBox(height: 24),
+        Container(
+          width: double.infinity,
+          height: 50,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: 
+                  [
+                      Colors.black.withValues(alpha: 0.85),
+                      Colors.black.withValues(alpha: 0.7),
+                    ],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: isDark
+                ? []
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _isLoading ? null : _handleLogin,
+              borderRadius: BorderRadius.circular(12),
+              child: Center(
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text(
+                        '登录',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          fontFamily: 'PingFangSC',
+                        ),
+                      ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          width: double.infinity,
+          height: 50,
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+              width: 1.5,
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _isLoading ? null : () => setState(() => _isRegistering = true),
+              borderRadius: BorderRadius.circular(12),
+              child: Center(
+                child: Text(
+                  '注册新账号',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'PingFangSC',
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                height: 1,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      (isDark ? Colors.white : Colors.black).withValues(alpha: 0.2),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                '或使用第三方登录',
+                style: TextStyle(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.5)
+                      : Colors.black.withValues(alpha: 0.4),
+                  fontSize: 12,
+                  fontFamily: 'PingFangSC',
+                ),
+              ),
+            ),
+            Expanded(
+              child: Container(
+                height: 1,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      (isDark ? Colors.white : Colors.black).withValues(alpha: 0.2),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            Expanded(
+              child: _buildOAuthButton(
+                onTap: _handleGoogleLogin,
+                icon: Icons.g_mobiledata,
+                label: 'Google',
+                colors: const [Color(0xFF4285F4), Color(0xFF357AE8)],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildOAuthButton(
+                onTap: _handleGitHubLogin,
+                icon: Icons.code,
+                label: 'GitHub',
+                colors: const [Color(0xFF24292E), Color(0xFF1B1F23)],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _buildOAuthButton(
+          onTap: _handleMicrosoftLogin,
+          icon: Icons.business,
+          label: 'Microsoft',
+          colors: const [Color(0xFF00A4EF), Color(0xFF0078D4)],
+        ),
+      ],
+    );
+    
+    if (isWide) {
+      // 桌面端
+      return ClipRect(
+        key: const ValueKey('login_form'),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isDark
+                  ? [
+                      Colors.black.withValues(alpha: 0.4),
+                      Colors.black.withValues(alpha: 0.3),
+                    ]
+                  : [
+                      Colors.white.withValues(alpha: 0.8),
+                      Colors.white.withValues(alpha: 0.6),
+                    ],
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 60,
+            vertical: 80,
+          ),
+          child: Center(
+            child: SingleChildScrollView(
+              child: loginContent,
+            ),
+          ),
+        ),
+      );
+    }
+    
+    // 移动端
+    return Container(
+      key: const ValueKey('login_form'),
+      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 32),
+      constraints: const BoxConstraints(maxWidth: 450),
+      child: loginContent,
+    );
+  }
 
 
 Widget _buildRegisterForm() {
-  return Container(
-    padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
-    constraints: const BoxConstraints(maxWidth: 430),
-    child: Material(
-      color: Colors.transparent,
-      shape: RoundedSuperellipseBorder(
-        borderRadius: BorderRadius.circular(12.0),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaX: 12.0,
-          sigmaY: 12.0,
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            color: CupertinoColors.white.withAlpha(51),
-            border: Border.all(
-              color: CupertinoDynamicColor.resolve(CupertinoColors.white, context)
-                  .withAlpha(51),
-              width: 0.8,
-            ),
-            borderRadius: BorderRadius.circular(12.0),
-          ),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 顶部返回按钮 + 注册标题
-              SizedBox(
-  height: 40,
-  child: Stack(
-    alignment: Alignment.center,
-    children: [
-      // 返回按钮靠左
-      Positioned(
-        left: 0,
-        child: FButton.icon(
-          onPress: _isLoading ? null : () => setState(() => _isRegistering = false),
-          child: Icon(FIcons.chevronLeft),
-        ),
-      ),
-      // 注册文本居中，统一动画样式
-      Center(
-        child: AnimatedDefaultTextStyle(
-          duration: Duration.zero,
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Theme.of(context).textTheme.titleLarge?.color ?? Colors.black,
-            fontFamily: 'PingFangSC',
-          ),
-          child: const Text('注册'),
-        ),
-      ),
-    ],
-  ),
-),
-              const SizedBox(height: 20),
-              // 用户名
-              FTextField(
-                controller: _usernameController,
-                focusNode: _usernameFocus,
-                label: const Text('用户名'),
-                hint: '请输入用户名',
-                textInputAction: TextInputAction.next,
-                onEditingComplete: () => FocusScope.of(context).requestFocus(_passwordFocus),
-              ),
-              const SizedBox(height: 20),
-              // 密码
-              FTextField(
-                controller: _passwordController,
-                focusNode: _passwordFocus,
-                label: const Text('密码'),
-                hint: '请输入密码',
-                obscureText: true,
-                textInputAction: TextInputAction.next,
-                onEditingComplete: () => FocusScope.of(context).requestFocus(_captchaFocus),
-              ),
-              const SizedBox(height: 20),
-              // 验证码
-              _buildCaptchaCard(),
-              const SizedBox(height: 20),
-              // 同意条款
-              FCheckbox(
-                label: const Text('同意隐私条款'),
-                description: Row(
-                  children: [
-                    const Text('请阅读并同意我们的'),
-                    MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: GestureDetector(
-                        onTap: _launchPrivacyPolicy,
-                        child: const Text(
-                          '隐私条款',
-                          style: TextStyle(
-                            color: Color.fromARGB(255, 184, 222, 247),
-                            decoration: TextDecoration.underline,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWide = screenWidth > 800;
+    
+    final registerContent = Column(
+      mainAxisSize: MainAxisSize.min,
+                children: [
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Positioned(
+                        left: 0,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            onPressed: _isLoading
+                                ? null
+                                : () => setState(() => _isRegistering = false),
+                            icon: Icon(
+                              Icons.arrow_back,
+                              color: isDark ? Colors.white : Colors.black,
+                            ),
                           ),
                         ),
                       ),
+                      Center(
+                        child: ShaderMask(
+                          shaderCallback: (bounds) => LinearGradient(
+                            colors: [
+                              Theme.of(context).colorScheme.primary,
+                              Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                            ],
+                          ).createShader(bounds),
+                          child: const Text(
+                            '创建账号',
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              fontFamily: 'PingFangSC',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '加入 Dext，开始创建问卷',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.6)
+                          : Colors.black.withValues(alpha: 0.5),
+                      fontFamily: 'PingFangSC',
                     ),
-                    const Text('。'),
-                  ],
-                ),
-                value: _agreeToTerms,
-                onChange: (val) => setState(() => _agreeToTerms = val),
-              ),
-              const SizedBox(height: 20),
-              // 注册按钮
-              FButton(
-                onPress: (_isLoading || !_agreeToTerms) ? null : _handleRegister,
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('注册'),
-              ),
-            ],
+                  ),
+                  const SizedBox(height: 32),
+                  FTextField(
+                    controller: _usernameController,
+                    focusNode: _usernameFocus,
+                    label: const Text('用户名'),
+                    hint: '3-12个字符',
+                    textInputAction: TextInputAction.next,
+                    onEditingComplete: () =>
+                        FocusScope.of(context).requestFocus(_passwordFocus),
+                  ),
+                  const SizedBox(height: 16),
+                  FTextField(
+                    controller: _passwordController,
+                    focusNode: _passwordFocus,
+                    label: const Text('密码'),
+                    hint: '8-64个字符',
+                    obscureText: true,
+                    textInputAction: TextInputAction.next,
+                    onEditingComplete: () =>
+                        FocusScope.of(context).requestFocus(_confirmFocus),
+                  ),
+                  const SizedBox(height: 16),
+                  FTextField(
+                    controller: _confirmPasswordController,
+                    focusNode: _confirmFocus,
+                    label: const Text('确认密码'),
+                    hint: '请再次输入密码',
+                    obscureText: true,
+                    textInputAction: TextInputAction.next,
+                    onEditingComplete: () =>
+                        FocusScope.of(context).requestFocus(_captchaFocus),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildCaptchaCard(),
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.05)
+                          : Colors.black.withValues(alpha: 0.03),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.1)
+                            : Colors.black.withValues(alpha: 0.1),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Checkbox(
+                          value: _agreeToTerms,
+                          onChanged: (val) =>
+                              setState(() => _agreeToTerms = val ?? false),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Wrap(
+                            children: [
+                              Text(
+                                '我已阅读并同意 ',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.7)
+                                      : Colors.black.withValues(alpha: 0.7),
+                                ),
+                              ),
+                              MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: GestureDetector(
+                                  onTap: _launchPrivacyPolicy,
+                                  child: Text(
+                                    '隐私政策',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Theme.of(context).colorScheme.primary,
+                                      decoration: TextDecoration.underline,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Container(
+                    width: double.infinity,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: (_isLoading || !_agreeToTerms)
+                            ? [
+                                Colors.grey.withValues(alpha: 0.3),
+                                Colors.grey.withValues(alpha: 0.2),
+                              ]
+                                : [
+                                    Colors.black.withValues(alpha: 0.85),
+                                    Colors.black.withValues(alpha: 0.7),
+                                  ],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: (_isLoading || !_agreeToTerms || isDark)
+                          ? []
+                          : [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.2),
+                                blurRadius: 12,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: (_isLoading || !_agreeToTerms) ? null : _handleRegister,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Center(
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : const Text(
+                                  '注册',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    fontFamily: 'PingFangSC',
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+    
+    if (isWide) {
+      return ClipRect(
+        key: const ValueKey('register_form'),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isDark
+                  ? [
+                      Colors.black.withValues(alpha: 0.4),
+                      Colors.black.withValues(alpha: 0.3),
+                    ]
+                  : [
+                      Colors.white.withValues(alpha: 0.8),
+                      Colors.white.withValues(alpha: 0.6),
+                    ],
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 60,
+            vertical: 80,
+          ),
+          child: Center(
+            child: SingleChildScrollView(
+              child: registerContent,
+            ),
           ),
         ),
-      ),
-    ),
-  );
-}
+      );
+    }
+    
+    // 移动端
+    return Container(
+      key: const ValueKey('register_form'),
+      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 32),
+      constraints: const BoxConstraints(maxWidth: 450),
+      child: registerContent,
+    );
+  }
 }

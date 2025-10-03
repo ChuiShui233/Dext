@@ -6,6 +6,7 @@ import '../models/user.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import '../services/config.dart';
+import '../widgets/crop_image_dialog.dart';
 
 class HomeSettingsContent extends StatefulWidget {
   final VoidCallback onLogout;
@@ -63,6 +64,33 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
       );
 
       if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        Uint8List? imageBytes;
+
+        // 获取图片数据
+        if (file.bytes != null) {
+          // Web 和桌面端优先使用 bytes
+          imageBytes = file.bytes!;
+        } else if (file.path != null) {
+          // 移动端使用文件路径读取
+          final imageFile = File(file.path!);
+          imageBytes = await imageFile.readAsBytes();
+        } else {
+          throw '无法获取图片数据';
+        }
+
+        // 显示裁剪对话框
+        if (!mounted) return;
+        final Uint8List? croppedBytes = await showDialog<Uint8List>(
+          context: context,
+          builder: (context) => CropImageDialog(
+            imageBytes: imageBytes,
+          ),
+        );
+
+        // 用户取消裁剪
+        if (croppedBytes == null) return;
+
         if (mounted) {
           showFToast(
             context: context,
@@ -70,29 +98,11 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
           );
         }
 
-        final file = result.files.first;
-        String avatarUrl;
-
-        // Web平台使用字节数据，移动端使用文件路径
-        if (kIsWeb) {
-          if (file.bytes != null && file.name.isNotEmpty) {
-            avatarUrl = await widget.apiService.uploadAvatarUniversal(
-              imageBytes: file.bytes!,
-              fileName: file.name,
-            );
-          } else {
-            throw '无法获取图片数据';
-          }
-        } else {
-          if (file.path != null) {
-            final imageFile = File(file.path!);
-            avatarUrl = await widget.apiService.uploadAvatarUniversal(
-              imageFile: imageFile,
-            );
-          } else {
-            throw '无法获取文件路径';
-          }
-        }
+        // 上传裁剪后的图片
+        final String avatarUrl = await widget.apiService.uploadAvatarUniversal(
+          imageBytes: croppedBytes,
+          fileName: file.name.isNotEmpty ? file.name : 'avatar.png',
+        );
 
         setState(() {
           _currentUser = _currentUser?.copyWith(avatarUrl: avatarUrl);

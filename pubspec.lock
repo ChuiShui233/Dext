@@ -161,6 +161,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.2"
+  crop_image_plus:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: master
+      resolved-ref: "38aa0e8d3aef27859a0fa6645ae6bc22cde57a42"
+      url: "https://github.com/ChuiShui233/crop_image_plus.git"
+    source: git
+    version: "1.0.16"
   cross_file:
     dependency: transitive
     description:
@@ -225,6 +234,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.3"
+  equatable:
+    dependency: transitive
+    description:
+      name: equatable
+      sha256: "567c64b3cb4cf82397aac55f4f0cbd3ca20d77c6c03bedbc4ceaddc08904aef7"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.7"
   fake_async:
     dependency: transitive
     description:
@@ -305,6 +322,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.1"
+  fl_chart:
+    dependency: "direct main"
+    description:
+      name: fl_chart
+      sha256: "74959b99b92b9eebeed1a4049426fd67c4abc3c5a0f4d12e2877097d6a11ae08"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.69.2"
   flat_buffers:
     dependency: transitive
     description:
@@ -720,10 +745,11 @@ packages:
   oauth2_client:
     dependency: "direct main"
     description:
-      name: oauth2_client
-      sha256: d6a146049f36ef2da32bdc7a7a9e5671a0e66ea596d8f70a26de4cddfcab4d2e
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: main
+      resolved-ref: "4401ff3715d12f8bf778162514275066abab3c69"
+      url: "https://github.com/ChuiShui233/oauth2_client-4.2.0_Plus.git"
+    source: git
     version: "4.2.0"
   octo_image:
     dependency: transitive

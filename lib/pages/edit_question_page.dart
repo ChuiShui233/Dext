@@ -804,9 +804,21 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
           ],
         ),
         const SizedBox(height: 8),
-        ..._options.map((option) => ListTile(
+        ..._options.map((option) {
+          // 计算跳转有效性：-1 表示结束问卷；或目标题存在
+          final int? targetId = _jumpLogic[option.id];
+          final bool hasValidJump = targetId != null && (targetId == -1 || _allQuestions.any((q) => q.id == targetId));
+          Question? targetQ;
+          if (targetId != null && targetId > 0) {
+            final idx = _allQuestions.indexWhere((q) => q.id == targetId);
+            targetQ = idx != -1 ? _allQuestions[idx] : null;
+          } else {
+            targetQ = null;
+          }
+
+          return ListTile(
           title: Text(option.text),
-          subtitle: ((option.mediaUrl != null && option.mediaUrl!.isNotEmpty) || _jumpLogic.containsKey(option.id))
+          subtitle: ((option.mediaUrl != null && option.mediaUrl!.isNotEmpty) || hasValidJump)
               ? Padding(
                   padding: const EdgeInsets.only(top: 8.0),
                   child: Column(
@@ -828,18 +840,15 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
                             ),
                           ),
                         ),
-                      if (_jumpLogic.containsKey(option.id))
+                      if (hasValidJump)
                         Padding(
                           padding: const EdgeInsets.only(top: 6),
                           child: Text(
-                            () {
-                              final targetId = _jumpLogic[option.id]!;
-                              final target = _allQuestions.firstWhere(
-                                (q) => q.id == targetId,
-                                orElse: () => Question(id: 0, title: '（未知）', type: QuestionType.singleChoice, options: [], required: true, order: 0),
-                              );
-                              return '跳转至：第${target.order + 1}题 ${target.title}';
-                            }(),
+                            targetId == -1
+                                ? '跳转至：结束问卷'
+                                : (targetQ != null
+                                    ? '跳转至：第${targetQ.order + 1}题 ${targetQ.title}'
+                                    : '跳转：默认（下一题）'),
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
@@ -853,28 +862,53 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
               if (_selectedType == QuestionType.singleChoice)
                 IconButton(
                   tooltip: "设置跳题逻辑",
-                  icon: Icon(Icons.call_split, color: _jumpLogic.containsKey(option.id) ? Theme.of(context).primaryColor : null),
+                  icon: Icon(
+                    Icons.call_split,
+                    color: hasValidJump
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
                   onPressed: () => _setJumpLogic(option),
                 ),
               if (_selectedType == QuestionType.singleChoice)
                 IconButton(
                   tooltip: "清除跳转",
-                  icon: const Icon(Icons.clear_all),
-                  onPressed: () {
-                    setState(() {
-                      final idx = _options.indexWhere((o) => o.id == option.id);
-                      if (idx != -1) {
-                        _options[idx] = _options[idx].copyWith(destination: null);
-                      }
-                      _jumpLogic.remove(option.id);
-                    });
-                  },
+                  icon: Icon(
+                    Icons.clear_all,
+                    color: hasValidJump
+                        ? Theme.of(context).colorScheme.error
+                        : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
+                  ),
+                  onPressed: hasValidJump
+                      ? () {
+                          setState(() {
+                            final idx = _options.indexWhere((o) => o.id == option.id);
+                            if (idx != -1) {
+                              _options[idx] = _options[idx].copyWith(destination: null);
+                            }
+                            _jumpLogic.remove(option.id);
+                          });
+                        }
+                      : null,
                 ),
-              IconButton(icon: const Icon(Icons.edit), onPressed: () => _editOption(option)),
-              IconButton(icon: const Icon(Icons.delete), onPressed: () => _deleteOption(option)),
+              IconButton(
+                icon: Icon(
+                  Icons.edit,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                onPressed: () => _editOption(option),
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.delete,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                onPressed: () => _deleteOption(option),
+              ),
             ],
           ),
-        )),
+          );
+        }),
         FButton(
           style: FButtonStyle.outline,
           onPress: _addOption,
@@ -1381,9 +1415,21 @@ class _JumpLogicDialogState extends State<JumpLogicDialog> {
     _selectedQuestionId = widget.currentJumpTo;
   }
 
+  String _getQuestionTypeLabel(QuestionType type) {
+    switch (type) {
+      case QuestionType.singleChoice: return '单选';
+      case QuestionType.multipleChoice: return '多选';
+      case QuestionType.slider: return '评级';
+      case QuestionType.matrix: return '矩阵';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final availableQuestions = widget.questions.where((q) => q.id != widget.currentQuestionId).toList();
+    final availableQuestions = widget.questions
+        .where((q) => q.id != widget.currentQuestionId)
+        .toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
 
     return FDialog(
       direction: Axis.horizontal,
@@ -1398,17 +1444,18 @@ class _JumpLogicDialogState extends State<JumpLogicDialog> {
             hint: '默认（下一题）',
             format: (value) {
               if (value == -1) return '结束问卷';
-              final question = availableQuestions.firstWhere(
-                (q) => q.id == value,
-                orElse: () => Question(id: 0, title: '未知问题', type: QuestionType.singleChoice, options: [], required: true, order: 0),
-              );
-              return '第${question.order + 1}题: ${question.title}';
+              final idx = availableQuestions.indexWhere((q) => q.id == value);
+              if (idx == -1) return '默认（下一题）';
+              final question = availableQuestions[idx];
+              return '第${question.order + 1}题：${question.title} (${_getQuestionTypeLabel(question.type)})';
             },
             initialValue: _selectedQuestionId,
             onChange: (value) => setState(() => _selectedQuestionId = value),
             children: [
-              ...availableQuestions.map((q) => FSelectItem('第${q.order + 1}题: ${q.title}', q.id)),
-              FSelectItem('结束问卷', -1), // Use -1 to represent ending the survey
+              ...availableQuestions.map((q) => 
+                FSelectItem('第${q.order + 1}题：${q.title} (${_getQuestionTypeLabel(q.type)})', q.id)
+              ),
+              FSelectItem('结束问卷', -1),
             ],
           ),
         ],

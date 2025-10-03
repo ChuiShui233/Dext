@@ -54,9 +54,17 @@ dependencies:
   clipboard_watcher: ^0.2.0
   pointycastle: ^4.0.0
   desktop_drop: ^0.6.1
-  oauth2_client: ^4.2.0
+  oauth2_client:
+    git:
+      url: https://github.com/ChuiShui233/oauth2_client-4.2.0_Plus.git
+      ref: main
   flutter_speed_dial: ^7.0.0
   connectivity_plus: ^7.0.0
+  fl_chart: ^0.69.0
+  crop_image_plus:
+    git:
+      url: https://github.com/ChuiShui233/crop_image_plus.git
+      ref: master
 
 dev_dependencies:
   flutter_test:

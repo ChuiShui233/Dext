@@ -7,7 +7,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/api_service.dart';
 import '../models/question.dart';
 import '../controllers/survey_runtime.dart';
-import 'public_access_page.dart';
 import '../components/glass_card.dart';
 import '../widgets/question_display_widget.dart';
 import 'fullscreen_media_viewer.dart';
@@ -722,19 +721,8 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
 
   /// 导航到公开访问页面，避免Web端路由SecurityError
   void _navigateToPublicAccess() {
-    if (kIsWeb) {
-      // Web平台直接使用MaterialPageRoute替换当前页面
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const PublicAccessPage(),
-          settings: const RouteSettings(name: '/public/access'),
-        ),
-      );
-    } else {
-      // 移动平台使用路由导航
-      Navigator.pushNamedAndRemoveUntil(context, '/public/access', (route) => false);
-    }
+    // 直接返回主页
+    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
   }
 
 }

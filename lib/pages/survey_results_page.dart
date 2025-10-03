@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../widgets/top_safe_spacer.dart';
 import 'package:flutter/material.dart' as vmath;
 import 'package:forui/forui.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import '../models/survey.dart';
@@ -48,6 +49,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
   String? _errorMessage;
   Set<int> _selectedResults = {};
   bool _isSelectionMode = false;
+  bool _usePieChart = false; // 是否使用饼状图
   late final ApiService _apiService;
   String? _desktopBackground;
   String? _mobileBackground;
@@ -65,6 +67,98 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
     final firstId = lenR > 0 ? _results.first.id : -1;
     final lastId = lenR > 0 ? _results.last.id : -1;
     return '$lenR-$lenQ-$firstId-$lastId';
+  }
+
+  // 饼状图
+  Widget _buildPieChart(Map<int, int> stats, List<QuestionOption> options, int total) {
+    if (stats.isEmpty || total == 0) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Text('暂无数据'),
+        ),
+      );
+    }
+
+    final List<Color> pieColors = [
+      Colors.blue,
+      Colors.green,
+      Colors.orange,
+      Colors.purple,
+      Colors.red,
+      Colors.teal,
+      Colors.pink,
+      Colors.amber,
+      Colors.cyan,
+      Colors.indigo,
+    ];
+
+    final sections = stats.entries.map((entry) {
+      final optionIndex = entry.key;
+      final count = entry.value;
+      final percentage = (count / total * 100);
+      final color = pieColors[optionIndex % pieColors.length];
+      
+      return PieChartSectionData(
+        value: count.toDouble(),
+        title: '${percentage.toStringAsFixed(1)}%',
+        color: color,
+        radius: 100,
+        titleStyle: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      );
+    }).toList();
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 250,
+          child: PieChart(
+            PieChartData(
+              sections: sections,
+              sectionsSpace: 2,
+              centerSpaceRadius: 0,
+              borderData: FlBorderData(show: false),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        // 图例
+        Wrap(
+          spacing: 16,
+          runSpacing: 8,
+          children: stats.entries.map((entry) {
+            final optionIndex = entry.key;
+            final count = entry.value;
+            final optionText = optionIndex < options.length ? options[optionIndex].text : '选项 ${optionIndex + 1}';
+            final percentage = (count / total * 100).toStringAsFixed(1);
+            final color = pieColors[optionIndex % pieColors.length];
+            
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '$optionText: $count次 ($percentage%)',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            );
+          }).toList(),
+        ),
+      ],
+    );
   }
 
   // 比例条：当 ratio==1.0 时显示循环炫彩流动彩虹色
@@ -172,7 +266,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
     // 解析答案：新数据为 1..stars（含0.5）；旧数据为[min..max]区间的原值
     double min = q.ratingMin;
     double max = q.ratingMax;
-    double initial = q.ratingInitial;
     int stars = q.ratingStars;
     bool allowHalf = q.ratingAllowHalf;
     final String style = q.ratingStyle; // star | crumb
@@ -182,24 +275,44 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
     final String maxLabel = q.ratingMaxLabel.isNotEmpty ? q.ratingMaxLabel : '最大值';
     final labelsMap = q.ratingLabels; // Map<double,String>
 
+    // 如果用户未填写评分，显示提示
+    if (selectChoices.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(left: 16, top: 4),
+        child: Text(
+          '未评分',
+          style: TextStyle(
+            fontSize: 14,
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+          ),
+        ),
+      );
+    }
+
     double v;
-    if (selectChoices.isNotEmpty) {
-      final parsed = double.tryParse(selectChoices);
-      if (parsed != null) {
-        // 判断是否已经是 1..stars 范围
-        if (parsed >= 0.5 && parsed <= stars + 0.001) {
-          v = parsed;
-        } else {
-          // 旧数据：按 min..max 映射到 1..stars
-          final clamped = parsed.clamp(min, max);
-          final ratio = (max > min) ? ((clamped - min) / (max - min)).clamp(0.0, 1.0) : 0.0;
-          v = 1.0 + ratio * (stars - 1);
-        }
+    final parsed = double.tryParse(selectChoices);
+    if (parsed != null) {
+      // 判断是否已经是 1..stars 范围
+      if (parsed >= 0.5 && parsed <= stars + 0.001) {
+        v = parsed;
       } else {
-        v = initial;
+        // 旧数据：按 min..max 映射到 1..stars
+        final clamped = parsed.clamp(min, max);
+        final ratio = (max > min) ? ((clamped - min) / (max - min)).clamp(0.0, 1.0) : 0.0;
+        v = 1.0 + ratio * (stars - 1);
       }
     } else {
-      v = initial;
+      // 无法解析，显示未评分
+      return Padding(
+        padding: const EdgeInsets.only(left: 16, top: 4),
+        child: Text(
+          '未评分',
+          style: TextStyle(
+            fontSize: 14,
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+          ),
+        ),
+      );
     }
 
     // 限制范围
@@ -755,15 +868,21 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (_isSelectionMode)
-                        Checkbox(
-                          value: isSelected,
-                          onChanged: (_) => _toggleSelection(result.id),
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Checkbox(
+                            value: isSelected,
+                            onChanged: (_) => _toggleSelection(result.id),
+                          ),
                         ),
                       Expanded(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Text(
                               '作答者: ${result.userAccount}',
@@ -772,29 +891,25 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            Row(
-                              children: [
-                                Text(
-                                  DateFormatUtils.formatIsoString(result.createTime),
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                if (!_isSelectionMode)
-                                  FButton(
-                                    style: FButtonStyle.ghost,
-                                    onPress: () => _showDeleteConfirmDialog(result.id),
-                                    child: Icon(
-                                      Icons.delete,
-                                      size: 18,
-                                      color: Theme.of(context).colorScheme.error,
-                                    ),
-                                  ),
-                              ],
+                            Text(
+                              DateFormatUtils.formatIsoString(result.createTime),
+                              style: const TextStyle(
+                                fontSize: 14,
+                              ),
                             ),
                           ],
                         ),
                       ),
+                      if (!_isSelectionMode)
+                        FButton(
+                          style: FButtonStyle.ghost,
+                          onPress: () => _showDeleteConfirmDialog(result.id),
+                          child: Icon(
+                            Icons.delete,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -896,12 +1011,34 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              '统计概览',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  '统计概览',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Row(
+                  children: [
+                    const Icon(Icons.bar_chart, size: 18),
+                    const SizedBox(width: 4),
+                    Switch(
+                      value: _usePieChart,
+                      onChanged: (value) {
+                        setState(() {
+                          _usePieChart = value;
+                          _statisticsCache = null; // 清除缓存
+                        });
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.pie_chart, size: 18),
+                  ],
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             Text(
@@ -926,6 +1063,10 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                         ),
                       ),
                       const SizedBox(height: 8),
+                      // 根据开关显示饼状图或条形图
+                      if (_usePieChart)
+                        _buildPieChart(questionStats, question.options, totalResponses)
+                      else
                       // 响应式：两列或三列网格
                       LayoutBuilder(builder: (context, constraints) {
                         final w = constraints.maxWidth;
@@ -1056,7 +1197,25 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                           ),
                           ),
                         )
-                    else LayoutBuilder(builder: (context, constraints) {
+                    else if (_usePieChart) ...[
+                      // 将分桶数据映射为饼图需要的结构
+                      Builder(builder: (_) {
+                        final mappedStats = <int, int>{};
+                        final labels = <QuestionOption>[];
+                        for (int i = 0; i < entries.length; i++) {
+                          final e = entries[i];
+                          mappedStats[i] = e.value;
+                          final label = (e.key % 1 == 0)
+                              ? '${e.key.toInt()} 星'
+                              : '${e.key.toStringAsFixed(1)} 星';
+                          labels.add(QuestionOption(id: i, text: label));
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(left: 8.0, right: 8.0),
+                          child: _buildPieChart(mappedStats, labels, answered),
+                        );
+                      })
+                    ] else LayoutBuilder(builder: (context, constraints) {
                       final w = constraints.maxWidth;
                       final cols = w >= 1200 ? 3 : (w >= 800 ? 2 : 1);
                       const gap = 12.0;
@@ -1065,11 +1224,11 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                         spacing: gap,
                         runSpacing: 8,
                         children: entries.map((e) {
-                      final pct = answered > 0 ? (e.value / answered * 100).toStringAsFixed(1) : '0.0';
-                      final ratio = answered > 0 ? (e.value / answered) : 0.0;
-                      final label = (e.key % 1 == 0)
-                          ? '${e.key.toInt()} 星'
-                          : '${e.key.toStringAsFixed(1)} 星';
+                          final pct = answered > 0 ? (e.value / answered * 100).toStringAsFixed(1) : '0.0';
+                          final ratio = answered > 0 ? (e.value / answered) : 0.0;
+                          final label = (e.key % 1 == 0)
+                              ? '${e.key.toInt()} 星'
+                              : '${e.key.toStringAsFixed(1)} 星';
                           return SizedBox(
                             width: itemW,
                             child: Padding(

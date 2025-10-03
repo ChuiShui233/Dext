@@ -19,20 +19,20 @@ import 'package:flutter/material.dart';
 FThemeData get zincLight {
   const colors = FColors(
     brightness: Brightness.light,
-    barrier: Color(0x22000000), // 稍微淡一些
-    background: Color(0xFFFFFFFF),
-    foreground: Color(0xDD000000), // 黑 0.87 -> 稍微浅一点
-    primary: Color(0xCC000000),    // 主色淡一点 (黑 0.8)
-    primaryForeground: Color(0xFFFFFFFF),
-    secondary: Color(0x66000000),  // secondary 黑 0.6 -> 再浅 (0.4)
-    secondaryForeground: Color.fromARGB(255, 0, 0, 0),
-    muted: Color(0xFFF9F9FA),      // 比原来更浅一点
-    mutedForeground: Color(0xFF9E9E9E),
-    destructive: Color(0xFFE57373), // 红色淡化 (原 EF4444 -> 柔和红)
+    barrier: Color(0x33000000),
+    background: Color(0xCCFFFFFF),
+    foreground: Color(0xFF09090B),
+    primary: Color(0xCC18181B),
+    primaryForeground: Color(0xFFFAFAFA),
+    secondary: Color(0x11000000), 
+    secondaryForeground: Color(0xFF18181B),
+    muted: Color(0xCCF4F4F5),
+    mutedForeground: Color(0xFF71717A),
+    destructive: Color(0xCCE57373),
     destructiveForeground: Color(0xFFFFFFFF),
-    error: Color(0xFFE57373),
-    errorForeground: Color(0xFFFFFFFF),
-    border: Color(0x1A000000), // Divider 黑 0.12 -> 更淡 (0.1)
+    error: Color(0xCCE57373),
+    errorForeground: Color(0xFFFAFAFA),
+    border: Color(0x66E4E4E7),
   );
 
   final typography = _typography(colors: colors);
@@ -53,11 +53,11 @@ FThemeData get zincDark {
     secondary: Color(0x66FFFFFF),  // secondary 白 0.6 -> 再浅 (0.4)
     secondaryForeground: Color.fromARGB(255, 255, 255, 255),
     muted: Color(0xFF2C2C2E),      // 比原来柔和点
-    mutedForeground: Color(0xFFB0B0B0),
+    mutedForeground: Color(0xFFFFFFFF),
     destructive: Color(0xFFB56565), // 红色淡化 (原 7F1D1D -> 柔和暗红)
     destructiveForeground: Color(0xFFFFFFFF),
     error: Color(0xFFB56565),
-    errorForeground: Color(0xFFFFFFFF),
+    errorForeground: Color(0xFF525252), 
     border: Color(0x1AFFFFFF), // Divider 白 0.12 -> 更淡 (0.1)
   );
 

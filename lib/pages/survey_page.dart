@@ -329,7 +329,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   String _getSurveyTypeText(int type) {
     switch (type) {
       case 0:
-        return '普通问卷';
+        return '问卷调查';
       case 1:
         return '限时问卷';
       case 2:
@@ -606,24 +606,26 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                     ),
                   ],
                 ),
-                // 多选操作组件
-                if (_isMultiSelectMode && _selectedSurveyIds.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: MultiSelectActions(
-                      selectedIds: _selectedSurveyIds,
-                      onSelectionChanged: _onSelectionChanged,
-                      onSelectAll: _onSelectAll,
-                      onClearSelection: _onClearSelection,
-                      customActions: [
-                        FButton(
-                          style: FButtonStyle.destructive,
-                          onPress: _batchDeleteSurveys,
-                          child: const Text('批量删除'),
-                        ),
-                      ],
-                    ),
-                  ),
+                // 多选操作组件 - 进入多选模式即显示，带高度伸缩动画
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOutCubic,
+                  child: _isMultiSelectMode
+                      ? Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: MultiSelectActions(
+                            selectedIds: _selectedSurveyIds,
+                            onSelectionChanged: _onSelectionChanged,
+                            onSelectAll: _onSelectAll,
+                            onClearSelection: _onClearSelection,
+                            onExitMultiSelectMode: _exitMultiSelectMode,
+                            customActions: [
+                              _buildDeleteButton(context),
+                            ],
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Row(
@@ -640,6 +642,28 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                               _onSearchChanged();
                             },
                           ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: 160,
+                        child: FSelect<int>(
+                          hint: '类型筛选',
+                          format: (value) => _getSurveyTypeText(value),
+                          clearable: true,
+                          onChange: (value) {
+                            setState(() {
+                              _selectedSurveyType = value;
+                              _currentPage = 1;
+                            });
+                            _loadData();
+                          },
+                          children: [
+                            FSelectItem('问卷调查', 0),
+                            FSelectItem('限时问卷', 1),
+                            FSelectItem('限次问卷', 2),
+                            FSelectItem('自选风格', 3),
+                          ],
                         ),
                       ),
                     ],
@@ -767,6 +791,58 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                               dividerColor: Colors.transparent,
                                             ),
                                             child: ExpansionTile(
+                                              leading: _isMultiSelectMode
+                                                  ? GestureDetector(
+                                                      behavior: HitTestBehavior.opaque,
+                                                      onTap: () => _onSurveySelectionChanged(survey.id, !isSelected),
+                                                      child: SizedBox(
+                                                        width: 24,
+                                                        height: 24,
+                                                        child: AnimatedContainer(
+                                                          duration: const Duration(milliseconds: 180),
+                                                          curve: Curves.easeOutCubic,
+                                                          decoration: BoxDecoration(
+                                                            color: isSelected
+                                                                ? (Theme.of(context).brightness == Brightness.dark
+                                                                    ? Colors.white
+                                                                    : Theme.of(context).colorScheme.primary)
+                                                                : Colors.transparent,
+                                                            shape: BoxShape.circle,
+                                                            border: Border.all(
+                                                              color: isSelected
+                                                                  ? (Theme.of(context).brightness == Brightness.dark
+                                                                      ? Colors.white
+                                                                      : Theme.of(context).colorScheme.primary)
+                                                                  : (Theme.of(context).brightness == Brightness.dark
+                                                                      ? Colors.white
+                                                                      : Colors.black.withValues(alpha: 0.25)),
+                                                              width: 2,
+                                                            ),
+                                                          ),
+                                                          alignment: Alignment.center,
+                                                          child: AnimatedSwitcher(
+                                                            duration: const Duration(milliseconds: 150),
+                                                            switchInCurve: Curves.easeOutBack,
+                                                            switchOutCurve: Curves.easeInCubic,
+                                                            transitionBuilder: (child, anim) => FadeTransition(
+                                                              opacity: anim,
+                                                              child: ScaleTransition(scale: anim, child: child),
+                                                            ),
+                                                            child: isSelected
+                                                                ? Icon(
+                                                                    key: const ValueKey('checked'),
+                                                                    Icons.check_rounded,
+                                                                    size: 16,
+                                                                    color: Theme.of(context).brightness == Brightness.dark
+                                                                        ? Colors.black87
+                                                                        : Colors.white,
+                                                                  )
+                                                                : const SizedBox.shrink(key: ValueKey('unchecked')),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    )
+                                                  : null,
                                               initiallyExpanded: _isAllExpanded,
                                               title: Text(
                                                 survey.surveyName,
@@ -928,16 +1004,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                     ),
                                   );
 
-                                  // 如果处于多选模式，用MultiSelectItem包装
-                                  if (_isMultiSelectMode) {
-                                    cardContent = MultiSelectItem(
-                                      id: survey.id,
-                                      isSelected: isSelected,
-                                      onSelectionChanged: _onSurveySelectionChanged,
-                                      child: cardContent,
-                                    );
-                                  }
-
                                   return Padding(
                                     padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                                     child: cardContent,
@@ -1025,7 +1091,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   void _onSelectionChanged(List<int> selectedIds) {
     setState(() {
       _selectedSurveyIds = selectedIds;
-      _isMultiSelectMode = selectedIds.isNotEmpty;
+      // 不根据选中项数量自动切换多选模式状态
     });
   }
 
@@ -1038,6 +1104,13 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   }
 
   void _onClearSelection() {
+    setState(() {
+      _selectedSurveyIds = [];
+      // 保持多选模式
+    });
+  }
+
+  void _exitMultiSelectMode() {
     setState(() {
       _selectedSurveyIds = [];
       _isMultiSelectMode = false;
@@ -1053,8 +1126,50 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
       } else {
         _selectedSurveyIds.remove(surveyId);
       }
-      _isMultiSelectMode = _selectedSurveyIds.isNotEmpty;
     });
+  }
+
+  Widget _buildDeleteButton(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _batchDeleteSurveys,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.error.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.error.withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.delete_outline,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '批量删除',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _batchDeleteSurveys() async {
