@@ -118,6 +118,21 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
+      - name: 安装 CMake 与 VS 构建工具
+        run: |
+          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=1' -y
+          choco install ninja -y
+          choco install visualstudio2022buildtools --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --includeOptional" -y
+
+      - name: 检查 VS 环境
+        run: |
+          echo "Visual Studio 环境检测中..."
+          & "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+          echo "CMake 版本："
+          cmake --version
+          echo "MSBuild 版本："
+          & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" -version
+
       - name: 设置 Flutter 环境
         uses: subosito/flutter-action@v2
         with:
@@ -150,14 +165,19 @@ jobs:
             flutter create --platforms=windows .
           }
 
-      - name: 构建 Windows
-        run: flutter build windows --release
+      - name: 清理构建缓存
+        run: flutter clean
 
-      - name: 打包 Windows 应用
+      - name: 构建 Windows 应用（详细日志）
+        run: |
+          echo "开始构建 Release 版本..."
+          flutter build windows --release -v
+
+      - name: 打包 Windows 构建产物
         run: |
           Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath dext-windows.zip
 
-      - name: 上传 Windows 构建产物
+      - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
