@@ -1,4 +1,4 @@
-package com.wucode.Dext
+package com.chuishui.Dext
 
 import io.flutter.embedding.android.FlutterActivity
 import android.os.Bundle

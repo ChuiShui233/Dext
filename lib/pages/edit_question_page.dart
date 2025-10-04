@@ -143,7 +143,7 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
         if (_options.length >= 9) {
           _allowHalf = _options[8].text.toLowerCase() == 'true';
         }
-        // 加载自定义评级标签（第11项，JSON），根据星数生成输入框并回填
+        // 加载自定义评级标签（第11项，JSON），根据星数或半星步进生成输入框并回填
         if (_options.length >= 11) {
           final raw = _options[10].text.trim();
           if (raw.isNotEmpty) {
@@ -151,9 +151,11 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
               final Map<String, dynamic> m = jsonDecode(raw);
               if (m.isNotEmpty) {
                 _enableRatingLabels = true;
-                _ensurePerStarLabelCtrls(_starsCount);
-                for (int i = 0; i < _starsCount; i++) {
-                  final key = (i + 1).toString();
+                final totalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
+                _ensurePerStarLabelCtrls(totalSteps);
+                for (int i = 0; i < totalSteps; i++) {
+                  final value = _allowHalf ? (i + 1) * 0.5 : (i + 1).toDouble();
+                  final key = value % 1 == 0 ? value.toInt().toString() : value.toString();
                   final val = m[key]?.toString() ?? '';
                   if (val.isNotEmpty) _perStarLabelCtrls[i].text = val;
                 }
@@ -374,20 +376,24 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
   }
 
   Future<void> _deleteMedia(String url) async {
-    // 显示删除确认弹窗
+    // 显示删除确认弹窗 - 使用 Forui 样式
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => FDialog(
+        direction: Axis.horizontal,
         title: const Text('确认删除'),
-        content: const Text('确定要删除这个媒体文件吗？此操作无法撤销。'),
+        body: const Text('确定要删除这个媒体文件吗？此操作无法撤销。'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+          FButton(
+            style: FButtonStyle.outline,
+            intrinsicWidth: true,
+            onPress: () => Navigator.of(context).pop(false),
             child: const Text('取消'),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+          FButton(
+            style: FButtonStyle.primary,
+            intrinsicWidth: true,
+            onPress: () => Navigator.of(context).pop(true),
             child: const Text('删除'),
           ),
         ],
@@ -412,25 +418,22 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
             fileName,
           );
           
-          // 从本地列表中移除
-          setState(() {
-            _mediaUrls.remove(url);
-          });
-          
           _showSuccessToast('媒体文件删除成功');
         } else {
-          // 如果无法提取文件名，只从本地移除
-          setState(() {
-            _mediaUrls.remove(url);
-          });
           _showSuccessToast('媒体文件已从本地移除');
         }
-      } catch (e) {
-        // 删除失败时显示错误信息，但仍从本地移除
+        
+        // 无论服务器删除是否成功，都从本地列表中移除
         setState(() {
           _mediaUrls.remove(url);
         });
+      } catch (e) {
+        // 删除失败时显示错误信息，但仍从本地移除
         _showErrorToast('删除媒体文件时出错，但已从本地移除', e.toString());
+        
+        setState(() {
+          _mediaUrls.remove(url);
+        });
       }
     }
   }
@@ -493,12 +496,14 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
           QuestionOption(id: 10, text: starsCount.toString()),
         ];
 
-        // 自定义标签（按星数 1..N 生成，留空则跳过），存入第 11 项（索引10）
+        // 自定义标签（按星数或半星步进生成，留空则跳过），存入第 11 项（索引10）
         if (_enableRatingLabels) {
-          _ensurePerStarLabelCtrls(starsCount);
+          final totalSteps = _allowHalf ? starsCount * 2 : starsCount;
+          _ensurePerStarLabelCtrls(totalSteps);
           final Map<String, String> map = {};
-          for (int i = 0; i < starsCount; i++) {
-            final key = (i + 1).toString();
+          for (int i = 0; i < totalSteps; i++) {
+            final value = _allowHalf ? (i + 1) * 0.5 : (i + 1).toDouble();
+            final key = value % 1 == 0 ? value.toInt().toString() : value.toString();
             final val = _perStarLabelCtrls[i].text.trim();
             if (val.isNotEmpty) {
               map[key] = val;
@@ -735,9 +740,38 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
               onEditingComplete: () {
                 final n = int.tryParse(_starsCountController.text.trim()) ?? _starsCount;
                 setState(() {
+                  // 保存当前的文本值
+                  final oldValues = <String, String>{};
+                  if (_enableRatingLabels) {
+                    final oldTotalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
+                    for (int i = 0; i < oldTotalSteps && i < _perStarLabelCtrls.length; i++) {
+                      final oldValue = _allowHalf ? (i + 1) * 0.5 : (i + 1).toDouble();
+                      final oldKey = oldValue % 1 == 0 ? oldValue.toInt().toString() : oldValue.toString();
+                      final text = _perStarLabelCtrls[i].text.trim();
+                      if (text.isNotEmpty) {
+                        oldValues[oldKey] = text;
+                      }
+                    }
+                  }
+                  
                   _starsCount = n.clamp(1, 10);
                   _starsCountController.text = _starsCount.toString();
-                  _ensurePerStarLabelCtrls(_starsCount);
+                  
+                  // 重新生成输入框并恢复文本值
+                  if (_enableRatingLabels) {
+                    final newTotalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
+                    _perStarLabelCtrls.clear();
+                    _ensurePerStarLabelCtrls(newTotalSteps);
+                    
+                    // 恢复文本值到对应的输入框
+                    for (int i = 0; i < newTotalSteps; i++) {
+                      final newValue = _allowHalf ? (i + 1) * 0.5 : (i + 1).toDouble();
+                      final newKey = newValue % 1 == 0 ? newValue.toInt().toString() : newValue.toString();
+                      if (oldValues.containsKey(newKey)) {
+                        _perStarLabelCtrls[i].text = oldValues[newKey]!;
+                      }
+                    }
+                  }
                 });
               },
             ),
@@ -747,7 +781,39 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
             child: FSwitch(
               label: const Text('允许半星'),
               value: _allowHalf,
-              onChange: (v) => setState(() { _allowHalf = v; }),
+              onChange: (v) => setState(() { 
+                // 保存当前的文本值
+                final oldValues = <String, String>{};
+                if (_enableRatingLabels) {
+                  final oldTotalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
+                  for (int i = 0; i < oldTotalSteps && i < _perStarLabelCtrls.length; i++) {
+                    final oldValue = _allowHalf ? (i + 1) * 0.5 : (i + 1).toDouble();
+                    final oldKey = oldValue % 1 == 0 ? oldValue.toInt().toString() : oldValue.toString();
+                    final text = _perStarLabelCtrls[i].text.trim();
+                    if (text.isNotEmpty) {
+                      oldValues[oldKey] = text;
+                    }
+                  }
+                }
+                
+                _allowHalf = v;
+                
+                // 重新生成输入框并恢复文本值
+                if (_enableRatingLabels) {
+                  final newTotalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
+                  _perStarLabelCtrls.clear();
+                  _ensurePerStarLabelCtrls(newTotalSteps);
+                  
+                  // 恢复文本值到对应的输入框
+                  for (int i = 0; i < newTotalSteps; i++) {
+                    final newValue = _allowHalf ? (i + 1) * 0.5 : (i + 1).toDouble();
+                    final newKey = newValue % 1 == 0 ? newValue.toInt().toString() : newValue.toString();
+                    if (oldValues.containsKey(newKey)) {
+                      _perStarLabelCtrls[i].text = oldValues[newKey]!;
+                    }
+                  }
+                }
+              }),
             ),
           ),
         ]),
@@ -758,7 +824,10 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
           value: _enableRatingLabels,
           onChange: (v) => setState(() {
             _enableRatingLabels = v;
-            if (v) _ensurePerStarLabelCtrls(_starsCount);
+            if (v) {
+              final totalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
+              _ensurePerStarLabelCtrls(totalSteps);
+            }
           }),
         ),
         if (_enableRatingLabels) ...[
@@ -766,20 +835,35 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
           Wrap(
             spacing: 12,
             runSpacing: 12,
-            children: List.generate(_starsCount, (i) {
-              final idx = i + 1;
-              _ensurePerStarLabelCtrls(_starsCount);
-              return SizedBox(
-                width: 220,
-                child: FTextFormField(
-                  label: Text('分值 $idx 文本(可留空)'),
-                  controller: _perStarLabelCtrls[i],
-                ),
-              );
-            }),
+            children: _allowHalf 
+              ? List.generate(_starsCount * 2, (i) {
+                  final value = (i + 1) * 0.5;
+                  final labelText = value % 1 == 0 ? value.toInt().toString() : value.toString();
+                  _ensurePerStarLabelCtrls(_starsCount * 2);
+                  return SizedBox(
+                    width: 220,
+                    child: FTextFormField(
+                      label: Text('分值 $labelText 文本'),
+                      controller: _perStarLabelCtrls[i],
+                    ),
+                  );
+                })
+              : List.generate(_starsCount, (i) {
+                  final idx = i + 1;
+                  _ensurePerStarLabelCtrls(_starsCount);
+                  return SizedBox(
+                    width: 220,
+                    child: FTextFormField(
+                      label: Text('分值 $idx 文本'),
+                      controller: _perStarLabelCtrls[i],
+                    ),
+                  );
+                }),
           ),
           const SizedBox(height: 4),
-          const Text('说明：根据星星数量(1..N)提供对应的文本输入，留空则使用默认数值。'),
+          Text(_allowHalf 
+            ? '说明：根据半星步进(0.5, 1, 1.5...)提供对应的文本输入，留空则使用默认数值。'
+            : '说明：根据星星数量(1..N)提供对应的文本输入，留空则使用默认数值。'),
         ],
       ],
     );
@@ -989,7 +1073,7 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: InkWell(
-                      onTap: () => _deleteMedia(absUrl),
+                      onTap: () => _deleteMedia(url),
                       borderRadius: BorderRadius.circular(4),
                       child: const Padding(
                         padding: EdgeInsets.all(4),

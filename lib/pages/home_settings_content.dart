@@ -539,32 +539,33 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
     );
   }
 
-  void _confirmLogout(BuildContext context, VoidCallback onLogout) {
-    showDialog(
+  void _confirmLogout(BuildContext context, VoidCallback onLogout) async {
+    bool isLoading = false;
+    
+    final confirmed = await showDialog<bool>(
       context: context,
-      barrierDismissible: false, // 禁止点击遮罩关闭，防止交互
-      builder: (context) {
-        bool isLoading = false;
+      barrierDismissible: false,
+      builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setState) => PopScope(
-            canPop: !isLoading, // 加载中阻止返回
+            canPop: !isLoading,
             child: FDialog(
               direction: Axis.horizontal,
               title: const Text('确认退出'),
               body: isLoading
                   ? const Row(
-                      children: [
-                        SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                        SizedBox(width: 8),
-                        Text('正在退出登录...')
-                      ],
-                    )
+                    children: [
+                      SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                      SizedBox(width: 8),
+                      Text('正在退出登录...')
+                    ],
+                  )
                   : const Text('确定要退出当前账号吗？'),
               actions: [
                 FButton(
                   style: FButtonStyle.outline,
                   intrinsicWidth: true,
-                  onPress: isLoading ? null : () => Navigator.pop(context),
+                  onPress: isLoading ? null : () => Navigator.pop(dialogContext, false),
                   child: const Text('取消'),
                 ),
                 FButton(
@@ -574,21 +575,20 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
                       : () async {
                           setState(() => isLoading = true);
                           try {
+                            // 调用服务端注销并清理所有本地数据
                             await widget.apiService.logoutStrict();
-                            if (context.mounted) {
-                              Navigator.pop(context);
+                            if (dialogContext.mounted) {
+                              Navigator.pop(dialogContext, true);
                             }
-                            onLogout(); // 仅在服务端成功后本地登出
                           } catch (e) {
-                            if (context.mounted) {
+                            setState(() => isLoading = false);
+                            if (dialogContext.mounted) {
                               showFToast(
-                                context: context,
+                                context: dialogContext,
                                 title: const Text('退出失败'),
                                 description: Text(e.toString()),
                               );
                             }
-                          } finally {
-                            if (context.mounted) setState(() => isLoading = false);
                           }
                         },
                   child: const Text('确认'),
@@ -599,5 +599,10 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
         );
       },
     );
+    
+    // 只有在确认并成功退出后才调用 onLogout
+    if (confirmed == true && context.mounted) {
+      onLogout();
+    }
   }
 }

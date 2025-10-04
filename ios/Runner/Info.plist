@@ -52,7 +52,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.wucode.dext</string>
+			<string>com.chuishui.Dext</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>dext</string>

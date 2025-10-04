@@ -915,11 +915,12 @@ class ApiService {
     _updateStatus(RequestStatus.success, '已退出登录');
   }
 
-  /// 严格注销：仅当服务端成功返回时才视为成功，不做本地清理
+  /// 严格注销：先调用服务端注销，成功后清理所有本地令牌和会话数据
   Future<void> logoutStrict({StatusCallback? onStatus}) async {
     try {
       onStatus?.call(RequestStatus.loading, '正在退出登录...');
       _updateStatus(RequestStatus.loading, '正在退出登录...');
+      
       // 在有会话密钥时使用 AES，否则回退到 RSA 加密
       http.Response resp;
       if (_cryptoService.currentSessionKey != null) {
@@ -939,9 +940,14 @@ class ApiService {
           allowRetry: false,
         );
       }
+      
       if (resp.statusCode != 200) {
         throw '注销失败: ${resp.body}';
       }
+      
+      // 服务端注销成功后，清理所有本地数据
+      await _clearAllLocalData();
+      
       onStatus?.call(RequestStatus.success, '退出登录成功');
       _updateStatus(RequestStatus.success, '退出登录成功');
     } catch (e) {
@@ -949,6 +955,49 @@ class ApiService {
       onStatus?.call(RequestStatus.error, msg);
       _updateStatus(RequestStatus.error, msg);
       rethrow;
+    }
+  }
+  
+  /// 清理所有本地认证数据和会话密钥
+  Future<void> _clearAllLocalData() async {
+    try {
+      // 1. 清除内存中的令牌
+      authToken = null;
+      _core.updateAuthToken(null);
+      
+      // 2. 清除会话密钥
+      _cryptoService.clearSessionKey();
+      
+      // 3. 清除 SharedPreferences 中的所有认证相关数据
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('auth_token');
+      await prefs.remove('auth_token_expires');
+      await prefs.remove('refresh_token');
+      
+      // 4. 清除 FlutterSecureStorage 中的敏感数据
+      const storage = FlutterSecureStorage();
+      await storage.delete(key: 'auth_token');
+      await storage.delete(key: 'refresh_token');
+      await storage.delete(key: 'session_key');
+      
+      // 5. 清除所有缓存数据
+      await prefs.remove('projects_cache');
+      await prefs.remove('surveys_cache');
+      await prefs.remove('survey_stats_cache');
+      
+      // 清除所有问题缓存（使用通配符模式）
+      final keys = prefs.getKeys();
+      for (final key in keys) {
+        if (key.startsWith('questions_') || 
+            key.startsWith('answers_') ||
+            key.startsWith('user_')) {
+          await prefs.remove(key);
+        }
+      }
+      
+    } catch (e) {
+      // 即使清理失败也不抛出异常，确保用户能够退出
+      debugPrint('清理本地数据时出错: $e');
     }
   }
 

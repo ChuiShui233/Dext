@@ -24,11 +24,11 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace "com.wucode.Dext"
+    namespace "com.chuishui.Dext"
     compileSdk 36
 
     defaultConfig {
-        applicationId "com.wucode.Dext"
+        applicationId "com.chuishui.Dext"
         minSdkVersion 23    // radio_player 要求最低 SDK 23
         targetSdk 35
         versionCode flutterVersionCode.toInteger()

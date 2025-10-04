@@ -5,8 +5,8 @@
 -keep class io.flutter.view.** { *; }
 -keep class io.flutter.** { *; }
 
--keep class com.wucode.Dext.MainApplication { *; }
--keep class com.wucode.Dext.MainActivity { *; }
+-keep class com.chuishui.Dext.MainApplication { *; }
+-keep class com.chuishui.Dext.MainActivity { *; }
 
 -keep class * implements io.flutter.plugin.common.PluginRegistry$PluginRegistrantCallback {
     <init>(...);

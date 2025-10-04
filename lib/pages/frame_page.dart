@@ -177,68 +177,6 @@ class FramePageState extends State<FramePage> {
     handleTabChange(4);
   }
 
-  void _handleLogout() {
-    showDialog(
-      context: context,
-      barrierDismissible: false, // 禁止点击遮罩关闭
-      builder: (context) {
-        bool isLoading = false;
-        return StatefulBuilder(
-          builder: (context, setState) => PopScope(
-            canPop: !isLoading, // 加载中阻止返回
-            child: FDialog(
-              direction: Axis.horizontal,
-              title: const Text('确认退出'),
-              body: isLoading
-                  ? const Row(
-                    children: [
-                      SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                      SizedBox(width: 8),
-                      Text('正在退出登录...'),
-                    ],
-                  )
-                  : const Text('确定要退出当前账号吗？'),
-              actions: [
-                FButton(
-                  style: FButtonStyle.outline,
-                  intrinsicWidth: true,
-                  onPress: isLoading ? null : () => Navigator.pop(context),
-                  child: const Text('取消'),
-                ),
-                FButton(
-                  intrinsicWidth: true,
-                  onPress: isLoading
-                      ? null
-                      : () async {
-                          setState(() => isLoading = true);
-                          try {
-                            // 优先使用传入的 apiService
-                            await widget.apiService?.logoutStrict();
-                            if (context.mounted) {
-                              Navigator.pop(context);
-                            }
-                            widget.onLogout();
-                          } catch (e) {
-                            if (context.mounted) {
-                              showFToast(
-                                context: context,
-                                title: const Text('退出失败'),
-                                description: Text(e.toString()),
-                              );
-                            }
-                          } finally {
-                            if (context.mounted) setState(() => isLoading = false);
-                          }
-                        },
-                  child: const Text('确认'),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 
 
   @override
@@ -354,7 +292,7 @@ class FramePageState extends State<FramePage> {
           surveyCount: _surveyCount,
           onProjectTap: _handleProjectTap,
           onSurveyTap: _handleSurveyTap,
-          onLogout: _handleLogout,
+          onLogout: widget.onLogout,  // 直接传递 main.dart 的 onLogout，不要传递 _handleLogout
           onThemeModeChange: widget.onThemeModeChange,
           onTabChanged: handleTabChange,
           userNotifier: widget.userNotifier,

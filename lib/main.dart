@@ -396,15 +396,21 @@ class _YuMeng233AppState extends State<YuMeng233App>
     // 停止定时刷新
     _tokenRefreshTimer?.cancel();
     
+    // 清理本地存储
     await _storage.delete(key: 'auth_token');
     await _storage.delete(key: 'token_expiry');
+    
+    // 更新状态
     setState(() {
       _token = null;
       _tokenExpiry = null;
     });
+    
     // 显式导航到登录页面
     final nav = _navigatorKey.currentState;
-    nav?.pushNamedAndRemoveUntil('/', (route) => false);
+    if (nav != null) {
+      nav.pushNamedAndRemoveUntil('/', (route) => false);
+    }
   }
 
   @override
