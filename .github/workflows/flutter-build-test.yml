@@ -180,7 +180,8 @@ jobs:
             libjson-glib-dev \
             libsecret-1-0 \
             libsecret-1-dev \
-            libjsoncpp-dev
+            libjsoncpp-dev \
+            libayatana-appindicator3-dev
 
       - name: 设置 Flutter 环境
         uses: subosito/flutter-action@v2
