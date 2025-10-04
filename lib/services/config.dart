@@ -1,7 +1,7 @@
 // Centralized API configuration
 // Update the base URL here and all services will use it.
 
-const String apiBaseUrl = 'http://wucode.xyz:11222';
+const String apiBaseUrl = 'https://wucode.xyz:11222';
 
 /// 将相对路径（/openassets/...）转换为绝对URL，便于移动端/桌面端使用
 String toAbsoluteUrl(String? pathOrUrl) {
