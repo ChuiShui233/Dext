@@ -307,7 +307,11 @@ jobs:
           fi
 
       - name: 构建 Linux
-        run: flutter build linux --release
+        run: |
+          echo "创建 native_assets 目录以防止 CMake 报错..."
+          mkdir -p build/native_assets/linux
+          flutter build linux --release -v
+
 
       - name: 打包 Linux 应用
         run: |
