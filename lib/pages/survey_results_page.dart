@@ -1,6 +1,5 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../components/glass_card.dart';
 import '../widgets/top_safe_spacer.dart';
 import 'package:flutter/material.dart' as vmath;
 import 'package:forui/forui.dart';
@@ -62,7 +61,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
   late final AnimationController _rainbowCtl;
 
   String _computeStatsKey() {
-    // 基于结果与问题的数量及首尾 ID 简单生成 key（避免每次都重建）
+
     final lenR = _results.length;
     final lenQ = _questions.length;
     final firstId = lenR > 0 ? _results.first.id : -1;
@@ -70,7 +69,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
     return '$lenR-$lenQ-$firstId-$lastId';
   }
 
-  // 饼状图（包含标题和图例）
   Widget _buildPieChart(Map<int, int> stats, List<QuestionOption> options, int total, {String? title}) {
     if (stats.isEmpty || total == 0) {
       return const Center(
@@ -94,7 +92,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
       Colors.indigo,
     ];
 
-    final sections = stats.entries.map((entry) {
+    stats.entries.map((entry) {
       final optionIndex = entry.key;
       final count = entry.value;
       final percentage = (count / total * 100);
@@ -115,15 +113,16 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
       );
     }).toList();
 
-    return GlassCard(
-      margin: EdgeInsets.zero,
-      borderRadius: 12,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 标题
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double maxW = constraints.maxWidth;
+
+        final double hPad = (maxW * 0.04).clamp(8.0, 16.0);
+        return Padding(
+          padding: EdgeInsets.fromLTRB(hPad, 12, hPad, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             if (title != null) ...[
               Text(
                 title,
@@ -132,79 +131,249 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 16),
             ],
-            // 图例和饼图并排
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 图例
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: stats.entries.map((entry) {
-                      final optionIndex = entry.key;
-                      final count = entry.value;
-                      final optionText = optionIndex < options.length ? options[optionIndex].text : '选项 ${optionIndex + 1}';
-                      final percentage = (count / total * 100).toStringAsFixed(1);
-                      final color = pieColors[optionIndex % pieColors.length];
-                      
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
+            Builder(
+              builder: (context) {
+                final availableWidth = MediaQuery.sizeOf(context).width - hPad * 2;
+                final pieSize = (availableWidth * 0.9).clamp(200.0, 280.0);
+                final centerRadius = pieSize / 280 * 40; 
+                final bool placeLegendUnderTitle = availableWidth >= 560; 
+
+                final entries = stats.entries.toList();
+                int? touchedIndex;
+                Offset? touchPos;  
+                final Widget pie = StatefulBuilder(
+                  builder: (context, setInnerState) {
+                    return SizedBox(
+                      height: pieSize,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Center(
+                            child: OverflowBox(
+                              minWidth: 0,
+                              minHeight: 0,
+                              maxWidth: double.infinity,
+                              maxHeight: double.infinity,
+                              alignment: Alignment.center,
+                              child: SizedBox(
+                                width: pieSize,
+                                height: pieSize,
+                                child: PieChart(
+                                  PieChartData(
+                                    sectionsSpace: 6,
+                                    centerSpaceRadius: centerRadius,
+                                    borderData: FlBorderData(show: false),
+                                    sections: List.generate(entries.length, (i) {
+                                      final optionIndex = entries[i].key;
+                                      final count = entries[i].value;
+                                      final percentage = (count / total * 100);
+                                      final color = pieColors[optionIndex % pieColors.length];
+                                      final isTouched = touchedIndex == i;
+                                      final optionText = optionIndex < options.length
+                                          ? options[optionIndex].text
+                                          : '选项 ${optionIndex + 1}';
+                                      return PieChartSectionData(
+                                        value: count.toDouble(),
+                                        title: '${percentage.toStringAsFixed(1)}%',
+                                        color: color,
+                                        radius: isTouched ? 118 : 100,
+                                        titleStyle: TextStyle(
+                                          fontSize: isTouched ? 13 : 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                        titlePositionPercentageOffset: isTouched ? 0.55 : 0.60,
+                                      );
+                                    }),
+                                    pieTouchData: PieTouchData(
+                                      touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                                        setInnerState(() {
+                                          // 无兴趣或无命中 -> 清空
+                                          if (!event.isInterestedForInteractions ||
+                                              pieTouchResponse == null ||
+                                              pieTouchResponse.touchedSection == null) {
+                                            touchedIndex = null;
+                                            touchPos = null;
+                                            return;
+                                          }
+                                          // 有命中则获取索引并进行边界校验
+                                          final idx = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                                          if (idx == null || idx < 0 || idx >= entries.length) {
+                                            touchedIndex = null;
+                                            touchPos = null;
+                                          } else {
+                                            touchedIndex = idx;
+                                            touchPos = event.localPosition;
+                                          }
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                  swapAnimationDuration: const Duration(milliseconds: 220),
+                                  swapAnimationCurve: Curves.easeOutCubic,
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (touchedIndex != null && touchedIndex! >= 0 && touchedIndex! < entries.length && touchPos != null) ...[
+                            // Tooltip 气泡，位置基于触点，做边界夹取
+                            Positioned(
+                              left: (touchPos!.dx - 80).clamp(0.0, (pieSize - 160) > 0 ? (pieSize - 160) : 0.0),
+                              top: (touchPos!.dy - 44).clamp(0.0, (pieSize - 64) > 0 ? (pieSize - 64) : 0.0),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black87,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Builder(builder: (_) {
+                                    final e = entries[touchedIndex!];
+                                    final optionIndex = e.key;
+                                    final count = e.value;
+                                    final percentage = (count / total * 100).toStringAsFixed(1);
+                                    final optionText = optionIndex < options.length
+                                        ? options[optionIndex].text
+                                        : '选项 ${optionIndex + 1}';
+                                    return Text(
+                                      '$optionText  $count次  ($percentage%)',
+                                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                                    );
+                                  }),
+                                ),
+                              ),
+                            ),
+                          ]
+                        ],
+                      ),
+                    );
+                  },
+                );
+
+                // 图例（两种布局：顶部纵向、底部换行）
+                final Widget legendTop = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: stats.entries.map((entry) {
+                    final optionIndex = entry.key;
+                    final count = entry.value;
+                    final optionText = optionIndex < options.length ? options[optionIndex].text : '选项 ${optionIndex + 1}';
+                    final percentage = (count / total * 100).toStringAsFixed(1);
+                    final color = pieColors[optionIndex % pieColors.length];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: color,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '$optionText: $count次 ($percentage%)',
+                              style: const TextStyle(fontSize: 12),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                );
+
+                // 底部标识：按 1/2/3 列自适应换行，保证空间不足时一定换行
+                final int cols = availableWidth >= 720 ? 3 : (availableWidth >= 480 ? 2 : 1);
+                final double gap = 12.0;
+                final double maxItemWidth = cols == 1
+                    ? availableWidth
+                    : (availableWidth - gap * (cols - 1)) / cols;
+                final Widget legendBottom = Wrap(
+                  spacing: gap,
+                  runSpacing: 6,
+                  alignment: WrapAlignment.center,
+                  children: stats.entries.map((entry) {
+                    final optionIndex = entry.key;
+                    final count = entry.value;
+                    final optionText = optionIndex < options.length ? options[optionIndex].text : '选项 ${optionIndex + 1}';
+                    final percentage = (count / total * 100).toStringAsFixed(1);
+                    final color = pieColors[optionIndex % pieColors.length];
+                    return SizedBox(
+                      width: maxItemWidth,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         child: Row(
                           children: [
                             Container(
-                              width: 16,
-                              height: 16,
+                              width: 12,
+                              height: 12,
                               decoration: BoxDecoration(
                                 color: color,
-                                borderRadius: BorderRadius.circular(4),
+                                borderRadius: BorderRadius.circular(3),
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 6),
                             Expanded(
                               child: Text(
                                 '$optionText: $count次 ($percentage%)',
-                                style: const TextStyle(fontSize: 12),
+                                style: const TextStyle(fontSize: 11),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],
                         ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                // 饼图
-                Expanded(
-                  flex: 3,
-                  child: SizedBox(
-                    height: 280,
-                    child: PieChart(
-                      PieChartData(
-                        sections: sections,
-                        sectionsSpace: 8, // 增加扇区间距
-                        centerSpaceRadius: 40, // 添加中心空白，呈现圆环效果
-                        borderData: FlBorderData(show: false),
-                        pieTouchData: PieTouchData(
-                          touchCallback: (FlTouchEvent event, pieTouchResponse) {
-                            // 可以添加交互效果
-                          },
+                      ),
+                    );
+                  }).toList(),
+                );
+
+                if (placeLegendUnderTitle) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: legendTop,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        flex: 3,
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: pie,
                         ),
                       ),
-                    ),
-                  ),
-                ),
-              ],
+                    ],
+                  );
+                } else {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      pie,
+                      const SizedBox(height: 12),
+                      legendBottom,
+                    ],
+                  );
+                }
+              },
             ),
+            // 底部分割线移除，保留上方一条
           ],
         ),
-      ),
+      );
+      },
     );
   }
 
-  // 比例条：当 ratio==1.0 时显示循环炫彩流动彩虹色
   Widget _buildPercentBar(double ratio) {
     final clamped = ratio.clamp(0.0, 1.0);
     const double h = 18.0;
@@ -212,17 +381,16 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
     final Color fg = Theme.of(context).colorScheme.primary.withValues(alpha: 0.70);
 
     if (clamped >= 0.999) {
-      // 无缝循环：使用重复渐变 + 平移变换
       const rainbow = [
-        Color(0xFFFF0040), // 红
-        Color(0xFFFF8000), // 橙
-        Color(0xFFFFFF00), // 黄
-        Color(0xFF80FF00), // 绿
-        Color(0xFF00FFFF), // 青
-        Color(0xFF0080FF), // 蓝
-        Color(0xFF8000FF), // 靛/紫
-        Color(0xFFFF00FF), // 品
-        Color(0xFFFF0040), // 回到红，首尾一致确保无缝
+        Color(0xFFFF0040),
+        Color(0xFFFF8000),
+        Color(0xFFFFFF00),
+        Color(0xFF80FF00),
+        Color(0xFF00FFFF),
+        Color(0xFF0080FF),
+        Color(0xFF8000FF),
+        Color(0xFFFF00FF),
+        Color(0xFFFF0040),
       ];
 
       return Opacity(
@@ -232,7 +400,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
         child: AnimatedBuilder(
           animation: _rainbowCtl,
           builder: (context, _) {
-            // 叠加一层轻微模糊的相同渐变，形成柔和光晕
+
             return Stack(
               children: [
                 Container(
@@ -300,13 +468,11 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
 
   
 
-  // 评级显示（用于 slider 题）：读取新评级配置（星/面包屑、半星、图标、自定义标签），只读展示
   Widget _buildRatingRow(Question q, String selectChoices) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     const double starIconSize = 38.0;
 
-    // 解析答案：新数据为 1..stars（含0.5）；旧数据为[min..max]区间的原值
     double min = q.ratingMin;
     double max = q.ratingMax;
     int stars = q.ratingStars;
@@ -318,7 +484,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
     final String maxLabel = q.ratingMaxLabel.isNotEmpty ? q.ratingMaxLabel : '最大值';
     final labelsMap = q.ratingLabels; // Map<double,String>
 
-    // 如果用户未填写评分，显示提示
     if (selectChoices.isEmpty) {
       return Padding(
         padding: const EdgeInsets.only(left: 16, top: 4),
@@ -1064,22 +1229,18 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                Row(
-                  children: [
-                    const Icon(Icons.bar_chart, size: 18),
-                    const SizedBox(width: 4),
-                    Switch(
-                      value: _usePieChart,
-                      onChanged: (value) {
-                        setState(() {
-                          _usePieChart = value;
-                          _statisticsCache = null; // 清除缓存
-                        });
-                      },
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.pie_chart, size: 18),
-                  ],
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: FSwitch(
+                    label: const Text('饼图'),
+                    value: _usePieChart,
+                    onChange: (value) {
+                      setState(() {
+                        _usePieChart = value;
+                        _statisticsCache = null; // 清除缓存
+                      });
+                    },
+                  ),
                 ),
               ],
             ),
@@ -1483,7 +1644,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
               ),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: _isLoading
                       ? const Center(child: CircularProgressIndicator())
                       : _errorMessage != null
