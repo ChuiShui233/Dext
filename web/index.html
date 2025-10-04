@@ -34,7 +34,7 @@
   <style>
     :root {
       --slide-duration: 480ms;
-      --slide-curve: cubic-bezier(0.22, 1, 0.36, 1); /* 柔和且有力度的出场曲线 */
+      --slide-curve: cubic-bezier(0.22, 1, 0.36, 1);
       --fade-duration: 300ms;
     }
     /* 页面加载阶段的覆盖层与动画 */
@@ -53,14 +53,12 @@
     #app-loader.slide-up { transform: translateY(-100%); opacity: 0; pointer-events: none; }
     #app-loader .loader-content { text-align: center; color: #8a9299; font-family: inherit; }
     #app-loader .loader-img { width: 45vmin; height: 45vmin; object-fit: contain; display: block; margin: 0 auto 16px; }
-    /* 全局字体优先使用苹方 */
     body {
       font-family: 'PingFang SC', 'PingFang', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', 'Microsoft YaHei', sans-serif;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
 
-    /* 无障碍：用户偏好减少动画时，仅做淡出 */
     @media (prefers-reduced-motion: reduce) {
       #app-loader { transition: opacity var(--fade-duration) ease !important; }
       #app-loader.slide-up { transform: none; opacity: 0; }
@@ -70,7 +68,7 @@
 <body>
   <div id="app-loader" role="status" aria-live="polite">
     <div class="loader-content">
-      <img class="loader-img" src="assets/images/loading.gif" alt="loading" />
+      <img class="loader-img" src="assets/assets/images/loading.gif" alt="loading" />
       <div>正在加载资源，等等哦~</div>
     </div>
   </div>

@@ -1,5 +1,6 @@
 {
     "files.associations": {
+        "manifest.json": "json",
         "algorithm": "cpp",
         "any": "cpp",
         "array": "cpp",
