@@ -35,6 +35,41 @@
 
 <a href='https://github.com/chuishui233/dext'><img alt="Github" src="https://img.shields.io/badge/GitHub-Dext-blue?logo=github"></a>
 
+>Dext 后端将在近几天内公布源代码，敬请期待~
+
+## 项目截图
+
+### 桌面端界面
+
+<p align="center">
+  <img src=".preview/image_1.png" alt="登录界面" width="200"/>
+  <img src=".preview/image_2.png" alt="主界面" width="200"/>
+  <img src=".preview/image_3.png" alt="问卷创建" width="200"/>
+  <img src=".preview/image_4.png" alt="问卷预览" width="200"/>
+  <img src=".preview/image_5.png" alt="数据分析" width="200"/>
+</p>
+
+### 移动端界面
+
+<p align="center">
+  <img src=".preview/m_image_1.jpg" alt="移动端登录" width="200"/>
+  <img src=".preview/m_image_2.jpg" alt="移动端主页" width="200"/>
+  <img src=".preview/m_image_3.jpg" alt="移动端问卷" width="200"/>
+</p>
+
+<p align="center">
+  <img src=".preview/m_image_4.jpg" alt="移动端填写" width="200"/>
+  <img src=".preview/m_image_5.jpg" alt="移动端结果" width="200"/>
+  <img src=".preview/m_image_6.jpg" alt="移动端分析" width="200"/>
+</p>
+
+### Web端界面
+
+<p align="center">
+  <img src=".preview/image_WEB.png" alt="Web端展示" width="800"/>
+</p>
+
+
 ## 支持平台
 
 | 平台                           | 支持状态
@@ -207,48 +242,6 @@ flutter build web --release
 - **公开问卷访问** - 无需注册即可通过链接填写问卷
 - **跨平台兼容** - Web、Android、iOS 三平台统一访问体验
 - **离线数据缓存** - 支持离线填写和自动同步
-
-## 配置说明
-
-### 服务器配置
-
-应用需要配合后端服务器使用，服务器项目位于 `i:\Dext-Server`。
-
-### 深度链接配置
-
-应用支持通过 `https://wucode.xyz/?id=问卷ID` 格式的链接直接访问问卷。
-
-## 项目截图
-
-### 桌面端界面
-
-<p align="center">
-  <img src=".preview/image_1.png" alt="登录界面" width="200"/>
-  <img src=".preview/image_2.png" alt="主界面" width="200"/>
-  <img src=".preview/image_3.png" alt="问卷创建" width="200"/>
-  <img src=".preview/image_4.png" alt="问卷预览" width="200"/>
-  <img src=".preview/image_5.png" alt="数据分析" width="200"/>
-</p>
-
-### 移动端界面
-
-<p align="center">
-  <img src=".preview/m_image_1.jpg" alt="移动端登录" width="200"/>
-  <img src=".preview/m_image_2.jpg" alt="移动端主页" width="200"/>
-  <img src=".preview/m_image_3.jpg" alt="移动端问卷" width="200"/>
-</p>
-
-<p align="center">
-  <img src=".preview/m_image_4.jpg" alt="移动端填写" width="200"/>
-  <img src=".preview/m_image_5.jpg" alt="移动端结果" width="200"/>
-  <img src=".preview/m_image_6.jpg" alt="移动端分析" width="200"/>
-</p>
-
-### Web端界面
-
-<p align="center">
-  <img src=".preview/image_WEB.png" alt="Web端展示" width="800"/>
-</p>
 
 ## 贡献指南
 

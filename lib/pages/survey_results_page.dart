@@ -170,9 +170,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                                       final percentage = (count / total * 100);
                                       final color = pieColors[optionIndex % pieColors.length];
                                       final isTouched = touchedIndex == i;
-                                      final optionText = optionIndex < options.length
-                                          ? options[optionIndex].text
-                                          : '选项 ${optionIndex + 1}';
                                       return PieChartSectionData(
                                         value: count.toDouble(),
                                         title: '${percentage.toStringAsFixed(1)}%',
@@ -199,7 +196,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                                           }
                                           // 有命中则获取索引并进行边界校验
                                           final idx = pieTouchResponse.touchedSection!.touchedSectionIndex;
-                                          if (idx == null || idx < 0 || idx >= entries.length) {
+                                          if (idx < 0 || idx >= entries.length) {
                                             touchedIndex = null;
                                             touchPos = null;
                                           } else {
@@ -210,8 +207,8 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                                       },
                                     ),
                                   ),
-                                  swapAnimationDuration: const Duration(milliseconds: 220),
-                                  swapAnimationCurve: Curves.easeOutCubic,
+                                  duration: const Duration(milliseconds: 220),
+                                  curve: Curves.easeOutCubic,
                                 ),
                               ),
                             ),
