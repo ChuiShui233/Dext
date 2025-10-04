@@ -177,7 +177,10 @@ jobs:
             libstdc++-12-dev \
             libwebkit2gtk-4.1-dev \
             libsoup-3.0-dev \
-            libjson-glib-dev
+            libjson-glib-dev \
+            libsecret-1-0 \
+            libsecret-1-dev \
+            libjsoncpp-dev
 
       - name: 设置 Flutter 环境
         uses: subosito/flutter-action@v2

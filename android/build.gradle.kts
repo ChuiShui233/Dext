@@ -53,7 +53,28 @@ subprojects {
     if (name == "clipboard_watcher") {
         plugins.withId("com.android.library") {
             extensions.configure<LibraryExtension>("android") {
-                namespace = "com.clipboard_watcher"
+                namespace = "clipboard.watcher"
+            }
+        }
+        
+        // 在同步后修复 AndroidManifest.xml
+        tasks.register("fixClipboardWatcherManifest") {
+            doLast {
+                val manifestFile = file("${project.projectDir}/src/main/AndroidManifest.xml")
+                if (manifestFile.exists()) {
+                    var content = manifestFile.readText()
+                    if (content.contains("package=\"clipboard.watcher\"")) {
+                        content = content.replace("""package="clipboard.watcher"""", "")
+                        manifestFile.writeText(content)
+                        println("Fixed clipboard_watcher AndroidManifest.xml")
+                    }
+                }
+            }
+        }
+        
+        tasks.configureEach {
+            if (name.contains("process") && name.contains("Manifest")) {
+                dependsOn("fixClipboardWatcherManifest")
             }
         }
     }
