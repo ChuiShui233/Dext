@@ -30,11 +30,13 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _captchaController = TextEditingController();
   // 添加焦点控制
   final _usernameFocus = FocusNode();
+  final _emailFocus = FocusNode();
   final _passwordFocus = FocusNode();
   final _confirmFocus = FocusNode();
   final _captchaFocus = FocusNode();
@@ -410,6 +412,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       showErrorDialog('两次输入的密码不一致');
       return;
     }
+    
+    // 验证邮箱格式（如果填写）
+    final email = _emailController.text.trim();
+    if (email.isNotEmpty && !_isValidEmail(email)) {
+      showErrorDialog('邮箱格式不正确');
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -421,6 +430,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         password: hashPassword(_passwordController.text),
         captchaId: _captchaId ?? '',
         captchaValue: _captchaController.text.trim(),
+        email: email.isNotEmpty ? email : null,
       );
       
       if (!mounted) return;
@@ -459,6 +469,22 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         _fetchCaptcha();
       }
     }
+  }
+
+  bool _isValidEmail(String email) {
+    // 简单的邮箱格式验证
+    if (email.length < 3 || email.length > 255) {
+      return false;
+    }
+    final atIndex = email.indexOf('@');
+    if (atIndex <= 0 || atIndex == email.length - 1) {
+      return false;
+    }
+    final dotIndex = email.lastIndexOf('.');
+    if (dotIndex <= atIndex + 1 || dotIndex == email.length - 1) {
+      return false;
+    }
+    return true;
   }
 
   void showErrorDialog(String message) {
@@ -1215,6 +1241,17 @@ Widget _buildRegisterForm() {
                     focusNode: _usernameFocus,
                     label: const Text('用户名'),
                     hint: '3-12个字符',
+                    textInputAction: TextInputAction.next,
+                    onEditingComplete: () =>
+                        FocusScope.of(context).requestFocus(_emailFocus),
+                  ),
+                  const SizedBox(height: 16),
+                  FTextField(
+                    controller: _emailController,
+                    focusNode: _emailFocus,
+                    label: const Text('邮箱（可选）'),
+                    hint: '请输入邮箱地址',
+                    keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
                     onEditingComplete: () =>
                         FocusScope.of(context).requestFocus(_passwordFocus),

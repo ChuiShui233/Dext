@@ -13,6 +13,7 @@ import '../models/question.dart';
 import '../services/api_service.dart';
 import '../main.dart' show isDesktop;
 import '../widgets/frosted_glass_background.dart';
+import '../components/glass_card.dart';
 import 'edit_question_page.dart';
 import 'survey_preview_page.dart';
 import '../services/config.dart';
@@ -661,23 +662,13 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
 
 
   Widget _buildQuestionListItem(Question question, int index) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Container(
       key: ValueKey(question.id),
       margin: const EdgeInsets.only(bottom: 8, left: 16, right: 16),
-      child: Card(
-        elevation: 2,
-        color: Theme.of(context).brightness == Brightness.dark
-            ? Colors.transparent
-            : Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.white.withAlpha(25)
-                : Colors.black.withAlpha(25),
-            width: 1,
-          ),
-        ),
+      child: GlassCard(
+        margin: EdgeInsets.zero,
         child: Column(
           children: [
             // 拖动条 - 只有这个区域可以拖动
@@ -687,9 +678,9 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                 width: double.infinity,
                 height: 24,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.grey.shade800
-                      : Colors.grey.shade100,
+                  color: isDark 
+                      ? Colors.white.withAlpha(26)
+                      : Colors.black.withAlpha(13),
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(12),
                     topRight: Radius.circular(12),
@@ -700,7 +691,7 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.dark
+                      color: isDark 
                           ? Colors.grey.shade600
                           : Colors.grey.shade400,
                       borderRadius: BorderRadius.circular(2),
@@ -719,7 +710,12 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                   if (question.mediaUrls.isNotEmpty)
                     Text(
                       '${question.mediaUrls.length} 个媒体文件',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style: TextStyle(
+                        fontSize: 12, 
+                        color: isDark 
+                            ? Colors.grey.shade400
+                            : Colors.grey.shade600,
+                      ),
                     ),
                 ],
               ),

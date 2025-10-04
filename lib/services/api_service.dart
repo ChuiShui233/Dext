@@ -409,21 +409,28 @@ class ApiService {
     required String password,
     required String captchaId,
     required String captchaValue,
+    String? email,
     StatusCallback? onStatus,
   }) async {
     try {
       onStatus?.call(RequestStatus.loading, '正在注册...');
       _updateStatus(RequestStatus.loading, '正在注册...');
 
+      final requestData = {
+        'username': username,
+        'password': password,
+        'captchaId': captchaId,
+        'captchaValue': captchaValue,
+      };
+      
+      if (email != null && email.isNotEmpty) {
+        requestData['email'] = email;
+      }
+
       final response = await _encryptedRequest(
         'POST',
         '$baseUrl/api/auth/register',
-        {
-          'username': username,
-          'password': password,
-          'captchaId': captchaId,
-          'captchaValue': captchaValue,
-        },
+        requestData,
         onStatus: onStatus,
       );
 

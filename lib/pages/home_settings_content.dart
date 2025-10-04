@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import '../services/config.dart';
 import '../widgets/crop_image_dialog.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class HomeSettingsContent extends StatefulWidget {
   final VoidCallback onLogout;
@@ -30,11 +31,26 @@ class HomeSettingsContent extends StatefulWidget {
 
 class _HomeSettingsContentState extends State<HomeSettingsContent> {
   User? _currentUser;
+  String _appVersion = '加载中...';
 
   @override
   void initState() {
     super.initState();
     _fetchUserData();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      setState(() {
+        _appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+      });
+    } catch (e) {
+      setState(() {
+        _appVersion = '未知';
+      });
+    }
   }
 
 
@@ -129,6 +145,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
   }
 
   Future<void> _showUpdateUsernameDialog(BuildContext context) async {
+    final formKey = GlobalKey<FormState>();
     final usernameController = TextEditingController(text: _currentUser?.username ?? '');
     bool isLoading = false;
 
@@ -136,35 +153,61 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => FDialog(
+          direction: Axis.horizontal,
           title: const Text('修改用户名'),
-          body: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('请输入新的用户名（3-12位字母数字）'),
-              const SizedBox(height: 16),
-              FTextField(
-                controller: usernameController,
-                label: const Text('用户名'),
-                hint: '输入新用户名',
-                maxLength: 12,
-                enabled: !isLoading,
-              ),
-              if (isLoading) ...[
+          body: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('请输入新的用户名（3-12位字母数字）'),
                 const SizedBox(height: 16),
-                const Row(
-                  children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    SizedBox(width: 8),
-                    Text('正在更新用户名...'),
-                  ],
+                FTextFormField(
+                  controller: usernameController,
+                  label: const Text('用户名'),
+                  hint: '输入新用户名',
+                  maxLength: 12,
+                  enabled: !isLoading,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return '用户名不能为空';
+                    }
+                    
+                    final trimmed = value.trim();
+                    
+                    if (trimmed.length < 3 || trimmed.length > 12) {
+                      return '用户名长度必须在3-12位之间';
+                    }
+                    
+                    if (!RegExp(r'^[a-zA-Z0-9]+$').hasMatch(trimmed)) {
+                      return '用户名只能包含字母和数字';
+                    }
+                    
+                    if (trimmed == _currentUser?.username) {
+                      return '新用户名与当前用户名相同';
+                    }
+                    
+                    return null;
+                  },
                 ),
+                if (isLoading) ...[
+                  const SizedBox(height: 16),
+                  const Row(
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 8),
+                      Text('正在更新用户名...'),
+                    ],
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
           actions: [
             FButton(
@@ -174,40 +217,12 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
             ),
             FButton(
               onPress: isLoading ? null : () async {
+                // 验证表单
+                if (!formKey.currentState!.validate()) {
+                  return;
+                }
+                
                 final newUsername = usernameController.text.trim();
-                
-                // 验证用户名格式
-                if (newUsername.isEmpty) {
-                  showFToast(
-                    context: context,
-                    title: const Text('用户名不能为空'),
-                  );
-                  return;
-                }
-                
-                if (newUsername.length < 3 || newUsername.length > 12) {
-                  showFToast(
-                    context: context,
-                    title: const Text('用户名长度必须在3-12位之间'),
-                  );
-                  return;
-                }
-                
-                if (!RegExp(r'^[a-zA-Z0-9]+$').hasMatch(newUsername)) {
-                  showFToast(
-                    context: context,
-                    title: const Text('用户名只能包含字母和数字'),
-                  );
-                  return;
-                }
-                
-                if (newUsername == _currentUser?.username) {
-                  showFToast(
-                    context: context,
-                    title: const Text('新用户名与当前用户名相同'),
-                  );
-                  return;
-                }
 
                 setState(() {
                   isLoading = true;
@@ -458,7 +473,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
       children: [
         _buildNoHighlightListTile(
           title: const Text('版本'),
-          trailing: Text('1.0.0',
+          trailing: Text(_appVersion,
               style: TextStyle(
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.5))),
         ),
@@ -600,7 +615,6 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
       },
     );
     
-    // 只有在确认并成功退出后才调用 onLogout
     if (confirmed == true && context.mounted) {
       onLogout();
     }

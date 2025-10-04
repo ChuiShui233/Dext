@@ -51,9 +51,8 @@ class _CropImageDialogState extends State<CropImageDialog> {
       return data.buffer.asUint8List();
     } catch (e) {
       if (mounted) {
-        final currentContext = context;
         showFToast(
-          context: currentContext,
+          context: context,
           title: Text('裁剪失败: $e'),
         );
       }
@@ -106,16 +105,16 @@ class _CropImageDialogState extends State<CropImageDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                IconButton(
-                  icon: const Icon(Icons.rotate_left),
-                  tooltip: '向左旋转',
-                  onPressed: _isProcessing ? null : () => _cropController.rotateLeft(),
+                FButton.icon(
+                  style: FButtonStyle.outline,
+                  onPress: _isProcessing ? null : () => _cropController.rotateLeft(),
+                  child: const Icon(FIcons.rotateCcw, size: 20),
                 ),
                 const SizedBox(width: 16),
-                IconButton(
-                  icon: const Icon(Icons.rotate_right),
-                  tooltip: '向右旋转',
-                  onPressed: _isProcessing ? null : () => _cropController.rotateRight(),
+                FButton.icon(
+                  style: FButtonStyle.outline,
+                  onPress: _isProcessing ? null : () => _cropController.rotateRight(),
+                  child: const Icon(FIcons.rotateCw, size: 20),
                 ),
               ],
             ),
@@ -134,9 +133,11 @@ class _CropImageDialogState extends State<CropImageDialog> {
           onPress: _isProcessing
               ? null
               : () async {
+                  final navigator = Navigator.of(context);
                   final croppedBytes = await _getCroppedImage();
-                  if (croppedBytes != null && mounted) {
-                    Navigator.pop(context, croppedBytes);
+                  if (!mounted) return;
+                  if (croppedBytes != null) {
+                    navigator.pop(croppedBytes);
                   }
                 },
           child: _isProcessing

@@ -9,7 +9,7 @@ publish_to: 'none' # 如果您希望发布到 pub.dev，请移除此行
 # 在 Android 中，版本号用于 versionName 而构建号用于 versionCode。
 # 在 iOS 中，版本号用于 CFBundleShortVersionString 而构建号用于 CFBundleVersion。
 # 在 Windows 中，版本号用于产品和文件版本的主要、次要和修订部分而构建号用于构建后缀。
-version: 1.0.0+1
+version: 1.0.2+1
 
 environment:
   sdk: ^3.7.2
@@ -61,6 +61,7 @@ dependencies:
   flutter_speed_dial: ^7.0.0
   connectivity_plus: ^7.0.0
   fl_chart: ^0.69.0
+  package_info_plus: ^8.0.0
   crop_image_plus:
     git:
       url: https://github.com/ChuiShui233/crop_image_plus.git

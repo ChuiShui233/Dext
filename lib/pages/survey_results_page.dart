@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../components/glass_card.dart';
 import '../widgets/top_safe_spacer.dart';
 import 'package:flutter/material.dart' as vmath;
 import 'package:forui/forui.dart';
@@ -69,8 +70,8 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
     return '$lenR-$lenQ-$firstId-$lastId';
   }
 
-  // 饼状图
-  Widget _buildPieChart(Map<int, int> stats, List<QuestionOption> options, int total) {
+  // 饼状图（包含标题和图例）
+  Widget _buildPieChart(Map<int, int> stats, List<QuestionOption> options, int total, {String? title}) {
     if (stats.isEmpty || total == 0) {
       return const Center(
         child: Padding(
@@ -109,55 +110,97 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
           fontWeight: FontWeight.bold,
           color: Colors.white,
         ),
+        badgeWidget: null,
+        titlePositionPercentageOffset: 0.6,
       );
     }).toList();
 
-    return Column(
-      children: [
-        SizedBox(
-          height: 250,
-          child: PieChart(
-            PieChartData(
-              sections: sections,
-              sectionsSpace: 2,
-              centerSpaceRadius: 0,
-              borderData: FlBorderData(show: false),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        // 图例
-        Wrap(
-          spacing: 16,
-          runSpacing: 8,
-          children: stats.entries.map((entry) {
-            final optionIndex = entry.key;
-            final count = entry.value;
-            final optionText = optionIndex < options.length ? options[optionIndex].text : '选项 ${optionIndex + 1}';
-            final percentage = (count / total * 100).toStringAsFixed(1);
-            final color = pieColors[optionIndex % pieColors.length];
-            
-            return Row(
-              mainAxisSize: MainAxisSize.min,
+    return GlassCard(
+      margin: EdgeInsets.zero,
+      borderRadius: 12,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 标题
+            if (title != null) ...[
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            // 图例和饼图并排
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(4),
+                // 图例
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: stats.entries.map((entry) {
+                      final optionIndex = entry.key;
+                      final count = entry.value;
+                      final optionText = optionIndex < options.length ? options[optionIndex].text : '选项 ${optionIndex + 1}';
+                      final percentage = (count / total * 100).toStringAsFixed(1);
+                      final color = pieColors[optionIndex % pieColors.length];
+                      
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: color,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '$optionText: $count次 ($percentage%)',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  '$optionText: $count次 ($percentage%)',
-                  style: const TextStyle(fontSize: 12),
+                const SizedBox(width: 16),
+                // 饼图
+                Expanded(
+                  flex: 3,
+                  child: SizedBox(
+                    height: 280,
+                    child: PieChart(
+                      PieChartData(
+                        sections: sections,
+                        sectionsSpace: 8, // 增加扇区间距
+                        centerSpaceRadius: 40, // 添加中心空白，呈现圆环效果
+                        borderData: FlBorderData(show: false),
+                        pieTouchData: PieTouchData(
+                          touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                            // 可以添加交互效果
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ],
-            );
-          }).toList(),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -1046,6 +1089,90 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
               style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 16),
+            // 饼图模式：使用网格布局并列显示（包括非评级题和评级题）
+            if (_usePieChart)
+              LayoutBuilder(builder: (context, constraints) {
+                final w = constraints.maxWidth;
+                final cols = w >= 750 ? 2 : 1; // 屏幕够宽显示2列
+                const gap = 16.0;
+                final pieCards = <Widget>[];
+                
+                for (final question in _questions) {
+                  if (question.type != QuestionType.slider) {
+                    // 非评级题
+                    final questionStats = responsesByQuestion[question.id] ?? {};
+                    pieCards.add(SizedBox(
+                      width: cols > 1 ? (w - gap) / 2 : w,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: _buildPieChart(questionStats, question.options, totalResponses, title: question.title),
+                      ),
+                    ));
+                  } else {
+                    // 评级题
+                    final int stars = question.ratingStars;
+                    final bool allowHalf = question.ratingAllowHalf;
+                    final double min = question.ratingMin;
+                    final double max = question.ratingMax;
+                    final Map<double, int> bins = {};
+                    final step = allowHalf ? 0.5 : 1.0;
+                    for (double v = 1.0; v <= stars; v += step) {
+                      bins[double.parse(v.toStringAsFixed(1))] = 0;
+                    }
+                    int answered = 0;
+                    for (final r in _results) {
+                      final a = r.questions.firstWhere(
+                        (d) => d.questionId == question.id,
+                        orElse: () => AnswerDetail(
+                          id: 0,
+                          answerId: r.id,
+                          questionId: question.id,
+                          selectedOptions: const [],
+                          selectChoices: '',
+                        ),
+                      );
+                      if (a.selectChoices.isEmpty) continue;
+                      final parsed = double.tryParse(a.selectChoices);
+                      if (parsed == null) continue;
+                      answered++;
+                      double val;
+                      if (parsed >= 0.5 && parsed <= stars + 0.001) {
+                        val = parsed;
+                      } else {
+                        final clamped = parsed.clamp(min, max);
+                        final ratio = (max > min) ? ((clamped - min) / (max - min)).clamp(0.0, 1.0) : 0.0;
+                        val = 1.0 + ratio * (stars - 1);
+                      }
+                      final double rounded = allowHalf ? ( (val * 2).round() / 2.0 ) : val.roundToDouble();
+                      final key = double.parse(rounded.toStringAsFixed(1));
+                      bins[key] = (bins[key] ?? 0) + 1;
+                    }
+                    final entries = bins.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+                    if (answered > 0) {
+                      final mappedStats = <int, int>{};
+                      final labels = <QuestionOption>[];
+                      for (int i = 0; i < entries.length; i++) {
+                        final e = entries[i];
+                        mappedStats[i] = e.value;
+                        final label = (e.key % 1 == 0)
+                            ? '${e.key.toInt()} 星'
+                            : '${e.key.toStringAsFixed(1)} 星';
+                        labels.add(QuestionOption(id: i, text: label));
+                      }
+                      pieCards.add(SizedBox(
+                        width: cols > 1 ? (w - gap) / 2 : w,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: _buildPieChart(mappedStats, labels, answered, title: question.title),
+                        ),
+                      ));
+                    }
+                  }
+                }
+                return Wrap(spacing: gap, runSpacing: 0, children: pieCards);
+              })
+            else
+            // 条形图模式：原有布局
             ..._questions.map((question) {
               // 非评级题：沿用选项统计
               if (question.type != QuestionType.slider) {
@@ -1063,10 +1190,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                         ),
                       ),
                       const SizedBox(height: 8),
-                      // 根据开关显示饼状图或条形图
-                      if (_usePieChart)
-                        _buildPieChart(questionStats, question.options, totalResponses)
-                      else
                       // 响应式：两列或三列网格
                       LayoutBuilder(builder: (context, constraints) {
                         final w = constraints.maxWidth;
@@ -1178,14 +1301,17 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      question.title,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
+                    // 饼图模式下标题在卡片内，条形图模式下标题在外面
+                    if (!_usePieChart) ...[
+                      Text(
+                        question.title,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
+                      const SizedBox(height: 8),
+                    ],
                       if (answered == 0)
                         Padding(
                           padding: const EdgeInsets.only(left: 16),
@@ -1212,7 +1338,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                         }
                         return Padding(
                           padding: const EdgeInsets.only(left: 8.0, right: 8.0),
-                          child: _buildPieChart(mappedStats, labels, answered),
+                          child: _buildPieChart(mappedStats, labels, answered, title: question.title),
                         );
                       })
                     ] else LayoutBuilder(builder: (context, constraints) {

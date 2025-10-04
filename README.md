@@ -220,7 +220,26 @@ flutter build web --release
 
 ## 项目截图
 
-*（此处可以添加应用截图）*
+### 移动端/桌面端界面
+
+<p align="center">
+  <img src=".preview/image_1.png" alt="登录界面" width="200"/>
+  <img src=".preview/image_2.png" alt="主界面" width="200"/>
+  <img src=".preview/image_3.png" alt="问卷创建" width="200"/>
+  <img src=".preview/image_4.png" alt="问卷预览" width="200"/>
+</p>
+
+<p align="center">
+  <img src=".preview/image_5.png" alt="数据分析" width="400"/>
+</p>
+
+### Web端界面
+
+<p align="center">
+  <img src=".preview/image_WEB.png" alt="Web端展示" width="800"/>
+</p>
+
+> 📱 **跨平台一致性**：在不同平台上保持一致的用户体验和功能完整性
 
 ## 贡献指南
 
