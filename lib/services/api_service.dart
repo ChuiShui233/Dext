@@ -1,4 +1,4 @@
-// Modified by ChuiShui12 on 2025/07/02.
+// Modified by ChuiShui12 on 2025/10/07.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart' as dio;
 import 'config.dart';
 import '/services/crypto_service.dart';
 import 'core/api_core.dart' as core;
@@ -2150,7 +2151,7 @@ Future<Question> addQuestion(
     }
   }
 
-  // Web平台专用的字节数据上传函数
+  // Web平台专用的字节数据上传函数（使用Dio实现真正的上传进度）
   Future<String> uploadMediaBytes(
     int surveyId, 
     List<int> fileBytes,
@@ -2162,70 +2163,51 @@ Future<Question> addQuestion(
       onStatus?.call(RequestStatus.loading, '正在准备上传文件...');
       _updateStatus(RequestStatus.loading, '正在准备上传文件...');
       
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('$baseUrl/api/survey/$surveyId/media'),
-      );
-      
-      final Map<String, String> multipartHeaders = {
-        if (authToken != null) 'Authorization': 'Bearer $authToken',
-      };
-      request.headers.addAll(multipartHeaders);
-      
-      onStatus?.call(RequestStatus.loading, '正在准备文件...');
-      _updateStatus(RequestStatus.loading, '正在准备文件...');
-      
       final fileSize = fileBytes.length;
-      
       if (fileSize == 0) {
         throw '文件为空，无法上传';
       }
       
-      // 使用字节数据创建MultipartFile
-      request.files.add(http.MultipartFile.fromBytes(
-        'file',
-        fileBytes,
-        filename: fileName,
-      ));
+      // 使用Dio实现真正的上传进度监听
+      final dioClient = dio.Dio();
+      dioClient.options.headers = {
+        if (authToken != null) 'Authorization': 'Bearer $authToken',
+      };
+      // 移除超时限制，支持大文件上传
+      dioClient.options.sendTimeout = null; // 无发送超时
+      dioClient.options.receiveTimeout = null; // 无接收超时
+      dioClient.options.connectTimeout = const Duration(seconds: 30); // 仅保留连接超时
+      
+      final formData = dio.FormData.fromMap({
+        'file': dio.MultipartFile.fromBytes(
+          fileBytes,
+          filename: fileName,
+        ),
+      });
       
       onStatus?.call(RequestStatus.loading, '正在上传文件...');
       _updateStatus(RequestStatus.loading, '正在上传文件...');
       
-      final streamedResponse = await request.send();
-      
-      // 监听上传进度
-      int uploadedBytes = 0;
-      final responseBytes = <int>[];
       final startTime = DateTime.now();
       
-      await for (final chunk in streamedResponse.stream) {
-        responseBytes.addAll(chunk);
-        uploadedBytes += chunk.length;
-        
-        // 计算进度
-        final progress = (uploadedBytes / fileSize * 100).round();
-        
-        // 计算上传速度
-        final elapsed = DateTime.now().difference(startTime).inSeconds;
-        final speed = elapsed > 0 ? (uploadedBytes / elapsed / 1024).round() : 0; // KB/s
-        
-        // 回调进度
-        onProgress?.call(uploadedBytes, fileSize);
-        onStatus?.call(RequestStatus.loading, '上传进度: $progress% ($speed KB/s)');
-        _updateStatus(RequestStatus.loading, '上传进度: $progress% ($speed KB/s)');
-      }
-      
-      // 构建响应
-      final response = http.Response(
-        utf8.decode(responseBytes),
-        streamedResponse.statusCode,
-        headers: streamedResponse.headers,
-        request: streamedResponse.request,
+      final response = await dioClient.post(
+        '$baseUrl/api/survey/$surveyId/media',
+        data: formData,
+        onSendProgress: (sent, total) {
+          // 真正的上传进度回调
+          final progress = (sent / total * 100).round();
+          final elapsed = DateTime.now().difference(startTime).inSeconds;
+          final speed = elapsed > 0 ? (sent / elapsed / 1024).round() : 0;
+          
+          onProgress?.call(sent, total);
+          onStatus?.call(RequestStatus.loading, '上传进度: $progress% ($speed KB/s)');
+          _updateStatus(RequestStatus.loading, '上传进度: $progress% ($speed KB/s)');
+        },
       );
       
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        final url = data['publicUrl'] ?? data['url'] as String;
+        final data = response.data as Map<String, dynamic>;
+        final url = data['url'] as String;
         
         final totalTime = DateTime.now().difference(startTime).inSeconds;
         final avgSpeed = totalTime > 0 ? (fileSize / totalTime / 1024).round() : 0;
@@ -2235,23 +2217,29 @@ Future<Question> addQuestion(
         
         return url;
       } else {
-        final errorMsg = '上传媒体文件失败: ${response.statusCode}, Body: ${response.body}';
+        final errorMsg = '上传媒体文件失败: ${response.statusCode}';
         onStatus?.call(RequestStatus.error, errorMsg);
         _updateStatus(RequestStatus.error, errorMsg);
         throw errorMsg;
       }
-    } catch (e) {
-      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
-        final errorMsg = '上传超时，请检查网络连接';
-        onStatus?.call(RequestStatus.error, errorMsg);
-        _updateStatus(RequestStatus.error, errorMsg);
-        throw errorMsg;
+    } on dio.DioException catch (e) {
+      String errorMsg;
+      if (e.type == dio.DioExceptionType.connectionTimeout || 
+          e.type == dio.DioExceptionType.sendTimeout) {
+        errorMsg = '上传超时，请检查网络连接';
+      } else if (e.response != null) {
+        errorMsg = '上传失败: ${e.response?.statusCode} - ${e.response?.data}';
       } else {
-        final errorMsg = e.toString();
-        onStatus?.call(RequestStatus.error, errorMsg);
-        _updateStatus(RequestStatus.error, errorMsg);
-        rethrow;
+        errorMsg = '上传失败: ${e.message}';
       }
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      throw errorMsg;
+    } catch (e) {
+      final errorMsg = '上传失败: ${e.toString()}';
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
     }
   }
 
@@ -2360,7 +2348,7 @@ Future<Question> addQuestion(
     }
   }
 
-  // 增强版流式上传函数（移动端使用文件路径）
+  // 增强版流式上传函数（移动端使用文件路径，使用Dio实现真正的上传进度）
   Future<String> uploadMedia(
     int surveyId, 
     String filePath, {
@@ -2371,19 +2359,6 @@ Future<Question> addQuestion(
       onStatus?.call(RequestStatus.loading, '正在准备上传文件...');
       _updateStatus(RequestStatus.loading, '正在准备上传文件...');
       
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('$baseUrl/api/survey/$surveyId/media'),
-      );
-      
-      final Map<String, String> multipartHeaders = {
-        if (authToken != null) 'Authorization': 'Bearer $authToken',
-      };
-      request.headers.addAll(multipartHeaders);
-      
-      onStatus?.call(RequestStatus.loading, '正在准备文件...');
-      _updateStatus(RequestStatus.loading, '正在准备文件...');
-      
       // 获取文件信息
       final file = File(filePath);
       final fileSize = await file.length();
@@ -2392,48 +2367,47 @@ Future<Question> addQuestion(
         throw '文件为空，无法上传';
       }
       
-      request.files.add(await http.MultipartFile.fromPath('file', filePath));
+      // 使用Dio实现真正的上传进度监听
+      final dioClient = dio.Dio();
+      dioClient.options.headers = {
+        if (authToken != null) 'Authorization': 'Bearer $authToken',
+      };
+      // 移除超时限制，支持大文件上传
+      dioClient.options.sendTimeout = null; // 无发送超时
+      dioClient.options.receiveTimeout = null; // 无接收超时
+      dioClient.options.connectTimeout = const Duration(seconds: 30); // 仅保留连接超时
+      
+      final fileName = filePath.split(Platform.pathSeparator).last;
+      final formData = dio.FormData.fromMap({
+        'file': await dio.MultipartFile.fromFile(
+          filePath,
+          filename: fileName,
+        ),
+      });
       
       onStatus?.call(RequestStatus.loading, '正在上传文件...');
       _updateStatus(RequestStatus.loading, '正在上传文件...');
       
-      // 使用流式传输，不设置超时限制
-      final streamedResponse = await request.send();
-      
-      // 监听上传进度
-      int uploadedBytes = 0;
-      final responseBytes = <int>[];
       final startTime = DateTime.now();
       
-      await for (final chunk in streamedResponse.stream) {
-        responseBytes.addAll(chunk);
-        uploadedBytes += chunk.length;
-        
-        // 计算进度
-        final progress = (uploadedBytes / fileSize * 100).round();
-        
-        // 计算上传速度
-        final elapsed = DateTime.now().difference(startTime).inSeconds;
-        final speed = elapsed > 0 ? (uploadedBytes / elapsed / 1024).round() : 0; // KB/s
-        
-        // 回调进度
-        onProgress?.call(uploadedBytes, fileSize);
-        onStatus?.call(RequestStatus.loading, '上传进度: $progress% ($speed KB/s)');
-        _updateStatus(RequestStatus.loading, '上传进度: $progress% ($speed KB/s)');
-      }
-      
-      // 构建响应
-      final response = http.Response(
-        utf8.decode(responseBytes),
-        streamedResponse.statusCode,
-        headers: streamedResponse.headers,
-        request: streamedResponse.request,
+      final response = await dioClient.post(
+        '$baseUrl/api/survey/$surveyId/media',
+        data: formData,
+        onSendProgress: (sent, total) {
+          // 真正的上传进度回调
+          final progress = (sent / total * 100).round();
+          final elapsed = DateTime.now().difference(startTime).inSeconds;
+          final speed = elapsed > 0 ? (sent / elapsed / 1024).round() : 0;
+          
+          onProgress?.call(sent, total);
+          onStatus?.call(RequestStatus.loading, '上传进度: $progress% ($speed KB/s)');
+          _updateStatus(RequestStatus.loading, '上传进度: $progress% ($speed KB/s)');
+        },
       );
       
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        // 优先返回 publicUrl 字段
-        final url = data['publicUrl'] ?? data['url'] as String;
+        final data = response.data as Map<String, dynamic>;
+        final url = data['url'] as String;
         
         final totalTime = DateTime.now().difference(startTime).inSeconds;
         final avgSpeed = totalTime > 0 ? (fileSize / totalTime / 1024).round() : 0;
@@ -2443,23 +2417,29 @@ Future<Question> addQuestion(
         
         return url;
       } else {
-        final errorMsg = '上传媒体文件失败: ${response.statusCode}, Body: ${response.body}';
+        final errorMsg = '上传媒体文件失败: ${response.statusCode}';
         onStatus?.call(RequestStatus.error, errorMsg);
         _updateStatus(RequestStatus.error, errorMsg);
         throw errorMsg;
       }
-    } catch (e) {
-      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
-        final errorMsg = '上传超时，请检查网络连接';
-        onStatus?.call(RequestStatus.error, errorMsg);
-        _updateStatus(RequestStatus.error, errorMsg);
-        throw errorMsg;
+    } on dio.DioException catch (e) {
+      String errorMsg;
+      if (e.type == dio.DioExceptionType.connectionTimeout || 
+          e.type == dio.DioExceptionType.sendTimeout) {
+        errorMsg = '上传超时，请检查网络连接';
+      } else if (e.response != null) {
+        errorMsg = '上传失败: ${e.response?.statusCode} - ${e.response?.data}';
       } else {
-        final errorMsg = e.toString();
-        onStatus?.call(RequestStatus.error, errorMsg);
-        _updateStatus(RequestStatus.error, errorMsg);
-        rethrow;
+        errorMsg = '上传失败: ${e.message}';
       }
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      throw errorMsg;
+    } catch (e) {
+      final errorMsg = '上传失败: ${e.toString()}';
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
     }
   }
 

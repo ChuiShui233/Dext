@@ -601,37 +601,4 @@ class OAuthService {
            githubClientId != 'YOUR_GITHUB_CLIENT_ID' &&
            microsoftClientId != 'YOUR_MICROSOFT_CLIENT_ID';
   }
-
-  /// 获取配置说明
-  static String getConfigurationInstructions() {
-    return '''
-OAuth配置说明：
-
-1. Google OAuth配置：
-   - 访问 https://console.developers.google.com/
-   - 创建项目并启用Google+ API
-   - 创建OAuth 2.0客户端ID
-   - 将客户端ID和密钥替换到代码中
-
-2. GitHub OAuth配置：
-   - 访问 https://github.com/settings/developers
-   - 创建新的OAuth App
-   - 设置Authorization callback URL为: $_redirectUri
-   - 将客户端ID和密钥替换到代码中
-
-3. Microsoft OAuth配置：
-   - 访问 https://portal.azure.com/
-   - 在Azure Active Directory中注册应用
-   - 在"身份验证"中选择"任何组织目录中的帐户和个人Microsoft帐户"
-   - 配置重定向URI和API权限
-   - 获取应用程序(客户端)ID和客户端密钥
-   - 将客户端ID和密钥替换到代码中
-
-4. 重定向URI配置：
-   - Web: $oauthCallbackWeb
-   - Android: $oauthCallbackAndroid
-   - iOS: $oauthCallbackIOS
-   - Desktop: $oauthCallbackDesktop
-''';
-  }
 }
