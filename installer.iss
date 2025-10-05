@@ -9,8 +9,11 @@ DefaultDirName={userpf}\Dext
 DefaultGroupName=Dext
 OutputBaseFilename=DextSetup
 OutputDir=Output
+AppId=8B5F5F3A-8C2D-4E1B-9F7A-3D8E5C7F9A2B
 
-; 压缩设置 - 使用6.5新特性：增强的LZMA多线程压缩
+AppMutex=Global\8B5F5F3A-8C2D-4E1B-9F7A-3D8E5C7F9A2B_Setup
+
+; 压缩设置
 Compression=lzma2/ultra64
 LZMAUseSeparateProcess=yes
 LZMANumBlockThreads=4
@@ -44,56 +47,50 @@ WizardImageFile=installer\installer_bg.bmp
 ; 卸载信息显示 - 使用6.5新特性：数字分隔符
 UninstallDisplaySize=150_000_000
 
-;----------------------------------------
-; 语言设置
-;----------------------------------------
 [Languages]
-Name: "chinesesimp"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "chinesesimp"; MessagesFile: "installer/ChineseSimplified.isl"
 
-;----------------------------------------
-; 文件复制
-;----------------------------------------
 [Files]
 Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
-;----------------------------------------
-; 安装任务
-;----------------------------------------
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加图标:"; Flags: checkedonce
 Name: "startmenuicon"; Description: "创建开始菜单快捷方式"; GroupDescription: "附加图标:"; Flags: checkedonce
 
-;----------------------------------------
-; 快捷方式
-;----------------------------------------
 [Icons]
-; 桌面快捷方式（仅在用户勾选时创建）
-Name: "{autodesktop}\Dext"; Filename: "{app}\dext.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+; 当前用户桁面快捷方式
+Name: "{userdesktop}\Dext"; Filename: "{app}\dext.exe"; WorkingDir: "{app}"; Tasks: desktopicon; Check: not IsAllUsersInstall
+; 所有用户桁面快捷方式
+Name: "{commondesktop}\Dext"; Filename: "{app}\dext.exe"; WorkingDir: "{app}"; Tasks: desktopicon; Check: IsAllUsersInstall
 
-; 开始菜单文件夹快捷方式（仅在用户勾选时创建）
-Name: "{group}\Dext"; Filename: "{app}\dext.exe"; WorkingDir: "{app}"; Tasks: startmenuicon
-Name: "{group}\卸载 Dext"; Filename: "{uninstallexe}"; Tasks: startmenuicon
+; 当前用户开始菜单快捷方式
+Name: "{userprograms}\Dext\Dext"; Filename: "{app}\dext.exe"; WorkingDir: "{app}"; Tasks: startmenuicon; Check: not IsAllUsersInstall
+Name: "{userprograms}\Dext\卸载 Dext"; Filename: "{uninstallexe}"; Tasks: startmenuicon; Check: not IsAllUsersInstall
+; 所有用户开始菜单快捷方式
+Name: "{commonprograms}\Dext\Dext"; Filename: "{app}\dext.exe"; WorkingDir: "{app}"; Tasks: startmenuicon; Check: IsAllUsersInstall
+Name: "{commonprograms}\Dext\卸载 Dext"; Filename: "{uninstallexe}"; Tasks: startmenuicon; Check: IsAllUsersInstall
 
-;----------------------------------------
-; 安装完成后运行
-;----------------------------------------
 [Run]
 Filename: "{app}\dext.exe"; Description: "运行 Dext"; Flags: nowait postinstall skipifsilent
 
-;----------------------------------------
-; 卸载部分
-;----------------------------------------
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
 
-;----------------------------------------
-; 自定义安装页面（是否为所有用户安装）
-;----------------------------------------
 [Code]
 var
   AllUsersCheckbox: TNewCheckBox;
+  IsUpgradeInstall: Boolean;  // 标记是否为更新安装
+  SetupMutex: THandle;  // 安装程序互斥体
 
-{ 外部函数声明 }
+function CreateMutex(lpMutexAttributes: Integer; bInitialOwner: Boolean; lpName: String): THandle;
+  external 'CreateMutexW@kernel32.dll stdcall';
+
+function GetLastError: DWORD;
+  external 'GetLastError@kernel32.dll stdcall';
+
+function ReleaseMutex(hMutex: THandle): Boolean;
+  external 'ReleaseMutex@kernel32.dll stdcall';
+
 function FindWindowByClassName(lpClassName, lpWindowName: String): HWND;
   external 'FindWindowW@user32.dll stdcall';
   
@@ -116,13 +113,21 @@ const
   WM_CLOSE = $0010;
   PROCESS_TERMINATE = $0001;
 
-{ 检测是否为管理员用户 }
 function IsAdminUser: Boolean;
 begin
   Result := IsAdmin;
 end;
 
-{ 检测Dext是否正在运行 }
+{ 检查是否为所有用户安装 }
+function IsAllUsersInstall: Boolean;
+begin
+  // 如果是管理员且复选框存在且被勾选，则为所有用户安装
+  if IsAdmin and (AllUsersCheckbox <> nil) and AllUsersCheckbox.Checked then
+    Result := True
+  else
+    Result := False;
+end;
+
 function IsDextRunning: Boolean;
 var
   hWnd: HWND;
@@ -174,7 +179,6 @@ begin
     Exit;
   end;
   
-  // 第二步：尝试taskkill命令
   Exec('taskkill.exe', '/F /IM dext.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(1000);
   
@@ -184,7 +188,6 @@ begin
     Exit;
   end;
   
-  // 第三步：强制终止进程
   hWnd := FindWindowByClassName('FLUTTER_RUNNER_WIN32_WINDOW', '');
   if hWnd = 0 then
     hWnd := FindWindowByClassName('', 'Dext');
@@ -224,13 +227,11 @@ begin
   end;
 end;
 
-{ 检测高对比度模式 - Inno Setup 6.5.0 新增 }
 function IsHighContrast: Boolean;
 begin
   Result := HighContrastActive;
 end;
 
-{ 布尔值转字符串辅助函数 }
 function BoolToStr(Value: Boolean): String;
 begin
   if Value then
@@ -239,14 +240,12 @@ begin
     Result := 'False';
 end;
 
-{ 处理“为所有用户安装”复选框点击事件 }
 procedure AllUsersCheckboxClick(Sender: TObject);
 var
   NewPath: String;
 begin
   if AllUsersCheckbox.Checked then
   begin
-    // 为所有用户安装：设置固定路径并锁定
     NewPath := ExpandConstant('{commonpf}\Dext');
     WizardForm.DirEdit.Text := NewPath;
     WizardForm.DirEdit.ReadOnly := True;
@@ -254,7 +253,6 @@ begin
   end
   else
   begin
-    // 仅为当前用户安装：解锁路径选择
     NewPath := ExpandConstant('{userpf}\Dext');
     WizardForm.DirEdit.Text := NewPath;
     WizardForm.DirEdit.ReadOnly := False;
@@ -262,11 +260,23 @@ begin
   end;
 end;
 
-{ 初始化向导页面 - 添加自定义UI元素 }
 procedure InitializeWizard;
 var
   DefaultPath: String;
 begin
+  // 如果是更新安装，修改窗口标题和各页面文本
+  if IsUpgradeInstall then
+  begin
+    WizardForm.Caption := 'Dext 更新向导';
+    WizardForm.WelcomeLabel1.Caption := '欢迎使用 Dext 更新向导';
+    WizardForm.WelcomeLabel2.Caption := '这将更新您计算机上安装的 Dext 到新版本。' + #13#10#13#10 +
+                                        '建议您在继续之前关闭所有其他应用程序。' + #13#10#13#10 +
+                                        '点击「下一步」继续，或点击「取消」退出更新向导。';
+    WizardForm.FinishedLabel.Caption := 'Dext 已成功更新到您的计算机。';
+    WizardForm.ReadyLabel.Caption := '现在已经准备好开始更新。' + #13#10#13#10 +
+                                     '点击「更新」继续，或点击「上一步」修改设置。';
+  end;
+  
   if IsAdminUser then
   begin
     // 管理员模式：创建"为所有用户安装"复选框
@@ -294,18 +304,160 @@ begin
   end;
 end;
 
+{ 控制是否跳过选择目录页面 }
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := False;
+  
+  // 如果是更新安装，跳过选择目录、选择任务和选择开始菜单文件夹页面
+  if IsUpgradeInstall then
+  begin
+    if (PageID = wpSelectDir) or (PageID = wpSelectTasks) or (PageID = wpSelectProgramGroup) then
+      Result := True;
+  end;
+end;
+
+{ 页面切换时的处理 }
+procedure CurPageChanged(CurPageID: Integer);
+var
+  I: Integer;
+begin
+  // 如果是更新安装，修改按钮文本
+  if IsUpgradeInstall then
+  begin
+    if CurPageID = wpReady then
+    begin
+      // 将"安装"按钮改为"更新"
+      WizardForm.NextButton.Caption := '更新(&I)';
+    end;
+  end;
+  
+  // 如果选择了为所有用户安装，自动勾选并锁死任务选项
+  if CurPageID = wpSelectTasks then
+  begin
+    if IsAdmin and (AllUsersCheckbox <> nil) and AllUsersCheckbox.Checked then
+    begin
+      // 自动勾选所有任务
+      for I := 0 to WizardForm.TasksList.Items.Count - 1 do
+      begin
+        WizardForm.TasksList.Checked[I] := True;
+      end;
+      
+      // 禁用任务列表和按钮
+      WizardForm.TasksList.Enabled := False;
+    end
+    else
+    begin
+      // 如果不是为所有用户安装，确保启用
+      WizardForm.TasksList.Enabled := True;
+    end;
+  end;
+end;
+
+{ 检测是否为更新安装 }
+function IsExistingInstallation: Boolean;
+var
+  AppPath: String;
+  UninstallKey: String;
+  InstallLocation: String;
+begin
+  Result := False;
+  
+  // 优先从注册表读取实际安装路径
+  UninstallKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\8B5F5F3A-8C2D-4E1B-9F7A-3D8E5C7F9A2B_is1';
+  
+  // 检查当前用户注册表
+  if RegQueryStringValue(HKEY_CURRENT_USER, UninstallKey, 'InstallLocation', InstallLocation) then
+  begin
+    AppPath := AddBackslash(InstallLocation) + 'dext.exe';
+    if FileExists(AppPath) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+  
+  // 检查本地机器注册表
+  if RegQueryStringValue(HKEY_LOCAL_MACHINE, UninstallKey, 'InstallLocation', InstallLocation) then
+  begin
+    AppPath := AddBackslash(InstallLocation) + 'dext.exe';
+    if FileExists(AppPath) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+  
+  // 如果注册表中没有找到，检查默认路径
+  // 检查当前用户程序目录
+  AppPath := ExpandConstant('{userpf}\Dext\dext.exe');
+  if FileExists(AppPath) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  
+  // 检查公共程序目录
+  AppPath := ExpandConstant('{commonpf}\Dext\dext.exe');
+  if FileExists(AppPath) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  
+  // 检查Program Files (x86)
+  AppPath := ExpandConstant('{commonpf32}\Dext\dext.exe');
+  if FileExists(AppPath) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  
+  // 最后检查注册表项是否存在（但文件可能已被删除）
+  if RegKeyExists(HKEY_CURRENT_USER, UninstallKey) or 
+     RegKeyExists(HKEY_LOCAL_MACHINE, UninstallKey) then
+  begin
+    Result := True;
+    Exit;
+  end;
+end;
+
 { 安装程序启动时的初始化 }
 function InitializeSetup(): Boolean;
 var
   Response: Integer;
+  InstallationType: String;
+  ErrorCode: DWORD;
 begin
+  Result := False;
+  
+  // 创建全局互斥体防止多个安装程序实例
+  SetupMutex := CreateMutex(0, True, 'Global\DextSetup_8B5F5F3A-8C2D-4E1B-9F7A-3D8E5C7F9A2B');
+  ErrorCode := GetLastError;
+  
+  // ERROR_ALREADY_EXISTS = 183
+  if ErrorCode = 183 then
+  begin
+    MsgBox('另一个 Dext 安装程序已在运行，请关闭其他安装程序后再试。', mbError, MB_OK);
+    Result := False;
+    Exit;
+  end;
+  
   Result := True;
+  
+  // 检测是安装还是更新
+  IsUpgradeInstall := IsExistingInstallation;
+  
+  if IsUpgradeInstall then
+    InstallationType := '更新'
+  else
+    InstallationType := '安装';
   
   // 检测Dext是否正在运行
   if IsDextRunning then
   begin
-    Response := MsgBox('检测到Dext正在运行，需要关闭后才能继续安装。' + #13#10#13#10 +
-                       '点击“是”自动关闭程序，点击“否”取消安装。',
+    Response := MsgBox('检测到Dext正在运行，需要关闭后才能继续' + InstallationType + '。' + #13#10#13#10 +
+                       '点击"是"自动关闭程序，点击"否"取消' + InstallationType + '。',
                        mbConfirmation, MB_YESNO);
     
     if Response = IDYES then
@@ -324,12 +476,21 @@ begin
     end;
   end;
   
-  // 如果不是管理员，提示用户
-  if not IsAdmin then
+  // 显示安装类型提示
+  if IsUpgradeInstall then
   begin
-    MsgBox('提示：当前没有管理员权限，安装将仅限当前用户。' + #13#10 + 
-           '若需为所有用户安装，请右键安装程序选择“以管理员身份运行”。', 
-           mbInformation, MB_OK);
+    MsgBox('检测到已安装的Dext，将执行更新操作。' + #13#10 + 
+           '您的数据和设置将被保留。', mbInformation, MB_OK);
+  end
+  else
+  begin
+    // 如果不是管理员，提示用户
+    if not IsAdmin then
+    begin
+      MsgBox('提示：当前没有管理员权限，安装将仅限当前用户。' + #13#10 + 
+             '若需为所有用户安装，请右键安装程序选择"以管理员身份运行"。', 
+             mbInformation, MB_OK);
+    end;
   end;
 end;
 
@@ -361,5 +522,16 @@ begin
       Result := False;
       Exit;
     end;
+  end;
+end;
+
+{ 安装程序退出时的清理 }
+procedure DeinitializeSetup();
+begin
+  // 释放互斥体
+  if SetupMutex <> 0 then
+  begin
+    ReleaseMutex(SetupMutex);
+    CloseHandle(SetupMutex);
   end;
 end;
