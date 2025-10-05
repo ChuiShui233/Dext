@@ -1,5 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../services/config.dart';
 
@@ -24,20 +27,50 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
   @override
   void initState() {
     super.initState();
+    _loadCachedSubmissions();
     _loadRecentSubmissions();
+  }
+  
+  // 立即从缓存加载数据
+  Future<void> _loadCachedSubmissions() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getString('recent_submissions');
+      if (cached != null) {
+        final data = json.decode(cached) as Map<String, dynamic>;
+        final submissionsList = (data['submissions'] as List<dynamic>? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+        if (mounted) {
+          setState(() {
+            submissions = submissionsList.map((e) => RecentSubmission.fromJson(e)).toList();
+            isLoading = false;
+          });
+        }
+      }
+    } catch (_) {
+      // 忽略错误，_loadRecentSubmissions 会处理
+    }
   }
 
   Future<void> _loadRecentSubmissions() async {
     if (_hasLoaded) return;
     
+    // 延迟显示加载状态
+    Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
+      if (mounted && isLoading) {
+        setState(() {
+          isLoading = true;
+          errorMessage = '';
+        });
+      }
+    });
+    
     try {
-      setState(() {
-        isLoading = true;
-        errorMessage = '';
-      });
 
       final api = widget.apiService ?? ApiService();
       final list = await api.getRecentSubmissions();
+      loadingTimer.cancel();
       if (mounted) {
         setState(() {
           submissions = list.map((e) => RecentSubmission.fromJson(e)).toList();
@@ -46,6 +79,7 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
         });
       }
     } catch (e) {
+      loadingTimer.cancel();
       if (mounted) {
         setState(() {
           errorMessage = '加载失败: $e';

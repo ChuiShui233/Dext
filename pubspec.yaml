@@ -63,6 +63,7 @@ dependencies:
     git:
       url: https://github.com/ChuiShui233/crop_image_plus.git
       ref: master
+  shimmer: ^3.0.0
 
 dev_dependencies:
   flutter_test:

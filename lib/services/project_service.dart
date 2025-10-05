@@ -41,6 +41,78 @@ class ProjectService {
     String? search,
     StatusCallback? onStatus,
   }) async {
+    final prefs = await core.prefs();
+    final cacheKey = 'projects_paginated_${page}_${pageSize}_${search ?? ""}';
+    final cached = prefs.getString(cacheKey);
+    
+    if (cached != null) {
+      try {
+        onStatus?.call(RequestStatus.loading, '正在加载缓存数据...');
+        core.updateStatus(RequestStatus.loading, '正在加载缓存数据...');
+        
+        final cachedData = json.decode(cached) as Map<String, dynamic>;
+        final paginatedResponse = PaginatedResponse.fromJson(cachedData, (json) => Project.fromJson(json));
+        
+        onStatus?.call(RequestStatus.success, '缓存数据加载成功');
+        core.updateStatus(RequestStatus.success, '缓存数据加载成功');
+        
+        // 静默刷新
+        _refreshProjectsPaginatedSilently(prefs, cacheKey, page, pageSize, search, paginatedResponse);
+        return paginatedResponse;
+      } catch (_) {
+        onStatus?.call(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
+        core.updateStatus(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
+      }
+    }
+    
+    return _refreshProjectsPaginated(prefs, cacheKey, page, pageSize, search, onStatus: onStatus);
+  }
+
+  Future<void> _refreshProjectsPaginatedSilently(
+    SharedPreferences prefs,
+    String cacheKey,
+    int page,
+    int pageSize,
+    String? search,
+    PaginatedResponse<Project> cached,
+  ) async {
+    try {
+      final queryParams = <String, String>{
+        'page': page.toString(),
+        'pageSize': pageSize.toString(),
+      };
+      if (search != null && search.isNotEmpty) {
+        queryParams['search'] = search;
+      }
+      final uri = Uri.parse('${ApiCore.baseUrl}/api/project/list').replace(queryParameters: queryParams);
+      final resp = await core.httpRequest('GET', uri.toString());
+      
+      if (resp.statusCode == 200) {
+        final body = json.decode(resp.body) as Map<String, dynamic>;
+        final newResponse = PaginatedResponse.fromJson(body, (json) => Project.fromJson(json));
+        
+        if (_paginatedHasChanged(cached, newResponse)) {
+          prefs.setString(cacheKey, json.encode(body));
+          core.notifyDataUpdate('projects_paginated', newResponse);
+          core.updateStatus(RequestStatus.success, '项目数据已更新');
+        }
+      }
+    } catch (_) {}
+  }
+
+  bool _paginatedHasChanged(PaginatedResponse<Project> a, PaginatedResponse<Project> b) {
+    if (a.total != b.total || a.items.length != b.items.length) return true;
+    return _hasChanged(a.items, b.items);
+  }
+
+  Future<PaginatedResponse<Project>> _refreshProjectsPaginated(
+    SharedPreferences prefs,
+    String cacheKey,
+    int page,
+    int pageSize,
+    String? search, {
+    StatusCallback? onStatus,
+  }) async {
     onStatus?.call(RequestStatus.loading, '正在获取项目列表...');
     core.updateStatus(RequestStatus.loading, '正在获取项目列表...');
 
@@ -57,6 +129,7 @@ class ProjectService {
     
     if (resp.statusCode == 200) {
       final body = json.decode(resp.body) as Map<String, dynamic>;
+      prefs.setString(cacheKey, json.encode(body));
       final paginatedResponse = PaginatedResponse.fromJson(body, (json) => Project.fromJson(json));
       
       onStatus?.call(RequestStatus.success, '项目列表获取成功');
@@ -156,6 +229,13 @@ class ProjectService {
   Future<void> _clearProjectListCache() async {
     final prefs = await core.prefs();
     await prefs.remove('projects_cache');
+    // 清除所有分页缓存
+    final keys = prefs.getKeys();
+    for (final key in keys) {
+      if (key.startsWith('projects_paginated_')) {
+        await prefs.remove(key);
+      }
+    }
     core.notifyDataUpdate('projects_updated', {'action': 'mutated'});
   }
 
@@ -164,6 +244,14 @@ class ProjectService {
     await prefs.remove('projects_cache');
     await prefs.remove('surveys_cache');
     await prefs.remove('survey_stats_cache');
+    // 清除所有分页缓存
+    final keys = prefs.getKeys();
+    for (final key in keys) {
+      if (key.startsWith('projects_paginated_') || 
+          key.startsWith('surveys_paginated_')) {
+        await prefs.remove(key);
+      }
+    }
     core.notifyDataUpdate('projects_deleted', {'deletedId': projectId});
     core.notifyDataUpdate('surveys_deleted', {'deletedId': projectId});
     core.notifyDataUpdate('survey_stats_deleted', {'deletedId': projectId});

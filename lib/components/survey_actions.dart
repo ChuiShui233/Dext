@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import '../models/survey.dart';
 import '../services/api_service.dart';
+import '../services/config.dart';
 import '../pages/edit_survey_page.dart';
 
 class SurveyActions extends StatelessWidget {
@@ -44,8 +45,8 @@ class SurveyActions extends StatelessWidget {
   }
 
   Future<void> _showPublicLink(BuildContext context) async {
-    // 构建公开链接 - 使用 wucode.xyz 域名和问卷的 surveyUID
-    final publicLink = 'https://wucode.xyz/?id=${survey.surveyUid}';
+    // 构建公开链接 - 使用统一配置的域名和问卷的 surveyUID
+    final publicLink = buildPublicSurveyUrl(survey.surveyUid);
     
     await showAdaptiveDialog(
       context: context,

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 typedef FetchTrend = Future<Map<String, dynamic>> Function(String range);
@@ -25,21 +26,32 @@ class _DashboardChartState extends State<DashboardChart> {
 
   Future<void> _loadTrend() async {
     if (widget.fetchTrend == null) return; // 兼容占位
-    setState(() => _loading = true);
+    
+    // 延迟显示加载状态，如果缓存存在会立即返回
+    Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
+      if (mounted && _loading) {
+        setState(() => _loading = true);
+      }
+    });
+    
     try {
       // 记录加载前的总数，供动画起点使用
       final oldTotal = _counts.isNotEmpty ? _counts.fold<int>(0, (a, b) => a + b) : 0;
       final data = await widget.fetchTrend!.call(_range);
+      loadingTimer.cancel();
+      
+      if (!mounted) return;
       final labels = (data['labels'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [];
       final counts = (data['counts'] as List<dynamic>?)?.map((e) => (e as num).toInt()).toList() ?? [];
       setState(() {
         _prevTotalForRange = oldTotal.toDouble();
         _labels = labels;
         _counts = counts;
+        _loading = false;
       });
     } catch (_) {
+      loadingTimer.cancel();
       // 忽略，保持占位
-    } finally {
       if (mounted) setState(() => _loading = false);
     }
   }

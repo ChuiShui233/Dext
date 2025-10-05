@@ -7,24 +7,18 @@ import 'package:oauth2_client/google_oauth2_client.dart';
 import 'package:oauth2_client/github_oauth2_client.dart';
 import 'package:http/http.dart' as http;
 import 'api_service.dart';
+import 'config.dart';
 import 'web_oauth_handler.dart' if (dart.library.io) 'web_oauth_handler_stub.dart';
 
 class OAuthService {
-  static const String _googleClientId = '1098222292927-26rbvt32p9kfu8bvin8btapknj5qomhk.apps.googleusercontent.com';
-  static const String _googleClientSecret = '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';
-  static const String _githubClientId = 'Ov23linQUMRmORjFIiXr';
-  static const String _githubClientSecret = '651a67daf9829ba701ca1058344acb0171375b2f';
-  static const String _microsoftClientId = '6358d1bc-76bd-4340-951b-b250570209d9';
-  static const String _microsoftClientSecret = 'tVE8Q~4Ela3vsIQ8QzmJ4ocz5ZfvCbUOWaY~_chm';
-  
   // 重定向URI和自定义URI方案配置
   static String get _customUriScheme {
     if (kIsWeb) {
       return 'https';
     } else if (Platform.isAndroid) {
-      return 'com.dext.app';
+      return uriSchemeAndroid;
     } else if (Platform.isIOS) {
-      return 'dext';
+      return uriSchemeIOS;
     } else {
       return 'http';
     }
@@ -32,13 +26,13 @@ class OAuthService {
 
   static String get _redirectUri {
     if (kIsWeb) {
-      return 'https://wucode.xyz/oauth/callback';
+      return oauthCallbackWeb;
     } else if (Platform.isAndroid) {
-      return 'com.dext.app://oauth/callback';
+      return oauthCallbackAndroid;
     } else if (Platform.isIOS) {
-      return 'dext://oauth/callback';
+      return oauthCallbackIOS;
     } else {
-      return 'http://localhost:8080/oauth/callback';
+      return oauthCallbackDesktop;
     }
   }
 
@@ -75,7 +69,7 @@ class OAuthService {
   Future<Map<String, dynamic>> _signInWithMicrosoftWeb() async {
     // 构建授权URL
     final authUrl = Uri.https('login.microsoftonline.com', '/common/oauth2/v2.0/authorize', {
-      'client_id': _microsoftClientId,
+      'client_id': microsoftClientId,
       'response_type': 'code',
       'redirect_uri': _redirectUri,
       'scope': 'openid profile email User.Read',
@@ -106,8 +100,8 @@ class OAuthService {
       Uri.parse('https://login.microsoftonline.com/common/oauth2/v2.0/token'),
       headers: {'Content-Type': 'application/x-www-form-urlencoded'},
       body: {
-        'client_id': _microsoftClientId,
-        'client_secret': _microsoftClientSecret,
+        'client_id': microsoftClientId,
+        'client_secret': microsoftClientSecret,
         'code': code,
         'grant_type': 'authorization_code',
         'redirect_uri': _redirectUri,
@@ -166,8 +160,8 @@ class OAuthService {
     final helper = OAuth2Helper(
       client,
       grantType: OAuth2Helper.authorizationCode,
-      clientId: _microsoftClientId,
-      clientSecret: _microsoftClientSecret,
+      clientId: microsoftClientId,
+      clientSecret: microsoftClientSecret,
       scopes: ['openid', 'profile', 'email', 'User.Read'],
       webAuthOpts: {
         'windowName': 'Dext - Microsoft登录',
@@ -240,7 +234,7 @@ class OAuthService {
   Future<Map<String, dynamic>> _signInWithGoogleWeb() async {
     // 构建授权URL
     final authUrl = Uri.https('accounts.google.com', '/o/oauth2/v2/auth', {
-      'client_id': _googleClientId,
+      'client_id': googleClientId,
       'response_type': 'code',
       'redirect_uri': _redirectUri,
       'scope': 'openid profile email',
@@ -270,8 +264,8 @@ class OAuthService {
       Uri.parse('https://oauth2.googleapis.com/token'),
       headers: {'Content-Type': 'application/x-www-form-urlencoded'},
       body: {
-        'client_id': _googleClientId,
-        'client_secret': _googleClientSecret,
+        'client_id': googleClientId,
+        'client_secret': googleClientSecret,
         'code': code,
         'grant_type': 'authorization_code',
         'redirect_uri': _redirectUri,
@@ -327,8 +321,8 @@ class OAuthService {
     final helper = OAuth2Helper(
       client,
       grantType: OAuth2Helper.authorizationCode,
-      clientId: _googleClientId,
-      clientSecret: _googleClientSecret,
+      clientId: googleClientId,
+      clientSecret: googleClientSecret,
       scopes: ['openid', 'profile', 'email'],
       webAuthOpts: {
         'windowName': 'Dext - Google登录',
@@ -401,7 +395,7 @@ class OAuthService {
   Future<Map<String, dynamic>> _signInWithGitHubWeb() async {
     // 构建授权URL
     final authUrl = Uri.https('github.com', '/login/oauth/authorize', {
-      'client_id': _githubClientId,
+      'client_id': githubClientId,
       'redirect_uri': _redirectUri,
       'scope': 'user:email',
       'state': DateTime.now().millisecondsSinceEpoch.toString(),
@@ -433,8 +427,8 @@ class OAuthService {
         'Accept': 'application/json',
       },
       body: {
-        'client_id': _githubClientId,
-        'client_secret': _githubClientSecret,
+        'client_id': githubClientId,
+        'client_secret': githubClientSecret,
         'code': code,
       },
     );
@@ -508,8 +502,8 @@ class OAuthService {
     final helper = OAuth2Helper(
       client,
       grantType: OAuth2Helper.authorizationCode,
-      clientId: _githubClientId,
-      clientSecret: _githubClientSecret,
+      clientId: githubClientId,
+      clientSecret: githubClientSecret,
       scopes: ['user:email'],
       webAuthOpts: {
         'windowName': 'Dext - GitHub登录',
@@ -603,9 +597,9 @@ class OAuthService {
 
   /// 检查OAuth配置是否完整
   static bool isConfigured() {
-    return _googleClientId != 'YOUR_GOOGLE_CLIENT_ID' &&
-           _githubClientId != 'YOUR_GITHUB_CLIENT_ID' &&
-           _microsoftClientId != 'YOUR_MICROSOFT_CLIENT_ID';
+    return googleClientId != 'YOUR_GOOGLE_CLIENT_ID' &&
+           githubClientId != 'YOUR_GITHUB_CLIENT_ID' &&
+           microsoftClientId != 'YOUR_MICROSOFT_CLIENT_ID';
   }
 
   /// 获取配置说明
@@ -634,10 +628,10 @@ OAuth配置说明：
    - 将客户端ID和密钥替换到代码中
 
 4. 重定向URI配置：
-   - Web: https://wucode.xyz/oauth/callback
-   - Android: com.dext.app://oauth/callback
-   - iOS: dext://oauth/callback
-   - Desktop: http://localhost:8080/oauth/callback
+   - Web: $oauthCallbackWeb
+   - Android: $oauthCallbackAndroid
+   - iOS: $oauthCallbackIOS
+   - Desktop: $oauthCallbackDesktop
 ''';
   }
 }

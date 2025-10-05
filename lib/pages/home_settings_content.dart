@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:forui/forui.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../models/user.dart';
 import 'package:file_picker/file_picker.dart';
@@ -483,6 +484,17 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
           color: theme.dividerColor.withValues(alpha: 0.1),
         ),
         _buildNoHighlightListTile(
+          title: const Text('清空缓存'),
+          trailing: Icon(Icons.arrow_forward_ios,
+              size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
+          onTap: () => _clearCache(context),
+        ),
+        Divider(
+          height: 1,
+          thickness: 1,
+          color: theme.dividerColor.withValues(alpha: 0.1),
+        ),
+        _buildNoHighlightListTile(
           title: const Text('隐私政策'),
           trailing: Icon(Icons.arrow_forward_ios,
               size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
@@ -490,6 +502,68 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
         ),
       ],
     );
+  }
+
+  // ==================== 清空缓存 ====================
+  Future<void> _clearCache(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => FDialog(
+        direction: Axis.horizontal,
+        title: const Text('清空缓存'),
+        body: const Text('确定要清空所有本地缓存吗？\n这将清除问卷、项目、统计数据等缓存，但不会影响您的账户数据。'),
+        actions: [
+          FButton(
+            style: FButtonStyle.ghost,
+            onPress: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FButton(
+            onPress: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final localContext = context;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        
+        // 获取所有缓存键
+        final keys = prefs.getKeys();
+        int clearedCount = 0;
+        
+        // 清除所有缓存数据（保留认证信息）
+        for (final key in keys) {
+          if (!key.startsWith('auth_') && 
+              !key.startsWith('refresh_') && 
+              key != 'session_key') {
+            await prefs.remove(key);
+            clearedCount++;
+          }
+        }
+        
+        if (mounted && localContext.mounted) {
+          showFToast(
+            context: localContext,
+            alignment: FToastAlignment.bottomRight,
+            title: const Text('清空成功'),
+            description: Text('已清除 $clearedCount 项缓存数据'),
+          );
+        }
+      } catch (e) {
+        if (mounted && localContext.mounted) {
+          showFToast(
+            context: localContext,
+            alignment: FToastAlignment.bottomRight,
+            title: const Text('清空失败'),
+            description: Text('清空缓存失败: $e'),
+          );
+        }
+      }
+    }
   }
 
   // ==================== 工具方法 ====================

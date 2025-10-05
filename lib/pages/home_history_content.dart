@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:layout/layout.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import 'submission_detail_page.dart';
 import '../main.dart' show isDesktop;
@@ -34,7 +36,43 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
   void initState() {
     super.initState();
     _typeSelectController = FSelectController<int>(vsync: this);
+    // 初次进入：先显示加载，再从本地缓存读取，最后发起网络请求
+    _loading = true;
+    _loadCachedHistory();
     _fetch();
+  }
+
+  // 立即从本地缓存读取，避免初次渲染出现“无提交记录”闪烁
+  Future<void> _loadCachedHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = _buildCacheKey();
+      final cached = prefs.getString(key);
+      if (cached != null) {
+        final data = json.decode(cached) as Map<String, dynamic>;
+        final items = (data['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        final total = (data['total'] as num?)?.toInt() ?? items.length;
+        if (!mounted) return;
+        setState(() {
+          _items = items;
+          _total = total;
+          _loading = false; // 有缓存则直接显示
+        });
+        // 同步分页控制器
+        final totalPages = (_total / _pageSize).ceil();
+        _paginationController.dispose();
+        _paginationController = FPaginationController(pages: totalPages > 0 ? totalPages : 1);
+        _paginationController.page = (_page - 1).clamp(0, (totalPages - 1).clamp(0, double.infinity).toInt());
+      }
+    } catch (_) {
+      // 忽略缓存读取错误
+    }
+  }
+
+  String _buildCacheKey() {
+    final q = _searchController.text.trim();
+    final type = _selectedType?.toString() ?? 'all';
+    return 'history_${q}_${type}_${_page}_$_pageSize';
   }
 
   @override
@@ -48,7 +86,14 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
 
   Future<void> _fetch({bool resetPage = false}) async {
     if (!mounted) return;
-    setState(() => _loading = true);
+    
+    // 延迟显示加载状态，如果缓存存在会立即返回
+    Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
+      if (mounted && _loading) {
+        setState(() => _loading = true);
+      }
+    });
+    
     if (resetPage) {
       _page = 1;
       _paginationController.page = 0; // 同步重置分页控制器
@@ -60,6 +105,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
         page: _page,
         pageSize: _pageSize,
       );
+      loadingTimer.cancel();
       if (!mounted) return;
       final items = (resp['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       setState(() {
@@ -67,6 +113,12 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
         _total = (resp['total'] as num?)?.toInt() ?? items.length;
         _loading = false;
       });
+      // 写入本地缓存
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final key = _buildCacheKey();
+        await prefs.setString(key, json.encode({'items': items, 'total': _total}));
+      } catch (_) {}
       
       // 更新分页控制器
       final totalPages = (_total / _pageSize).ceil();
@@ -75,6 +127,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
       // 同步当前页码到分页控制器（转换为0-based）
       _paginationController.page = (_page - 1).clamp(0, (totalPages - 1).clamp(0, double.infinity).toInt());
     } catch (e) {
+      loadingTimer.cancel();
       if (!mounted) return;
       setState(() => _loading = false);
       showFToast(
@@ -405,6 +458,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final answerId = (item['answerId'] as num?)?.toInt();
+    final surveyId = (item['surveyId'] as num?)?.toInt();
     final surveyType = (item['surveyType'] as num?)?.toInt() ?? 0;
     final surveyStatus = (item['surveyStatus'] as num?)?.toInt() ?? 0;
     
@@ -493,6 +547,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
                           builder: (_) => SubmissionDetailPage(
                             apiService: widget.apiService,
                             answerId: answerId,
+                            surveyId: surveyId,
                           ),
                         ),
                       );

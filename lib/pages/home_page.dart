@@ -1,8 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:dext/services/api_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:layout/layout.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import 'home_main_content.dart';
 import 'home_history_content.dart';
@@ -56,22 +59,54 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+  
   Map<String, int>? _cachedAnalytics;
   bool _isLoadingAnalytics = false;
   
   @override
   void initState() {
     super.initState();
+    _loadCachedAnalytics();
     _loadAnalytics();
+  }
+  
+  // 立即从缓存加载数据
+  Future<void> _loadCachedAnalytics() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getString('analytics_overview');
+      if (cached != null) {
+        final data = json.decode(cached) as Map<String, dynamic>;
+        if (mounted) {
+          setState(() {
+            _cachedAnalytics = {
+              'totalViews': (data['totalViews'] as num?)?.toInt() ?? 0,
+              'totalSubmits': (data['totalSubmits'] as num?)?.toInt() ?? 0,
+            };
+          });
+        }
+      }
+    } catch (_) {
+      // 忽略错误，_loadAnalytics 会处理
+    }
   }
   
   Future<void> _loadAnalytics() async {
     if (_cachedAnalytics != null || _isLoadingAnalytics) return;
     
-    setState(() => _isLoadingAnalytics = true);
+    // 延迟显示加载状态，如果缓存存在会立即返回
+    Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
+      if (mounted && _isLoadingAnalytics) {
+        setState(() => _isLoadingAnalytics = true);
+      }
+    });
+    
     try {
       final analytics = await widget.apiService.getAnalyticsOverview();
+      loadingTimer.cancel();
       if (mounted) {
         setState(() {
           _cachedAnalytics = analytics;
@@ -79,6 +114,7 @@ class _HomePageState extends State<HomePage> {
         });
       }
     } catch (e) {
+      loadingTimer.cancel();
       if (mounted) {
         setState(() {
           _cachedAnalytics = const {'totalViews': 0, 'totalSubmits': 0};
@@ -90,6 +126,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // 必须调用以支持 AutomaticKeepAliveClientMixin
     final bool isMobileOrTablet = showSidebarInDrawer.resolve(context);
     // 当达到桌面布局断点（md+）时，隐藏底部导航栏（跨平台统一：含 Web/其他端）
     final bool showDesktopLayout = showSidebarInline.resolve(context);

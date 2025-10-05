@@ -77,6 +77,109 @@ class SurveyService {
     String? type,
     StatusCallback? onStatus,
   }) async {
+    final prefs = await core.prefs();
+    final cacheKey = 'surveys_paginated_${page}_${pageSize}_${search ?? ""}_${type ?? ""}';
+    final cached = prefs.getString(cacheKey);
+    
+    if (cached != null) {
+      try {
+        onStatus?.call(RequestStatus.loading, '正在加载缓存数据...');
+        core.updateStatus(RequestStatus.loading, '正在加载缓存数据...');
+        
+        final cachedData = json.decode(cached);
+        PaginatedResponse<Survey> paginatedResponse;
+        
+        if (cachedData is List) {
+          final items = cachedData.map<Survey>((j) => Survey.fromJson(j as Map<String, dynamic>)).toList();
+          paginatedResponse = PaginatedResponse<Survey>(
+            items: items,
+            total: items.length,
+            page: page,
+            pageSize: pageSize,
+            totalPages: items.isEmpty ? 0 : ((items.length + pageSize - 1) ~/ pageSize),
+          );
+        } else {
+          paginatedResponse = PaginatedResponse.fromJson(cachedData as Map<String, dynamic>, (json) => Survey.fromJson(json));
+        }
+        
+        onStatus?.call(RequestStatus.success, '缓存数据加载成功');
+        core.updateStatus(RequestStatus.success, '缓存数据加载成功');
+        
+        // 静默刷新
+        _refreshSurveysPaginatedSilently(prefs, cacheKey, page, pageSize, search, type, paginatedResponse);
+        return paginatedResponse;
+      } catch (_) {
+        onStatus?.call(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
+        core.updateStatus(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
+      }
+    }
+    
+    return _refreshSurveysPaginated(prefs, cacheKey, page, pageSize, search, type, onStatus: onStatus);
+  }
+
+  Future<void> _refreshSurveysPaginatedSilently(
+    SharedPreferences prefs,
+    String cacheKey,
+    int page,
+    int pageSize,
+    String? search,
+    String? type,
+    PaginatedResponse<Survey> cached,
+  ) async {
+    try {
+      final queryParams = <String, String>{
+        'page': page.toString(),
+        'pageSize': pageSize.toString(),
+      };
+      if (search != null && search.isNotEmpty) {
+        queryParams['search'] = search;
+      }
+      if (type != null && type.isNotEmpty) {
+        queryParams['type'] = type;
+      }
+      final uri = Uri.parse('${ApiCore.baseUrl}/api/survey/list').replace(queryParameters: queryParams);
+      final resp = await core.httpRequest('GET', uri.toString());
+      
+      if (resp.statusCode == 200) {
+        final body = json.decode(resp.body);
+        PaginatedResponse<Survey> newResponse;
+        
+        if (body is List) {
+          final items = body.map<Survey>((j) => Survey.fromJson(j as Map<String, dynamic>)).toList();
+          newResponse = PaginatedResponse<Survey>(
+            items: items,
+            total: items.length,
+            page: page,
+            pageSize: pageSize,
+            totalPages: items.isEmpty ? 0 : ((items.length + pageSize - 1) ~/ pageSize),
+          );
+        } else {
+          newResponse = PaginatedResponse.fromJson(body as Map<String, dynamic>, (json) => Survey.fromJson(json));
+        }
+        
+        if (_surveysPaginatedHasChanged(cached, newResponse)) {
+          prefs.setString(cacheKey, json.encode(body));
+          core.notifyDataUpdate('surveys_paginated', newResponse);
+          core.updateStatus(RequestStatus.success, '问卷数据已更新');
+        }
+      }
+    } catch (_) {}
+  }
+
+  bool _surveysPaginatedHasChanged(PaginatedResponse<Survey> a, PaginatedResponse<Survey> b) {
+    if (a.total != b.total || a.items.length != b.items.length) return true;
+    return _hasChanged(a.items, b.items);
+  }
+
+  Future<PaginatedResponse<Survey>> _refreshSurveysPaginated(
+    SharedPreferences prefs,
+    String cacheKey,
+    int page,
+    int pageSize,
+    String? search,
+    String? type, {
+    StatusCallback? onStatus,
+  }) async {
     onStatus?.call(RequestStatus.loading, '正在获取问卷列表...');
     core.updateStatus(RequestStatus.loading, '正在获取问卷列表...');
 
@@ -96,6 +199,8 @@ class SurveyService {
     
     if (resp.statusCode == 200) {
       final dynamic body = json.decode(resp.body);
+      prefs.setString(cacheKey, json.encode(body));
+      
       // 兼容两种返回格式：
       // 1) 非分页：直接返回数组 [ {...}, {...} ]
       // 2) 分页：返回对象 { items: [...], total: n, page: n, pageSize: n, totalPages: n }
@@ -180,6 +285,13 @@ class SurveyService {
     final prefs = await core.prefs();
     await prefs.remove('surveys_cache');
     await prefs.remove('survey_stats_cache');
+    // 清除所有分页缓存
+    final keys = prefs.getKeys();
+    for (final key in keys) {
+      if (key.startsWith('surveys_paginated_')) {
+        await prefs.remove(key);
+      }
+    }
     core.notifyDataUpdate('surveys_updated', {'action': 'mutated'});
     core.notifyDataUpdate('survey_stats_updated', {'action': 'mutated'});
   }
@@ -189,6 +301,13 @@ class SurveyService {
     await prefs.remove('surveys_cache');
     await prefs.remove('survey_stats_cache');
     await prefs.remove('questions_$surveyId');
+    // 清除所有分页缓存
+    final keys = prefs.getKeys();
+    for (final key in keys) {
+      if (key.startsWith('surveys_paginated_')) {
+        await prefs.remove(key);
+      }
+    }
     core.notifyDataUpdate('surveys_deleted', {'deletedId': surveyId});
     core.notifyDataUpdate('survey_stats_deleted', {'deletedId': surveyId});
     core.notifyDataUpdate('questions_deleted', {'deletedId': surveyId});

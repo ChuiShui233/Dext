@@ -248,8 +248,14 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     if (!mounted) return;
     final context = this.context;
     
+    // 延迟显示加载状态，如果缓存存在会立即返回，用户不会看到加载动画
+    Timer? loadingTimer;
     if (!silent) {
-      setState(() => _isLoading = true);
+      loadingTimer = Timer(const Duration(milliseconds: 150), () {
+        if (mounted && _isLoading) {
+          setState(() => _isLoading = true);
+        }
+      });
     }
     
     try {
@@ -261,6 +267,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
       );
       final projectResponse = await _apiService.getProjectsPaginated();
       
+      loadingTimer?.cancel();
       if (!mounted) return;
       
       setState(() {
@@ -280,6 +287,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
       // 异步加载统计信息
       _loadSurveyStats();
     } catch (e) {
+      loadingTimer?.cancel();
       if (!mounted) return;
       
       setState(() => _isLoading = false);

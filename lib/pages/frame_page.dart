@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -878,10 +880,17 @@ Widget _buildSidebarHeader(BuildContext context) {
         builder: (context, setState) {
           // 异步加载项目列表
           if (projects.isEmpty && !isLoadingProjects && !hasLoadedProjects) {
-            setState(() {
-              isLoadingProjects = true;
+            // 延迟显示加载状态，如果缓存存在会立即返回
+            Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
+              if (context.mounted && isLoadingProjects) {
+                setState(() {
+                  isLoadingProjects = true;
+                });
+              }
             });
+            
             widget.apiService!.getProjects().then((loadedProjects) {
+              loadingTimer.cancel();
               if (context.mounted) {
                 setState(() {
                   projects = loadedProjects;
@@ -893,6 +902,7 @@ Widget _buildSidebarHeader(BuildContext context) {
                 });
               }
             }).catchError((error) {
+              loadingTimer.cancel();
               if (context.mounted) {
                 setState(() {
                   isLoadingProjects = false;

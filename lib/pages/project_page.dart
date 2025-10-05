@@ -168,8 +168,14 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
   Future<void> _loadProjects({bool silent = false}) async {
     if (!mounted) return;
     
+    // 延迟显示加载状态，如果缓存存在会立即返回，用户不会看到加载动画
+    Timer? loadingTimer;
     if (!silent) {
-      setState(() => _isLoading = true);
+      loadingTimer = Timer(const Duration(milliseconds: 150), () {
+        if (mounted && _isLoading) {
+          setState(() => _isLoading = true);
+        }
+      });
     }
     
     try {
@@ -177,6 +183,7 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
         page: _currentPage,
         pageSize: _itemsPerPage,
       );
+      loadingTimer?.cancel();
       if (!mounted) return;
       
       setState(() {
@@ -192,6 +199,7 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
       // 同步当前页码到分页控制器（转换为0-based）
       _paginationController.page = (_currentPage - 1).clamp(0, (_totalPages - 1).clamp(0, double.infinity).toInt());
     } catch (e) {
+      loadingTimer?.cancel();
       if (!mounted) return;
       
       setState(() => _isLoading = false);

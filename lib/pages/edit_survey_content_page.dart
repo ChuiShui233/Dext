@@ -1,5 +1,6 @@
 // file: edit_survey_content_page.dart
 
+import 'dart:async';
 import 'dart:ui';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
@@ -54,14 +55,24 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
   }
 
   Future<void> _loadQuestions() async {
-    setState(() => _isLoading = true);
+    // 延迟显示加载状态，如果缓存存在会立即返回
+    Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
+      if (mounted && _isLoading) {
+        setState(() => _isLoading = true);
+      }
+    });
+    
     try {
       final questions = await _apiService.getSurveyQuestions(widget.survey.id);
+      loadingTimer.cancel();
+      if (!mounted) return;
+      
       setState(() {
         _questions = questions;
         _isLoading = false;
       });
     } catch (e) {
+      loadingTimer.cancel();
       if (!mounted) return;
       _showErrorToast('加载问题失败', e.toString());
       setState(() => _isLoading = false);

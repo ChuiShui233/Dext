@@ -113,12 +113,61 @@ class ApiService {
     }
   }
 
-  // 最近提交列表（用于仪表盘卡片）
+  // 最近提交列表（用于仪表盘卡片）（带缓存）
   Future<List<Map<String, dynamic>>> getRecentSubmissions({StatusCallback? onStatus}) async {
+    final prefs = await SharedPreferences.getInstance();
+    const cacheKey = 'recent_submissions';
+    final cached = prefs.getString(cacheKey);
+    
+    if (cached != null) {
+      try {
+        onStatus?.call(RequestStatus.loading, '正在加载缓存数据...');
+        _updateStatus(RequestStatus.loading, '正在加载缓存数据...');
+        
+        final data = json.decode(cached) as Map<String, dynamic>;
+        final submissions = (data['submissions'] as List<dynamic>? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+        
+        onStatus?.call(RequestStatus.success, '缓存数据加载成功');
+        _updateStatus(RequestStatus.success, '缓存数据加载成功');
+        
+        // 静默刷新
+        _refreshRecentSubmissionsSilently(prefs, cacheKey);
+        return submissions;
+      } catch (_) {
+        onStatus?.call(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
+        _updateStatus(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
+      }
+    }
+    
+    return _refreshRecentSubmissions(prefs, cacheKey, onStatus: onStatus);
+  }
+  
+  Future<void> _refreshRecentSubmissionsSilently(
+    SharedPreferences prefs,
+    String cacheKey,
+  ) async {
+    try {
+      final url = '$baseUrl/api/survey/recent-submissions';
+      final response = await _httpRequest('GET', url);
+      if (response.statusCode == 200) {
+        prefs.setString(cacheKey, response.body);
+        _updateStatus(RequestStatus.success, '最近提交数据已更新');
+      }
+    } catch (_) {}
+  }
+  
+  Future<List<Map<String, dynamic>>> _refreshRecentSubmissions(
+    SharedPreferences prefs,
+    String cacheKey, {
+    StatusCallback? onStatus,
+  }) async {
     try {
       final url = '$baseUrl/api/survey/recent-submissions';
       final response = await _httpRequest('GET', url, onStatus: onStatus);
       if (response.statusCode == 200) {
+        prefs.setString(cacheKey, response.body);
         final data = json.decode(response.body) as Map<String, dynamic>;
         final submissions = (data['submissions'] as List<dynamic>? ?? [])
             .whereType<Map<String, dynamic>>()
@@ -137,12 +186,72 @@ class ApiService {
     }
   }
 
-  // 分析概览：总浏览数 / 总提交数
+  // 分析概览：总浏览数 / 总提交数（带缓存）
   Future<Map<String, int>> getAnalyticsOverview({StatusCallback? onStatus}) async {
+    final prefs = await SharedPreferences.getInstance();
+    const cacheKey = 'analytics_overview';
+    final cached = prefs.getString(cacheKey);
+    
+    if (cached != null) {
+      try {
+        onStatus?.call(RequestStatus.loading, '正在加载缓存数据...');
+        _updateStatus(RequestStatus.loading, '正在加载缓存数据...');
+        
+        final data = json.decode(cached) as Map<String, dynamic>;
+        final overview = {
+          'totalViews': (data['totalViews'] as num?)?.toInt() ?? 0,
+          'totalSubmits': (data['totalSubmits'] as num?)?.toInt() ?? 0,
+        };
+        
+        onStatus?.call(RequestStatus.success, '缓存数据加载成功');
+        _updateStatus(RequestStatus.success, '缓存数据加载成功');
+        
+        // 静默刷新
+        _refreshAnalyticsOverviewSilently(prefs, cacheKey, overview);
+        return overview;
+      } catch (_) {
+        onStatus?.call(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
+        _updateStatus(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
+      }
+    }
+    
+    return _refreshAnalyticsOverview(prefs, cacheKey, onStatus: onStatus);
+  }
+  
+  Future<void> _refreshAnalyticsOverviewSilently(
+    SharedPreferences prefs,
+    String cacheKey,
+    Map<String, int> cached,
+  ) async {
+    try {
+      final response = await _httpRequest('GET', '$baseUrl/api/analytics/overview');
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        final newOverview = {
+          'totalViews': (data['totalViews'] as num?)?.toInt() ?? 0,
+          'totalSubmits': (data['totalSubmits'] as num?)?.toInt() ?? 0,
+        };
+        
+        if (cached['totalViews'] != newOverview['totalViews'] ||
+            cached['totalSubmits'] != newOverview['totalSubmits']) {
+          prefs.setString(cacheKey, json.encode(data));
+          _notifyDataUpdate('analytics_overview', newOverview);
+          _updateStatus(RequestStatus.success, '统计数据已更新');
+        }
+      }
+    } catch (_) {}
+  }
+  
+  Future<Map<String, int>> _refreshAnalyticsOverview(
+    SharedPreferences prefs,
+    String cacheKey, {
+    StatusCallback? onStatus,
+  }) async {
     try {
       final response = await _httpRequest('GET', '$baseUrl/api/analytics/overview', onStatus: onStatus);
       if (response.statusCode == 200) {
         final data = json.decode(response.body) as Map<String, dynamic>;
+        prefs.setString(cacheKey, json.encode(data));
         return {
           'totalViews': (data['totalViews'] as num?)?.toInt() ?? 0,
           'totalSubmits': (data['totalSubmits'] as num?)?.toInt() ?? 0,
@@ -171,13 +280,76 @@ class ApiService {
     return false;
   }
 
-  // 提交趋势：range = '7d' | 'month'，默认 '7d'
+  // 提交趋势：range = '7d' | 'month'，默认 '7d'（带缓存）
   Future<Map<String, dynamic>> getSubmitTrend({String range = '7d', StatusCallback? onStatus}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'submit_trend_$range';
+    final cached = prefs.getString(cacheKey);
+    
+    if (cached != null) {
+      try {
+        onStatus?.call(RequestStatus.loading, '正在加载缓存数据...');
+        _updateStatus(RequestStatus.loading, '正在加载缓存数据...');
+        
+        final trendData = json.decode(cached) as Map<String, dynamic>;
+        
+        onStatus?.call(RequestStatus.success, '缓存数据加载成功');
+        _updateStatus(RequestStatus.success, '缓存数据加载成功');
+        
+        // 静默刷新
+        _refreshSubmitTrendSilently(prefs, cacheKey, range, trendData);
+        return trendData;
+      } catch (_) {
+        onStatus?.call(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
+        _updateStatus(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
+      }
+    }
+    
+    return _refreshSubmitTrend(prefs, cacheKey, range, onStatus: onStatus);
+  }
+  
+  Future<void> _refreshSubmitTrendSilently(
+    SharedPreferences prefs,
+    String cacheKey,
+    String range,
+    Map<String, dynamic> cached,
+  ) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/analytics/submit-trend').replace(queryParameters: {'range': range});
+      final response = await _httpRequest('GET', uri.toString());
+      if (response.statusCode == 200) {
+        final newData = json.decode(response.body) as Map<String, dynamic>;
+        
+        if (_trendDataHasChanged(cached, newData)) {
+          prefs.setString(cacheKey, json.encode(newData));
+          _notifyDataUpdate('submit_trend', newData);
+          _updateStatus(RequestStatus.success, '趋势数据已更新');
+        }
+      }
+    } catch (_) {}
+  }
+  
+  bool _trendDataHasChanged(Map<String, dynamic> a, Map<String, dynamic> b) {
+    final labelsA = (a['labels'] as List?)?.toString();
+    final labelsB = (b['labels'] as List?)?.toString();
+    final countsA = (a['counts'] as List?)?.toString();
+    final countsB = (b['counts'] as List?)?.toString();
+    return labelsA != labelsB || countsA != countsB;
+  }
+  
+  Future<Map<String, dynamic>> _refreshSubmitTrend(
+    SharedPreferences prefs,
+    String cacheKey,
+    String range, {
+    StatusCallback? onStatus,
+  }) async {
     try {
       final uri = Uri.parse('$baseUrl/api/analytics/submit-trend').replace(queryParameters: {'range': range});
       final response = await _httpRequest('GET', uri.toString(), onStatus: onStatus);
       if (response.statusCode == 200) {
-        return json.decode(response.body) as Map<String, dynamic>;
+        final trendData = json.decode(response.body) as Map<String, dynamic>;
+        prefs.setString(cacheKey, json.encode(trendData));
+        return trendData;
       } else if (response.statusCode == 401) {
         throw response;
       } else {
@@ -980,6 +1152,7 @@ class ApiService {
       await prefs.remove('auth_token');
       await prefs.remove('auth_token_expires');
       await prefs.remove('refresh_token');
+      await prefs.remove('current_user_cache');
       
       // 4. 清除 FlutterSecureStorage 中的敏感数据
       const storage = FlutterSecureStorage();
@@ -2658,8 +2831,69 @@ Future<Question> addQuestion(
     }
   }
 
-  /// 获取当前用户信息
+  /// 获取当前用户信息（带缓存）
   Future<User> getCurrentUserHandler({StatusCallback? onStatus}) async {
+    final prefs = await SharedPreferences.getInstance();
+    const cacheKey = 'current_user_cache';
+    final cached = prefs.getString(cacheKey);
+    
+    if (cached != null) {
+      try {
+        onStatus?.call(RequestStatus.loading, '正在加载缓存数据...');
+        _updateStatus(RequestStatus.loading, '正在加载缓存数据...');
+        
+        final userData = json.decode(cached) as Map<String, dynamic>;
+        final user = User.fromJson(userData);
+        
+        onStatus?.call(RequestStatus.success, '缓存数据加载成功');
+        _updateStatus(RequestStatus.success, '缓存数据加载成功');
+        
+        // 静默刷新
+        _refreshCurrentUserSilently(prefs, cacheKey, user);
+        return user;
+      } catch (_) {
+        onStatus?.call(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
+        _updateStatus(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
+      }
+    }
+    
+    return _refreshCurrentUser(prefs, cacheKey, onStatus: onStatus);
+  }
+  
+  Future<void> _refreshCurrentUserSilently(
+    SharedPreferences prefs,
+    String cacheKey,
+    User cached,
+  ) async {
+    try {
+      final response = await _httpRequest('GET', '$baseUrl/api/user/current');
+      if (response.statusCode == 200) {
+        final userData = json.decode(response.body) as Map<String, dynamic>;
+        final newUser = User.fromJson(userData);
+        
+        if (_userHasChanged(cached, newUser)) {
+          prefs.setString(cacheKey, json.encode(userData));
+          _notifyDataUpdate('current_user', newUser);
+          _updateStatus(RequestStatus.success, '用户信息已更新');
+        }
+      }
+    } catch (_) {}
+  }
+  
+  bool _userHasChanged(User a, User b) {
+    return a.id != b.id ||
+           a.username != b.username ||
+           a.email != b.email ||
+           a.avatarUrl != b.avatarUrl ||
+           a.gender != b.gender ||
+           a.userStatus != b.userStatus;
+  }
+  
+  Future<User> _refreshCurrentUser(
+    SharedPreferences prefs,
+    String cacheKey, {
+    StatusCallback? onStatus,
+  }) async {
     try {
       onStatus?.call(RequestStatus.loading, '正在获取用户信息...');
       _updateStatus(RequestStatus.loading, '正在获取用户信息...');
@@ -2671,7 +2905,8 @@ Future<Question> addQuestion(
       );
       
       if (response.statusCode == 200) {
-        final userData = json.decode(response.body);
+        final userData = json.decode(response.body) as Map<String, dynamic>;
+        prefs.setString(cacheKey, json.encode(userData));
         final user = User.fromJson(userData);
         onStatus?.call(RequestStatus.success, '用户信息获取成功');
         _updateStatus(RequestStatus.success, '用户信息获取成功');

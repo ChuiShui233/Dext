@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../widgets/top_safe_spacer.dart';
@@ -818,9 +819,14 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
   }
 
   Future<void> _loadData() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
+    // 延迟显示加载状态，如果缓存存在会立即返回
+    Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
+      if (mounted && _isLoading) {
+        setState(() {
+          _isLoading = true;
+          _errorMessage = null;
+        });
+      }
     });
 
     try {
@@ -844,6 +850,9 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
           ? questionsData
           : <Question>[];
 
+      loadingTimer.cancel();
+      if (!mounted) return;
+      
       setState(() {
         _results = results;
         _questions = questions;
