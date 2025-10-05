@@ -139,7 +139,7 @@ class _SubmissionDetailPageState extends State<SubmissionDetailPage> {
                   _data = {
                     ...templateData,
                     'myAnswers': answerData!['myAnswers'],
-                    'myAnswerIndices': answerData!['myAnswerIndices'],
+                    'myAnswerIndices': answerData['myAnswerIndices'],
                   };
                   _isLoadingAnswers = false;
                 });
@@ -148,7 +148,7 @@ class _SubmissionDetailPageState extends State<SubmissionDetailPage> {
             return;
         }
       }
-    } catch (e) {}
+    } catch (_) {}
   }
   
   void _applyDataToState(Map<String, dynamic> d) {
@@ -432,7 +432,7 @@ class _SubmissionDetailPageState extends State<SubmissionDetailPage> {
         text: (entry.value['text'] ?? '') as String,
         mediaUrl: (entry.value['mediaUrl'] ?? '') as String,
       )).toList();
-    } catch (e) {}
+    } catch (_) {}
 
 
     QuestionType questionType;
