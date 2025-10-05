@@ -1,0 +1,31 @@
+Dext License – Mozilla Public License 2.0 with Non-Commercial Recommendation
+
+Copyright (c) 2025 ChuiShui233
+
+This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+You may obtain a copy of the License at https://mozilla.org/MPL/2.0/
+
+---
+
+Non-Commercial Use Recommendation
+
+While the Mozilla Public License 2.0 allows commercial use, the author recommends the following:
+
+- Dext is intended primarily for personal, educational, and research purposes.
+- Commercial use is permitted under MPL 2.0, but users should ensure compliance with applicable laws and data privacy regulations.
+- Redistribution of Dext in commercial products should respect user data security and privacy.
+
+---
+
+Disclaimer
+
+Dext is provided "as-is", without warranties or guarantees of any kind, either express or implied,
+including, but not limited to, warranties of merchantability, fitness for a particular purpose, or non-infringement.
+The author shall not be liable for any damages arising from the use of this software, including data loss, business interruption, or other economic loss.
+
+---
+
+Notes for Contributors
+
+- Any modifications or derivative works of Dext must remain under the Mozilla Public License 2.0.
+- All source code files that you modify must carry the MPL 2.0 license header.

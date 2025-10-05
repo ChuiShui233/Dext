@@ -2,13 +2,6 @@ name: dext
 description: "问卷调查应用"
 # 以下行防止包意外发布到 pub.dev 使用 `flutter pub publish`。对于私有包，建议保留此行。
 publish_to: 'none' # 如果您希望发布到 pub.dev，请移除此行
-# 以下定义了您的应用程序的版本和构建号。
-# 版本号由三个数字组成，用点号分隔，例如 1.2.43
-# 后面可以跟一个可选的构建号，用加号分隔。
-# 版本和构建号都可以通过在 flutter build 时使用 --build-name 和 --build-number 参数覆盖。
-# 在 Android 中，版本号用于 versionName 而构建号用于 versionCode。
-# 在 iOS 中，版本号用于 CFBundleShortVersionString 而构建号用于 CFBundleVersion。
-# 在 Windows 中，版本号用于产品和文件版本的主要、次要和修订部分而构建号用于构建后缀。
 version: 1.0.2+1
 
 environment:
@@ -28,8 +21,12 @@ dependencies:
   forui: ^0.12.0
   http: ^1.1.0
   layout: ^1.0.5
-  window_manager: ^0.5.0
-  tray_manager: ^0.2.3
+  window_manager: ^0.5.1
+  tray_manager:
+    git:
+      url: https://github.com/ChuiShui233/tray_manager.git
+      ref: win_fix
+      path: packages/tray_manager
   url_launcher: ^6.2.5
   flutter_localizations:
     sdk: flutter

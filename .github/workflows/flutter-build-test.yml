@@ -57,11 +57,19 @@ jobs:
       - name: 构建 APK
         run: flutter build apk --release
 
+      - name: 生成 SHA256 校验和
+        run: |
+          cd build/app/outputs/flutter-apk
+          sha256sum app-release.apk > app-release.apk.sha256
+          cat app-release.apk.sha256
+
       - name: 上传 APK 构建产物
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/app-release.apk.sha256
           retention-days: 7
 
   # iOS 构建测试
@@ -104,11 +112,24 @@ jobs:
       - name: 构建 iOS (无签名)
         run: flutter build ios --release --no-codesign
 
+      - name: 打包 iOS 应用
+        run: |
+          cd build/ios/iphoneos
+          zip -r Runner.app.zip Runner.app
+
+      - name: 生成 SHA256 校验
+        run: |
+          cd build/ios/iphoneos
+          shasum -a 256 Runner.app.zip > Runner.app.zip.sha256
+          cat Runner.app.zip.sha256
+
       - name: 上传 iOS 构建产物
         uses: actions/upload-artifact@v4
         with:
           name: ios-build
-          path: build/ios/iphoneos/Runner.app
+          path: |
+            build/ios/iphoneos/Runner.app.zip
+            build/ios/iphoneos/Runner.app.zip.sha256
           retention-days: 7
 
   # Windows 构建测试
@@ -211,17 +232,58 @@ jobs:
           echo "开始构建 Release 版本..."
           flutter build windows --release -v
 
-      # 📦 打包构建产物
-      - name: 打包 Windows 构建产物
+      # 📦 安装 Inno Setup
+      - name: 安装 Inno Setup
         run: |
-          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath dext-windows.zip
+          echo "安装 Inno Setup..."
+          choco install innosetup -y
+          echo "Inno Setup 安装完成 ✅"
 
-      # ☁️ 上传构建产物
-      - name: 上传构建产物
+      # 🔨 使用 Inno Setup 打包安装程序
+      - name: 打包 Windows 安装程序
+        run: |
+          echo "开始编译安装程序..."
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+          echo "安装程序编译完成 "
+
+      # 打包便携版
+      - name: 打包便携版
+        run: |
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath dext-windows-portable.zip
+
+      # 生成 SHA256 校验和
+      - name: 生成 SHA256 校验和
+        run: |
+          $installerHash = (Get-FileHash -Algorithm SHA256 -Path "Output\DextSetup.exe").Hash
+          $portableHash = (Get-FileHash -Algorithm SHA256 -Path "dext-windows-portable.zip").Hash
+          
+          "$installerHash  DextSetup.exe" | Out-File -FilePath "Output\DextSetup.exe.sha256" -Encoding ASCII
+          "$portableHash  dext-windows-portable.zip" | Out-File -FilePath "dext-windows-portable.zip.sha256" -Encoding ASCII
+          
+          Write-Host "DextSetup.exe SHA256:"
+          Get-Content "Output\DextSetup.exe.sha256"
+          Write-Host ""
+          Write-Host "dext-windows-portable.zip SHA256:"
+          Get-Content "dext-windows-portable.zip.sha256"
+
+      # 上传安装程序
+      - name: 上传 Windows 安装程序
         uses: actions/upload-artifact@v4
         with:
-          name: windows-build
-          path: dext-windows.zip
+          name: windows-installer
+          path: |
+            Output/DextSetup.exe
+            Output/DextSetup.exe.sha256
+          retention-days: 7
+
+      # 上传便携版
+      - name: 上传便携版
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: |
+            dext-windows-portable.zip
+            dext-windows-portable.zip.sha256
           retention-days: 7
 
   # macOS 构建测试
@@ -281,11 +343,19 @@ jobs:
           cd build/macos/Build/Products/Release
           zip -r dext-macos.zip dext.app
 
+      - name: 生成 SHA256 校验
+        run: |
+          cd build/macos/Build/Products/Release
+          shasum -a 256 dext-macos.zip > dext-macos.zip.sha256
+          cat dext-macos.zip.sha256
+
       - name: 上传 macOS 构建产物
         uses: actions/upload-artifact@v4
         with:
           name: macos-build
-          path: build/macos/Build/Products/Release/dext-macos.zip
+          path: |
+            build/macos/Build/Products/Release/dext-macos.zip
+            build/macos/Build/Products/Release/dext-macos.zip.sha256
           retention-days: 7
 
   # Linux 构建测试
@@ -358,11 +428,19 @@ jobs:
           cd build/linux/x64/release/bundle
           tar -czf dext-linux.tar.gz *
 
+      - name: 生成 SHA256 校验和
+        run: |
+          cd build/linux/x64/release/bundle
+          sha256sum dext-linux.tar.gz > dext-linux.tar.gz.sha256
+          cat dext-linux.tar.gz.sha256
+
       - name: 上传 Linux 构建产物
         uses: actions/upload-artifact@v4
         with:
           name: linux-build
-          path: build/linux/x64/release/bundle/dext-linux.tar.gz
+          path: |
+            build/linux/x64/release/bundle/dext-linux.tar.gz
+            build/linux/x64/release/bundle/dext-linux.tar.gz.sha256
           retention-days: 7
 
   # Web 构建测试
