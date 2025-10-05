@@ -227,12 +227,13 @@ packages:
     source: hosted
     version: "0.6.1"
   desktop_webview_window:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: desktop_webview_window
-      sha256: "57cf20d81689d5cbb1adfd0017e96b669398a669d927906073b0e42fc64111c0"
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: main
+      resolved-ref: "842ef8d4f7b775972778265e38e6d53c2e550cec"
+      url: "https://github.com/ChuiShui233/desktop_webview_window_Plus.git"
+    source: git
     version: "0.2.3"
   equatable:
     dependency: transitive
@@ -450,12 +451,13 @@ packages:
     source: sdk
     version: "0.0.0"
   flutter_web_auth_2:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: flutter_web_auth_2
-      sha256: "9a9ac1b83b215ebc4926657f7d88b1d766ac66b1dd50d258b9f3ea31e627565e"
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: main
+      resolved-ref: f138a5cfc6829c6b699882c3c411f6e286e5364c
+      url: "https://github.com/ChuiShui233/flutter_web_auth_2-5.0.0-alpha.4_Plus.git"
+    source: git
     version: "5.0.0-alpha.4"
   flutter_web_auth_2_platform_interface:
     dependency: transitive

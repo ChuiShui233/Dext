@@ -94,4 +94,13 @@ flutter_launcher_icons:
   ios: true
   adaptive_icon_background: "#FFFFFF"
 
+dependency_overrides:
+  flutter_web_auth_2:
+    git:
+      url: https://github.com/ChuiShui233/flutter_web_auth_2-5.0.0-alpha.4_Plus.git
+      ref: main
+  desktop_webview_window:
+    git:
+      url: https://github.com/ChuiShui233/desktop_webview_window_Plus.git
+      ref: main
   
