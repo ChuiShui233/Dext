@@ -19,10 +19,10 @@ const String githubClientId = 'Ov23linQUMRmORjFIiXr';
 const String microsoftClientId = '6358d1bc-76bd-4340-951b-b250570209d9';
 
 // ===== OAuth 重定向URI配置 =====
-const String oauthCallbackWeb = 'http://dext.wucode.xyz/oauth_callback.html';
+const String oauthCallbackWeb = 'https://dext.wucode.xyz/oauth_callback.html';
 const String oauthCallbackAndroid = 'com.dext.app://oauth/callback';
 const String oauthCallbackIOS = 'dext://oauth/callback';
-const String oauthCallbackDesktop = 'http://wucode.xyz:11222/oauth/callback';
+const String oauthCallbackDesktop = 'https://wucode.xyz:11222/oauth/callback';
 
 // ===== Android/iOS URI Scheme =====
 const String uriSchemeAndroid = 'com.dext.app';
