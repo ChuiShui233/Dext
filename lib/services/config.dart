@@ -20,9 +20,9 @@ const String microsoftClientId = '6358d1bc-76bd-4340-951b-b250570209d9';
 
 // ===== OAuth 重定向URI配置 =====
 const String oauthCallbackWeb = 'https://dext.wucode.xyz/oauth_callback.html';
-const String oauthCallbackAndroid = 'com.dext.app://oauth/callback';
-const String oauthCallbackIOS = 'dext://oauth/callback';
-const String oauthCallbackDesktop = 'https://wucode.xyz:11222/oauth/callback';
+const String oauthCallbackAndroid = 'https://dext.wucode.xyz/oauth_callback.html';
+const String oauthCallbackIOS = 'https://dext.wucode.xyz/oauth_callback.html';
+const String oauthCallbackDesktop = 'https://dext.wucode.xyz/oauth_callback.html';
 
 // ===== Android/iOS URI Scheme =====
 const String uriSchemeAndroid = 'com.dext.app';
