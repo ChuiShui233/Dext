@@ -179,9 +179,12 @@ void main() async {
   }
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 桌面窗口管理
   if (isDesktop) {
-    await _initDesktopWindowAndTray();
+    try {
+      await _initDesktopWindowAndTray();
+    } catch (e) {
+      // 啥玩意
+    }
   }
 
   // Android 状态栏透明

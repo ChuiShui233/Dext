@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:js_interop';
 import 'package:flutter/foundation.dart';
 // ignore: depend_on_referenced_packages
 import 'package:web/web.dart' as web;
@@ -65,15 +66,25 @@ class WebOAuthHandler {
 
     subscription = web.window.onMessage.listen((event) {
       try {
-        // 检查消息来源是否匹配重定向URL的域名
-        final redirectUri = Uri.parse(redirectUrl);
-        final eventData = event.data.toString();
+        final data = event.data;
         
         // 检查是否是OAuth回调消息
-        if (event.origin == redirectUri.origin || eventData.contains('code=') || eventData.startsWith(redirectUrl)) {
-          subscription.cancel();
-          if (!completer.isCompleted) {
-            completer.complete(eventData);
+        if (data != null) {
+          final dataMap = data.dartify() as Map?;
+          if (dataMap != null) {
+            if (dataMap['type'] == 'oauth_success') {
+              subscription.cancel();
+              if (!completer.isCompleted) {
+                completer.complete(dataMap['callback_url']?.toString() ?? '');
+              }
+            } else if (dataMap['type'] == 'oauth_error') {
+              subscription.cancel();
+              if (!completer.isCompleted) {
+                final error = dataMap['error_description']?.toString() ?? 
+                             dataMap['error']?.toString() ?? '未知错误';
+                completer.completeError(Exception('OAuth错误: $error'));
+              }
+            }
           }
         }
       } catch (e) {
