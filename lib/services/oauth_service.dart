@@ -1,16 +1,28 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
-import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/foundation.dart';
+import 'package:oauth2_client/oauth2_helper.dart';
+import 'package:oauth2_client/oauth2_client.dart';
+import 'package:oauth2_client/google_oauth2_client.dart';
+import 'package:oauth2_client/github_oauth2_client.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter_web_auth_2/flutter_web_auth_2.dart' as webauth2;
 import 'api_service.dart';
 import 'config.dart';
 import 'web_oauth_handler.dart' if (dart.library.io) 'web_oauth_handler_stub.dart';
 
 class OAuthService {
   // 重定向URI和自定义URI方案配置
+  static String get _customUriScheme {
+    if (kIsWeb) {
+      return 'https';
+    } else if (Platform.isAndroid) {
+      return uriSchemeAndroid;
+    } else if (Platform.isIOS) {
+      return uriSchemeIOS;
+    } else {
+      return 'http';
+    }
+  }
 
   static String get _redirectUri {
     if (kIsWeb) {
@@ -55,34 +67,28 @@ class OAuthService {
 
   /// Web端Microsoft OAuth登录
   Future<Map<String, dynamic>> _signInWithMicrosoftWeb() async {
-    // 生成 PKCE 参数
-    final verifier = _generateCodeVerifier();
-    final challenge = _codeChallengeS256(verifier);
+    // 从后端获取授权URL
+    final authUrlResponse = await http.get(
+      Uri.parse('${ApiService.baseUrl}/api/auth/oauth/microsoft/url?redirect_uri=${Uri.encodeComponent(_redirectUri)}'),
+    );
 
-    // 构建授权URL（使用 PKCE）
-    final authUrl = Uri.https('login.microsoftonline.com', '/common/oauth2/v2.0/authorize', {
-      'client_id': microsoftClientId,
-      'response_type': 'code',
-      'redirect_uri': _redirectUri,
-      'scope': 'openid profile email User.Read',
-      'response_mode': 'query',
-      'state': DateTime.now().millisecondsSinceEpoch.toString(),
-      'code_challenge': challenge,
-      'code_challenge_method': 'S256',
-    });
+    if (authUrlResponse.statusCode != 200) {
+      throw Exception('获取授权URL失败: ${authUrlResponse.statusCode}');
+    }
 
-    // 打开授权窗口（Web 用 WebOAuthHandler；原生容错使用 _nativeAuthenticate）
-    final authCode = kIsWeb
-        ? await WebOAuthHandler.authenticate(
-            authUrl: authUrl.toString(),
-            redirectUrl: _redirectUri,
-            windowOptions: {
-              'width': '500',
-              'height': '700',
-            },
-            timeoutSeconds: 300,
-          )
-        : await _nativeAuthenticate(authUrl.toString());
+    final authUrlData = json.decode(authUrlResponse.body);
+    final authUrl = authUrlData['auth_url'];
+
+    // 使用自定义处理器打开OAuth窗口
+    final authCode = await WebOAuthHandler.authenticate(
+      authUrl: authUrl,
+      redirectUrl: _redirectUri,
+      windowOptions: {
+        'width': '500',
+        'height': '700',
+      },
+      timeoutSeconds: 300,
+    );
 
     // 解析授权码
     final uri = Uri.parse(authCode);
@@ -91,13 +97,11 @@ class OAuthService {
       throw Exception('未获取到授权码');
     }
 
-    // 使用后端进行交换（避免在前端持有 client secret）
-    final result = await _exchangeWithBackend(
-      provider: 'microsoft',
-      code: code,
-      redirectUri: _redirectUri,
-      codeVerifier: verifier,
-    );
+    // 直接将授权码发送给后端，让后端处理令牌交换
+    final result = await _authenticateWithBackend('microsoft', {
+      'authorization_code': code,
+      'redirect_uri': _redirectUri,
+    });
 
     return {
       'success': true,
@@ -109,42 +113,56 @@ class OAuthService {
 
   /// 原生平台Microsoft OAuth登录
   Future<Map<String, dynamic>> _signInWithMicrosoftNative() async {
-    // 使用与 Web 一致的模式：PKCE + 后端交换
-    final verifier = _generateCodeVerifier();
-    final challenge = _codeChallengeS256(verifier);
-
-    final authUrl = Uri.https('login.microsoftonline.com', '/common/oauth2/v2.0/authorize', {
-      'client_id': microsoftClientId,
-      'response_type': 'code',
-      'redirect_uri': _redirectUri,
-      'scope': 'openid profile email User.Read',
-      'response_mode': 'query',
-      'state': DateTime.now().millisecondsSinceEpoch.toString(),
-      'code_challenge': challenge,
-      'code_challenge_method': 'S256',
-    });
-
-    final authCode = await _nativeAuthenticate(authUrl.toString());
-
-    final uri = Uri.parse(authCode);
-    final code = uri.queryParameters['code'];
-    if (code == null) {
-      throw Exception('未获取到授权码');
-    }
-
-    final result = await _exchangeWithBackend(
-      provider: 'microsoft',
-      code: code,
+    // 创建自定义的Microsoft OAuth2客户端
+    final client = OAuth2Client(
+      authorizeUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+      tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
       redirectUri: _redirectUri,
-      codeVerifier: verifier,
+      customUriScheme: _customUriScheme,
     );
 
-    return {
-      'success': true,
-      'token': result['token'],
-      'expires': result['expires'],
-      'user': result['user'],
-    };
+    final helper = OAuth2Helper(
+      client,
+      grantType: OAuth2Helper.authorizationCode,
+      clientId: microsoftClientId,
+      scopes: ['openid', 'profile', 'email', 'User.Read'],
+      webAuthOpts: {
+        'windowName': 'Dext - Microsoft登录',
+        'windowTitle': 'Dext - Microsoft登录',
+        'windowIcon': 'assets/images/Dext.ico',
+        'useWebview': true,
+        'timeout': 300,
+      },
+    );
+
+    // 使用Microsoft Graph API获取用户信息
+    final response = await helper.get('https://graph.microsoft.com/v1.0/me');
+    
+    if (response.statusCode == 200) {
+      final userInfo = json.decode(response.body);
+      final accessToken = await helper.getToken();
+      
+      // 调用后端OAuth接口，只传递访问令牌
+      final result = await _authenticateWithBackend('microsoft', {
+        'access_token': accessToken?.accessToken,
+        'user_info': {
+          'id': userInfo['id'],
+          'email': userInfo['mail'] ?? userInfo['userPrincipalName'],
+          'name': userInfo['displayName'],
+          'picture': null,
+          'provider': 'microsoft',
+        },
+      });
+
+      return {
+        'success': true,
+        'token': result['token'],
+        'expires': result['expires'],
+        'user': userInfo,
+      };
+    } else {
+      throw Exception('获取用户信息失败: ${response.statusCode}');
+    }
   }
 
   /// Google OAuth2 登录
@@ -178,23 +196,21 @@ class OAuthService {
 
   /// Web端Google OAuth登录
   Future<Map<String, dynamic>> _signInWithGoogleWeb() async {
-    final verifier = _generateCodeVerifier();
-    final challenge = _codeChallengeS256(verifier);
-    // 构建授权URL（使用 PKCE）
-    final authUrl = Uri.https('accounts.google.com', '/o/oauth2/v2/auth', {
-      'client_id': googleClientId,
-      'response_type': 'code',
-      'redirect_uri': _redirectUri,
-      'scope': 'openid profile email',
-      'state': DateTime.now().millisecondsSinceEpoch.toString(),
-      'code_challenge': challenge,
-      'code_challenge_method': 'S256',
-      'access_type': 'offline',
-    });
+    // 从后端获取授权URL
+    final authUrlResponse = await http.get(
+      Uri.parse('${ApiService.baseUrl}/api/auth/oauth/google/url?redirect_uri=${Uri.encodeComponent(_redirectUri)}'),
+    );
+
+    if (authUrlResponse.statusCode != 200) {
+      throw Exception('获取授权URL失败: ${authUrlResponse.statusCode}');
+    }
+
+    final authUrlData = json.decode(authUrlResponse.body);
+    final authUrl = authUrlData['auth_url'];
 
     // 使用自定义处理器打开OAuth窗口
     final authCode = await WebOAuthHandler.authenticate(
-      authUrl: authUrl.toString(),
+      authUrl: authUrl,
       redirectUrl: _redirectUri,
       windowOptions: {
         'width': '500',
@@ -210,13 +226,11 @@ class OAuthService {
       throw Exception('未获取到授权码');
     }
 
-    // 使用后端进行交换
-    final result = await _exchangeWithBackend(
-      provider: 'google',
-      code: code,
-      redirectUri: _redirectUri,
-      codeVerifier: verifier,
-    );
+    // 直接将授权码发送给后端，让后端处理令牌交换
+    final result = await _authenticateWithBackend('google', {
+      'authorization_code': code,
+      'redirect_uri': _redirectUri,
+    });
 
     return {
       'success': true,
@@ -228,41 +242,58 @@ class OAuthService {
 
   /// 原生平台Google OAuth登录
   Future<Map<String, dynamic>> _signInWithGoogleNative() async {
-    final verifier = _generateCodeVerifier();
-    final challenge = _codeChallengeS256(verifier);
-
-    final authUrl = Uri.https('accounts.google.com', '/o/oauth2/v2/auth', {
-      'client_id': googleClientId,
-      'response_type': 'code',
-      'redirect_uri': _redirectUri,
-      'scope': 'openid profile email',
-      'state': DateTime.now().millisecondsSinceEpoch.toString(),
-      'code_challenge': challenge,
-      'code_challenge_method': 'S256',
-      'access_type': 'offline',
-    });
-
-    final authCode = await _nativeAuthenticate(authUrl.toString());
-
-    final uri = Uri.parse(authCode);
-    final code = uri.queryParameters['code'];
-    if (code == null) {
-      throw Exception('未获取到授权码');
-    }
-
-    final result = await _exchangeWithBackend(
-      provider: 'google',
-      code: code,
+    final client = GoogleOAuth2Client(
       redirectUri: _redirectUri,
-      codeVerifier: verifier,
+      customUriScheme: _customUriScheme,
     );
 
-    return {
-      'success': true,
-      'token': result['token'],
-      'expires': result['expires'],
-      'user': result['user'],
-    };
+    final helper = OAuth2Helper(
+      client,
+      grantType: OAuth2Helper.authorizationCode,
+      clientId: googleClientId,
+      scopes: ['openid', 'profile', 'email'],
+      webAuthOpts: {
+        'windowName': 'Dext - Google登录',
+        'windowTitle': 'Dext - Google登录',
+        'windowIcon': 'assets/images/Dext.ico',
+        'useWebview': true,
+        'timeout': 300,
+      },
+    );
+
+    // 首先获取访问令牌
+    final accessToken = await helper.getToken();
+    if (accessToken?.accessToken == null) {
+      throw Exception('获取访问令牌失败');
+    }
+    
+    // 使用访问令牌获取用户信息
+    final response = await helper.get('https://www.googleapis.com/oauth2/v2/userinfo');
+    
+    if (response.statusCode == 200) {
+      final userInfo = json.decode(response.body);
+      
+      // 调用后端OAuth接口，只传递访问令牌
+      final result = await _authenticateWithBackend('google', {
+        'access_token': accessToken!.accessToken,
+        'user_info': {
+          'id': userInfo['id'],
+          'email': userInfo['email'],
+          'name': userInfo['name'],
+          'picture': userInfo['picture'],
+          'provider': 'google',
+        },
+      });
+
+      return {
+        'success': true,
+        'token': result['token'],
+        'expires': result['expires'],
+        'user': userInfo,
+      };
+    } else {
+      throw Exception('获取用户信息失败: ${response.statusCode}');
+    }
   }
 
   /// GitHub OAuth2 登录
@@ -296,21 +327,21 @@ class OAuthService {
 
   /// Web端GitHub OAuth登录
   Future<Map<String, dynamic>> _signInWithGitHubWeb() async {
-    final verifier = _generateCodeVerifier();
-    final challenge = _codeChallengeS256(verifier);
-    // 构建授权URL（GitHub 支持 PKCE）
-    final authUrl = Uri.https('github.com', '/login/oauth/authorize', {
-      'client_id': githubClientId,
-      'redirect_uri': _redirectUri,
-      'scope': 'user:email',
-      'state': DateTime.now().millisecondsSinceEpoch.toString(),
-      'code_challenge': challenge,
-      'code_challenge_method': 'S256',
-    });
+    // 从后端获取授权URL
+    final authUrlResponse = await http.get(
+      Uri.parse('${ApiService.baseUrl}/api/auth/oauth/github/url?redirect_uri=${Uri.encodeComponent(_redirectUri)}'),
+    );
+
+    if (authUrlResponse.statusCode != 200) {
+      throw Exception('获取授权URL失败: ${authUrlResponse.statusCode}');
+    }
+
+    final authUrlData = json.decode(authUrlResponse.body);
+    final authUrl = authUrlData['auth_url'];
 
     // 使用自定义处理器打开OAuth窗口
     final authCode = await WebOAuthHandler.authenticate(
-      authUrl: authUrl.toString(),
+      authUrl: authUrl,
       redirectUrl: _redirectUri,
       windowOptions: {
         'width': '500',
@@ -326,13 +357,11 @@ class OAuthService {
       throw Exception('未获取到授权码');
     }
 
-    // 使用后端进行交换
-    final result = await _exchangeWithBackend(
-      provider: 'github',
-      code: code,
-      redirectUri: _redirectUri,
-      codeVerifier: verifier,
-    );
+    // 直接将授权码发送给后端，让后端处理令牌交换
+    final result = await _authenticateWithBackend('github', {
+      'authorization_code': code,
+      'redirect_uri': _redirectUri,
+    });
 
     return {
       'success': true,
@@ -344,108 +373,110 @@ class OAuthService {
 
   /// 原生平台GitHub OAuth登录
   Future<Map<String, dynamic>> _signInWithGitHubNative() async {
-    final verifier = _generateCodeVerifier();
-    final challenge = _codeChallengeS256(verifier);
-
-    final authUrl = Uri.https('github.com', '/login/oauth/authorize', {
-      'client_id': githubClientId,
-      'redirect_uri': _redirectUri,
-      'scope': 'user:email',
-      'state': DateTime.now().millisecondsSinceEpoch.toString(),
-      'code_challenge': challenge,
-      'code_challenge_method': 'S256',
-    });
-
-    final authCode = await _nativeAuthenticate(authUrl.toString());
-
-    final uri = Uri.parse(authCode);
-    final code = uri.queryParameters['code'];
-    if (code == null) {
-      throw Exception('未获取到授权码');
-    }
-
-    final result = await _exchangeWithBackend(
-      provider: 'github',
-      code: code,
+    final client = GitHubOAuth2Client(
       redirectUri: _redirectUri,
-      codeVerifier: verifier,
+      customUriScheme: _customUriScheme,
     );
 
-    return {
-      'success': true,
-      'token': result['token'],
-      'expires': result['expires'],
-      'user': result['user'],
-    };
-  }
-
-
-
-  // 使用后端进行授权码交换（PKCE）
-  Future<Map<String, dynamic>> _exchangeWithBackend({
-    required String provider,
-    required String code,
-    required String redirectUri,
-    required String codeVerifier,
-  }) async {
-    final response = await http.post(
-      Uri.parse('${ApiService.baseUrl}/api/auth/oauth/exchange'),
-      headers: {
-        'Content-Type': 'application/json',
+    final helper = OAuth2Helper(
+      client,
+      grantType: OAuth2Helper.authorizationCode,
+      clientId: githubClientId,
+      scopes: ['user:email'],
+      webAuthOpts: {
+        'windowName': 'Dext - GitHub登录',
+        'windowTitle': 'Dext - GitHub登录',
+        'windowIcon': 'assets/images/Dext.ico',
+        'useWebview': true,
+        'timeout': 300,
       },
-      body: json.encode({
-        'provider': provider,
-        'code': code,
-        'redirect_uri': redirectUri,
-        'code_verifier': codeVerifier,
-      }),
     );
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body) as Map<String, dynamic>;
+
+    // 获取用户基本信息
+    final userResponse = await helper.get('https://api.github.com/user');
+    
+    if (userResponse.statusCode == 200) {
+      final userInfo = json.decode(userResponse.body);
+      final accessToken = await helper.getToken();
+      
+      // 获取用户邮箱
+      String? email = userInfo['email'];
+      if (email == null || email.isEmpty) {
+        final emailResponse = await helper.get('https://api.github.com/user/emails');
+        if (emailResponse.statusCode == 200) {
+          final emails = json.decode(emailResponse.body) as List;
+          final primaryEmail = emails.firstWhere(
+            (e) => e['primary'] == true,
+            orElse: () => emails.isNotEmpty ? emails.first : null,
+          );
+          email = primaryEmail?['email'];
+        }
+      }
+
+      final userInfoFormatted = {
+        'id': userInfo['id'].toString(),
+        'email': email ?? '',
+        'name': userInfo['name'] ?? userInfo['login'],
+        'picture': userInfo['avatar_url'],
+        'username': userInfo['login'],
+        'provider': 'github',
+      };
+      
+      // 调用后端OAuth接口，只传递访问令牌
+      final result = await _authenticateWithBackend('github', {
+        'access_token': accessToken?.accessToken,
+        'user_info': userInfoFormatted,
+      });
+
       return {
-        'token': data['token'],
-        'expires': DateTime.parse(data['expires']),
-        'user': data['user'],
+        'success': true,
+        'token': result['token'],
+        'expires': result['expires'],
+        'user': userInfoFormatted,
       };
     } else {
-      throw Exception('后端交换失败: ${response.statusCode}');
+      throw Exception('获取用户信息失败: ${userResponse.statusCode}');
     }
   }
 
-  // 生成 PKCE code_verifier（43-128 长度的高熵字符串）
-  String _generateCodeVerifier([int length = 64]) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
-    final rand = Random.secure();
-    final sb = StringBuffer();
-    for (int i = 0; i < length; i++) {
-      sb.write(chars[rand.nextInt(chars.length)]);
+
+  /// 与后端进行OAuth认证
+  Future<Map<String, dynamic>> _authenticateWithBackend(
+    String provider,
+    Map<String, dynamic> oauthData,
+  ) async {
+    try {
+      // 使用ApiService的加密请求方法
+      final requestData = {
+        'provider': provider,
+        'oauth_data': oauthData,
+      };
+      
+      final response = await ApiService().encryptedRequest(
+        'POST',
+        '${ApiService.baseUrl}/api/auth/oauth',
+        requestData,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'token': data['token'],
+          'expires': DateTime.parse(data['expires']),
+        };
+      } else {
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['message'] ?? '后端认证失败');
+      }
+    } catch (e) {
+      throw Exception('后端认证失败: ${e.toString()}');
     }
-    return sb.toString();
-  }
-
-  // 计算 S256 code_challenge（base64url-无填充）
-  String _codeChallengeS256(String verifier) {
-    final bytes = utf8.encode(verifier);
-    final digest = crypto.sha256.convert(bytes).bytes;
-    return base64UrlEncode(digest).replaceAll('=', '');
-  }
-
-  // 原生平台统一使用 flutter_web_auth_2 弹出授权并等待回调
-  Future<String> _nativeAuthenticate(String authUrl) async {
-    final scheme = Uri.parse(_redirectUri).scheme; // com.dext.app / dext / http
-    // flutter_web_auth_2 需要 callbackUrlScheme；对 http/https 桌面回调也能支持
-    final result = await webauth2.FlutterWebAuth2.authenticate(
-      url: authUrl,
-      callbackUrlScheme: scheme,
-    );
-    return result; // 返回完整回调URL字符串
   }
 
   /// 检查OAuth配置是否完整
   static bool isConfigured() {
-    // 通过 --dart-define 注入的客户端ID必须为非空
-    return googleClientId.isNotEmpty &&
-           githubClientId.isNotEmpty &&
-           microsoftClientId.isNotEmpty;
+    return googleClientId != 'YOUR_GOOGLE_CLIENT_ID' &&
+           githubClientId != 'YOUR_GITHUB_CLIENT_ID' &&
+           microsoftClientId != 'YOUR_MICROSOFT_CLIENT_ID';
   }
 }

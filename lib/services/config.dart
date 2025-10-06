@@ -8,42 +8,21 @@ const String appDomain = 'dext.wucode.xyz';
 const String appDomainUrl = 'https://dext.wucode.xyz';
 
 // ===== OAuth 配置 =====
+// 注意：前端只保留Client ID用于原生平台OAuth，Web端完全由后端处理
 // Google OAuth
-// 默认填入 Client ID，便于本地/桌面直接运行；生产可用 --dart-define 覆盖
-const String googleClientId = String.fromEnvironment(
-  'GOOGLE_CLIENT_ID',
-  defaultValue: '1098222292927-26rbvt32p9kfu8bvin8btapknj5qomhk.apps.googleusercontent.com',
-);
-const String googleClientSecret = String.fromEnvironment(
-  'GOOGLE_CLIENT_SECRET',
-  defaultValue: '',
-);
+const String googleClientId = '1098222292927-26rbvt32p9kfu8bvin8btapknj5qomhk.apps.googleusercontent.com';
 
 // GitHub OAuth
-const String githubClientId = String.fromEnvironment(
-  'GITHUB_CLIENT_ID',
-  defaultValue: 'Ov23linQUMRmORjFIiXr',
-);
-const String githubClientSecret = String.fromEnvironment(
-  'GITHUB_CLIENT_SECRET',
-  defaultValue: '',
-);
+const String githubClientId = 'Ov23linQUMRmORjFIiXr';
 
 // Microsoft OAuth
-const String microsoftClientId = String.fromEnvironment(
-  'MS_CLIENT_ID',
-  defaultValue: '6358d1bc-76bd-4340-951b-b250570209d9',
-);
-const String microsoftClientSecret = String.fromEnvironment(
-  'MS_CLIENT_SECRET',
-  defaultValue: '',
-);
+const String microsoftClientId = '6358d1bc-76bd-4340-951b-b250570209d9';
 
 // ===== OAuth 重定向URI配置 =====
-const String oauthCallbackWeb = 'https://dext.wucode.xyz/oauth/callback';
+const String oauthCallbackWeb = 'http://dext.wucode.xyz/oauth_callback.html';
 const String oauthCallbackAndroid = 'com.dext.app://oauth/callback';
 const String oauthCallbackIOS = 'dext://oauth/callback';
-const String oauthCallbackDesktop = 'http://localhost:8080/oauth/callback';
+const String oauthCallbackDesktop = 'http://wucode.xyz:11222/oauth/callback';
 
 // ===== Android/iOS URI Scheme =====
 const String uriSchemeAndroid = 'com.dext.app';

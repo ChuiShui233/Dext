@@ -1,0 +1,237 @@
+Date : 2025-10-06 20:01:07
+Directory : i:\Dext
+Total : 131 files,  111213 codes, 1404 comments, 11742 blanks, all 124359 lines
+
+Languages
++-------------------------+------------+------------+------------+------------+------------+
+| language                | files      | code       | comment    | blank      | total      |
++-------------------------+------------+------------+------------+------------+------------+
+| WebAssembly Text Format |          1 |     82,632 |          0 |      8,868 |     91,500 |
+| Dart                    |         66 |     24,837 |      1,084 |      2,245 |     28,166 |
+| C++                     |         16 |        638 |        135 |        191 |        964 |
+| JavaScript              |          2 |        555 |         36 |         73 |        664 |
+| CMake                   |          8 |        536 |          0 |         94 |        630 |
+| YAML                    |          5 |        502 |         59 |         89 |        650 |
+| XML                     |         10 |        487 |         55 |         14 |        556 |
+| JSON                    |          4 |        248 |          0 |          4 |        252 |
+| HTML                    |          2 |        222 |         15 |         20 |        257 |
+| Markdown                |          2 |        214 |          0 |         67 |        281 |
+| Kotlin                  |          4 |        100 |          6 |         17 |        123 |
+| Swift                   |          6 |         93 |          7 |         21 |        121 |
+| Ruby                    |          2 |         66 |          3 |         22 |         91 |
+| Gradle                  |          1 |         65 |          4 |         12 |         81 |
+| Properties              |          2 |         18 |          0 |          5 |         23 |
++-------------------------+------------+------------+------------+------------+------------+
+
+Directories
++-----------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                  | files      | code       | comment    | blank      | total      |
++-----------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                     |        131 |    111,213 |      1,404 |     11,742 |    124,359 |
+| . (Files)                                                             |          5 |        307 |         35 |         83 |        425 |
+| .github                                                               |          1 |        406 |         24 |         71 |        501 |
+| .github\workflows                                                     |          1 |        406 |         24 |         71 |        501 |
+| android                                                               |         14 |        266 |         63 |         45 |        374 |
+| android (Files)                                                       |          3 |        103 |          5 |         16 |        124 |
+| android\app                                                           |         10 |        158 |         58 |         28 |        244 |
+| android\app (Files)                                                   |          2 |         65 |          4 |         13 |         82 |
+| android\app\src                                                       |          8 |         93 |         54 |         15 |        162 |
+| android\app\src\debug                                                 |          1 |          3 |          4 |          1 |          8 |
+| android\app\src\main                                                  |          6 |         87 |         46 |         13 |        146 |
+| android\app\src\main (Files)                                          |          1 |         51 |         13 |          3 |         67 |
+| android\app\src\main\kotlin                                           |          1 |         10 |          1 |          4 |         15 |
+| android\app\src\main\kotlin\com                                       |          1 |         10 |          1 |          4 |         15 |
+| android\app\src\main\kotlin\com\wucode                                |          1 |         10 |          1 |          4 |         15 |
+| android\app\src\main\kotlin\com\wucode\Dext                           |          1 |         10 |          1 |          4 |         15 |
+| android\app\src\main\res                                              |          4 |         26 |         32 |          6 |         64 |
+| android\app\src\main\res\drawable                                     |          1 |          4 |          7 |          2 |         13 |
+| android\app\src\main\res\drawable-v21                                 |          1 |          4 |          7 |          2 |         13 |
+| android\app\src\main\res\values                                       |          1 |          9 |          9 |          1 |         19 |
+| android\app\src\main\res\values-night                                 |          1 |          9 |          9 |          1 |         19 |
+| android\app\src\profile                                               |          1 |          3 |          4 |          1 |          8 |
+| android\gradle                                                        |          1 |          5 |          0 |          1 |          6 |
+| android\gradle\wrapper                                                |          1 |          5 |          0 |          1 |          6 |
+| ios                                                                   |          9 |        262 |          6 |         24 |        292 |
+| ios (Files)                                                           |          1 |         33 |          2 |         11 |         46 |
+| ios\Runner                                                            |          7 |        222 |          2 |          9 |        233 |
+| ios\Runner (Files)                                                    |          2 |         13 |          0 |          3 |         16 |
+| ios\RunnerTests                                                       |          1 |          7 |          2 |          4 |         13 |
+| ios\Runner\Assets.xcassets                                            |          3 |        148 |          0 |          4 |        152 |
+| ios\Runner\Assets.xcassets\AppIcon.appiconset                         |          1 |        122 |          0 |          1 |        123 |
+| ios\Runner\Assets.xcassets\LaunchImage.imageset                       |          2 |         26 |          0 |          3 |         29 |
+| ios\Runner\Base.lproj                                                 |          2 |         61 |          2 |          2 |         65 |
+| lib                                                                   |         66 |     24,837 |      1,084 |      2,245 |     28,166 |
+| lib (Files)                                                           |          2 |        702 |         58 |         72 |        832 |
+| lib\components                                                        |          6 |      1,216 |         44 |         89 |      1,349 |
+| lib\controllers                                                       |          1 |         92 |         18 |         20 |        130 |
+| lib\models                                                            |          9 |        855 |         23 |         91 |        969 |
+| lib\pages                                                             |         19 |     14,697 |        475 |        985 |     16,157 |
+| lib\services                                                          |         14 |      4,638 |        354 |        716 |      5,708 |
+| lib\services (Files)                                                  |         13 |      4,486 |        347 |        684 |      5,517 |
+| lib\services\core                                                     |          1 |        152 |          7 |         32 |        191 |
+| lib\theme                                                             |          2 |        239 |         17 |         19 |        275 |
+| lib\utils                                                             |          2 |         67 |         16 |         11 |         94 |
+| lib\widgets                                                           |         11 |      2,331 |         79 |        242 |      2,652 |
+| linux                                                                 |          9 |        393 |         41 |         94 |        528 |
+| linux (Files)                                                         |          1 |        104 |          0 |         25 |        129 |
+| linux\flutter                                                         |          4 |        165 |          9 |         27 |        201 |
+| linux\runner                                                          |          4 |        124 |         32 |         42 |        198 |
+| macos                                                                 |          7 |        518 |          6 |         28 |        552 |
+| macos (Files)                                                         |          1 |         33 |          1 |         11 |         45 |
+| macos\Flutter                                                         |          1 |         44 |          3 |          4 |         51 |
+| macos\Runner                                                          |          4 |        434 |          0 |          9 |        443 |
+| macos\Runner (Files)                                                  |          2 |         23 |          0 |          7 |         30 |
+| macos\RunnerTests                                                     |          1 |          7 |          2 |          4 |         13 |
+| macos\Runner\Assets.xcassets                                          |          1 |         68 |          0 |          1 |         69 |
+| macos\Runner\Assets.xcassets\AppIcon.appiconset                       |          1 |         68 |          0 |          1 |         69 |
+| macos\Runner\Base.lproj                                               |          1 |        343 |          0 |          1 |        344 |
+| web                                                                   |          6 |     83,444 |         51 |      8,962 |     92,457 |
+| web (Files)                                                           |          3 |        257 |         15 |         21 |        293 |
+| web\assets                                                            |          3 |     83,187 |         36 |      8,941 |     92,164 |
+| web\assets\packages                                                   |          3 |     83,187 |         36 |      8,941 |     92,164 |
+| web\assets\packages\fast_rsa                                          |          3 |     83,187 |         36 |      8,941 |     92,164 |
+| web\assets\packages\fast_rsa\web                                      |          3 |     83,187 |         36 |      8,941 |     92,164 |
+| web\assets\packages\fast_rsa\web\assets                               |          3 |     83,187 |         36 |      8,941 |     92,164 |
+| windows                                                               |         14 |        780 |         94 |        190 |      1,064 |
+| windows (Files)                                                       |          1 |        138 |          0 |         22 |        160 |
+| windows\flutter                                                       |          4 |        180 |          9 |         29 |        218 |
+| windows\runner                                                        |          9 |        462 |         85 |        139 |        686 |
++-----------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++-----------------------------------------------------------------------+-------------------------+------------+------------+------------+------------+
+| filename                                                              | language                | code       | comment    | blank      | total      |
++-----------------------------------------------------------------------+-------------------------+------------+------------+------------+------------+
+| i:\Dext\.github\workflows\flutter-build-test.yml                      | YAML                    |        406 |         24 |         71 |        501 |
+| i:\Dext\README.md                                                     | Markdown                |        211 |          0 |         65 |        276 |
+| i:\Dext\analysis_options.yaml                                         | YAML                    |          3 |         22 |          4 |         29 |
+| i:\Dext\android\app\build.gradle                                      | Gradle                  |         65 |          4 |         12 |         81 |
+| i:\Dext\android\app\build.gradle.kts                                  | Kotlin                  |          0 |          0 |          1 |          1 |
+| i:\Dext\android\app\src\debug\AndroidManifest.xml                     | XML                     |          3 |          4 |          1 |          8 |
+| i:\Dext\android\app\src\main\AndroidManifest.xml                      | XML                     |         51 |         13 |          3 |         67 |
+| i:\Dext\android\app\src\main\kotlin\com\wucode\Dext\MainActivity.kt   | Kotlin                  |         10 |          1 |          4 |         15 |
+| i:\Dext\android\app\src\main\res\drawable-v21\launch_background.xml   | XML                     |          4 |          7 |          2 |         13 |
+| i:\Dext\android\app\src\main\res\drawable\launch_background.xml       | XML                     |          4 |          7 |          2 |         13 |
+| i:\Dext\android\app\src\main\res\values-night\styles.xml              | XML                     |          9 |          9 |          1 |         19 |
+| i:\Dext\android\app\src\main\res\values\styles.xml                    | XML                     |          9 |          9 |          1 |         19 |
+| i:\Dext\android\app\src\profile\AndroidManifest.xml                   | XML                     |          3 |          4 |          1 |          8 |
+| i:\Dext\android\build.gradle.kts                                      | Kotlin                  |         69 |          5 |          7 |         81 |
+| i:\Dext\android\gradle.properties                                     | Properties              |         13 |          0 |          4 |         17 |
+| i:\Dext\android\gradle\wrapper\gradle-wrapper.properties              | Properties              |          5 |          0 |          1 |          6 |
+| i:\Dext\android\settings.gradle.kts                                   | Kotlin                  |         21 |          0 |          5 |         26 |
+| i:\Dext\devtools_options.yaml                                         | YAML                    |          5 |          0 |          0 |          5 |
+| i:\Dext\forui.yaml                                                    | YAML                    |          4 |          3 |          3 |         10 |
+| i:\Dext\ios\Podfile                                                   | Ruby                    |         33 |          2 |         11 |         46 |
+| i:\Dext\ios\RunnerTests\RunnerTests.swift                             | Swift                   |          7 |          2 |          4 |         13 |
+| i:\Dext\ios\Runner\AppDelegate.swift                                  | Swift                   |         12 |          0 |          2 |         14 |
+| i:\Dext\ios\Runner\Assets.xcassets\AppIcon.appiconset\Contents.json   | JSON                    |        122 |          0 |          1 |        123 |
+| i:\Dext\ios\Runner\Assets.xcassets\LaunchImage.imageset\Contents.json | JSON                    |         23 |          0 |          1 |         24 |
+| i:\Dext\ios\Runner\Assets.xcassets\LaunchImage.imageset\README.md     | Markdown                |          3 |          0 |          2 |          5 |
+| i:\Dext\ios\Runner\Base.lproj\LaunchScreen.storyboard                 | XML                     |         36 |          1 |          1 |         38 |
+| i:\Dext\ios\Runner\Base.lproj\Main.storyboard                         | XML                     |         25 |          1 |          1 |         27 |
+| i:\Dext\ios\Runner\Runner-Bridging-Header.h                           | C++                     |          1 |          0 |          1 |          2 |
+| i:\Dext\lib\app_navigator.dart                                        | Dart                    |          2 |          1 |          2 |          5 |
+| i:\Dext\lib\components\bottom_nav_actions.dart                        | Dart                    |          0 |          1 |          0 |          1 |
+| i:\Dext\lib\components\glass_card.dart                                | Dart                    |         60 |          3 |          6 |         69 |
+| i:\Dext\lib\components\media_gallery.dart                             | Dart                    |        123 |          6 |          8 |        137 |
+| i:\Dext\lib\components\multi_select_actions.dart                      | Dart                    |        346 |          9 |         28 |        383 |
+| i:\Dext\lib\components\survey_actions.dart                            | Dart                    |        340 |          4 |         17 |        361 |
+| i:\Dext\lib\components\video_player_widget.dart                       | Dart                    |        347 |         21 |         30 |        398 |
+| i:\Dext\lib\controllers\survey_runtime.dart                           | Dart                    |         92 |         18 |         20 |        130 |
+| i:\Dext\lib\main.dart                                                 | Dart                    |        700 |         57 |         70 |        827 |
+| i:\Dext\lib\models\captcha.dart                                       | Dart                    |        120 |          1 |         17 |        138 |
+| i:\Dext\lib\models\home_state.dart                                    | Dart                    |         77 |          5 |         16 |         98 |
+| i:\Dext\lib\models\paginated_response.dart                            | Dart                    |         37 |          0 |          4 |         41 |
+| i:\Dext\lib\models\project.dart                                       | Dart                    |         65 |          0 |          4 |         69 |
+| i:\Dext\lib\models\question.dart                                      | Dart                    |        239 |         10 |         27 |        276 |
+| i:\Dext\lib\models\survey.dart                                        | Dart                    |         89 |          0 |          4 |         93 |
+| i:\Dext\lib\models\survey_result.dart                                 | Dart                    |         72 |          0 |          8 |         80 |
+| i:\Dext\lib\models\survey_stats.dart                                  | Dart                    |         62 |          5 |          5 |         72 |
+| i:\Dext\lib\models\user.dart                                          | Dart                    |         94 |          2 |          6 |        102 |
+| i:\Dext\lib\pages\create_survey_page.dart                             | Dart                    |        524 |          4 |         22 |        550 |
+| i:\Dext\lib\pages\edit_question_page.dart                             | Dart                    |      1,414 |         53 |         95 |      1,562 |
+| i:\Dext\lib\pages\edit_survey_content_page.dart                       | Dart                    |        700 |         20 |         46 |        766 |
+| i:\Dext\lib\pages\edit_survey_page.dart                               | Dart                    |        845 |         22 |         48 |        915 |
+| i:\Dext\lib\pages\frame_page.dart                                     | Dart                    |      1,092 |         22 |         63 |      1,177 |
+| i:\Dext\lib\pages\fullscreen_media_viewer.dart                        | Dart                    |      1,103 |         79 |        108 |      1,290 |
+| i:\Dext\lib\pages\home_history_content.dart                           | Dart                    |        679 |         12 |         40 |        731 |
+| i:\Dext\lib\pages\home_main_content.dart                              | Dart                    |        282 |         11 |         10 |        303 |
+| i:\Dext\lib\pages\home_page.dart                                      | Dart                    |        224 |          6 |         19 |        249 |
+| i:\Dext\lib\pages\home_settings_content.dart                          | Dart                    |        627 |         19 |         51 |        697 |
+| i:\Dext\lib\pages\login_page.dart                                     | Dart                    |      1,329 |         34 |         76 |      1,439 |
+| i:\Dext\lib\pages\project_page.dart                                   | Dart                    |        941 |         28 |         62 |      1,031 |
+| i:\Dext\lib\pages\project_surveys_page.dart                           | Dart                    |        348 |          7 |         23 |        378 |
+| i:\Dext\lib\pages\public_access_page.dart                             | Dart                    |        352 |         12 |         27 |        391 |
+| i:\Dext\lib\pages\public_survey_page.dart                             | Dart                    |        633 |         36 |         60 |        729 |
+| i:\Dext\lib\pages\submission_detail_page.dart                         | Dart                    |        460 |          0 |         50 |        510 |
+| i:\Dext\lib\pages\survey_page.dart                                    | Dart                    |      1,165 |         40 |         77 |      1,282 |
+| i:\Dext\lib\pages\survey_preview_page.dart                            | Dart                    |        265 |         18 |         20 |        303 |
+| i:\Dext\lib\pages\survey_results_page.dart                            | Dart                    |      1,714 |         52 |         88 |      1,854 |
+| i:\Dext\lib\services\api_service.dart                                 | Dart                    |      2,716 |        198 |        407 |      3,321 |
+| i:\Dext\lib\services\auth_service.dart                                | Dart                    |        128 |          2 |         12 |        142 |
+| i:\Dext\lib\services\clipboard_service.dart                           | Dart                    |        190 |         27 |         34 |        251 |
+| i:\Dext\lib\services\config.dart                                      | Dart                    |         24 |         13 |         10 |         47 |
+| i:\Dext\lib\services\core\api_core.dart                               | Dart                    |        152 |          7 |         32 |        191 |
+| i:\Dext\lib\services\crypto_service.dart                              | Dart                    |        133 |         21 |         38 |        192 |
+| i:\Dext\lib\services\oauth_service.dart                               | Dart                    |        396 |         34 |         52 |        482 |
+| i:\Dext\lib\services\project_service.dart                             | Dart                    |        224 |          4 |         32 |        260 |
+| i:\Dext\lib\services\survey_service.dart                              | Dart                    |        430 |         10 |         44 |        484 |
+| i:\Dext\lib\services\url_handler.dart                                 | Dart                    |         88 |         12 |         22 |        122 |
+| i:\Dext\lib\services\url_handler_stub.dart                            | Dart                    |          3 |          0 |          2 |          5 |
+| i:\Dext\lib\services\url_handler_web.dart                             | Dart                    |         15 |          2 |          3 |         20 |
+| i:\Dext\lib\services\web_oauth_handler.dart                           | Dart                    |        116 |         23 |         24 |        163 |
+| i:\Dext\lib\services\web_oauth_handler_stub.dart                      | Dart                    |         23 |          1 |          4 |         28 |
+| i:\Dext\lib\theme\theme.dart                                          | Dart                    |         93 |          4 |          6 |        103 |
+| i:\Dext\lib\theme\zincx_theme.dart                                    | Dart                    |        146 |         13 |         13 |        172 |
+| i:\Dext\lib\utils\date_format.dart                                    | Dart                    |         27 |          7 |          3 |         37 |
+| i:\Dext\lib\utils\network_reachability.dart                           | Dart                    |         40 |          9 |          8 |         57 |
+| i:\Dext\lib\widgets\app_layout.dart                                   | Dart                    |         31 |          1 |          3 |         35 |
+| i:\Dext\lib\widgets\crop_image_dialog.dart                            | Dart                    |        142 |          0 |         13 |        155 |
+| i:\Dext\lib\widgets\dashboard_chart.dart                              | Dart                    |        286 |         15 |         22 |        323 |
+| i:\Dext\lib\widgets\dashboard_stats_card.dart                         | Dart                    |         69 |          0 |          5 |         74 |
+| i:\Dext\lib\widgets\frosted_glass_background.dart                     | Dart                    |        251 |         28 |         44 |        323 |
+| i:\Dext\lib\widgets\line_chart.dart                                   | Dart                    |        196 |          0 |         30 |        226 |
+| i:\Dext\lib\widgets\question_display_widget.dart                      | Dart                    |        589 |         15 |         44 |        648 |
+| i:\Dext\lib\widgets\recent_survey_responses_list.dart                 | Dart                    |        321 |          8 |         21 |        350 |
+| i:\Dext\lib\widgets\rotating_text.dart                                | Dart                    |        280 |          5 |         41 |        326 |
+| i:\Dext\lib\widgets\top_safe_spacer.dart                              | Dart                    |         19 |          1 |          4 |         24 |
+| i:\Dext\lib\widgets\window_caption.dart                               | Dart                    |        147 |          6 |         15 |        168 |
+| i:\Dext\linux\CMakeLists.txt                                          | CMake                   |        104 |          0 |         25 |        129 |
+| i:\Dext\linux\flutter\CMakeLists.txt                                  | CMake                   |         79 |          0 |         10 |         89 |
+| i:\Dext\linux\flutter\generated_plugin_registrant.cc                  | C++                     |         51 |          4 |          5 |         60 |
+| i:\Dext\linux\flutter\generated_plugin_registrant.h                   | C++                     |          5 |          5 |          6 |         16 |
+| i:\Dext\linux\flutter\generated_plugins.cmake                         | CMake                   |         30 |          0 |          6 |         36 |
+| i:\Dext\linux\runner\CMakeLists.txt                                   | CMake                   |         21 |          0 |          6 |         27 |
+| i:\Dext\linux\runner\main.cc                                          | C++                     |          5 |          0 |          2 |          7 |
+| i:\Dext\linux\runner\my_application.cc                                | C++                     |         91 |         25 |         29 |        145 |
+| i:\Dext\linux\runner\my_application.h                                 | C++                     |          7 |          7 |          5 |         19 |
+| i:\Dext\macos\Flutter\GeneratedPluginRegistrant.swift                 | Swift                   |         44 |          3 |          4 |         51 |
+| i:\Dext\macos\Podfile                                                 | Ruby                    |         33 |          1 |         11 |         45 |
+| i:\Dext\macos\RunnerTests\RunnerTests.swift                           | Swift                   |          7 |          2 |          4 |         13 |
+| i:\Dext\macos\Runner\AppDelegate.swift                                | Swift                   |         11 |          0 |          3 |         14 |
+| i:\Dext\macos\Runner\Assets.xcassets\AppIcon.appiconset\Contents.json | JSON                    |         68 |          0 |          1 |         69 |
+| i:\Dext\macos\Runner\Base.lproj\MainMenu.xib                          | XML                     |        343 |          0 |          1 |        344 |
+| i:\Dext\macos\Runner\MainFlutterWindow.swift                          | Swift                   |         12 |          0 |          4 |         16 |
+| i:\Dext\pubspec.yaml                                                  | YAML                    |         84 |         10 |         11 |        105 |
+| i:\Dext\web\assets\packages\fast_rsa\web\assets\rsa.wasm              | WebAssembly Text Format |     82,632 |          0 |      8,868 |     91,500 |
+| i:\Dext\web\assets\packages\fast_rsa\web\assets\wasm_exec.js          | JavaScript              |        478 |         36 |         62 |        576 |
+| i:\Dext\web\assets\packages\fast_rsa\web\assets\worker.js             | JavaScript              |         77 |          0 |         11 |         88 |
+| i:\Dext\web\index.html                                                | HTML                    |         93 |         15 |          8 |        116 |
+| i:\Dext\web\manifest.json                                             | JSON                    |         35 |          0 |          1 |         36 |
+| i:\Dext\web\oauth_callback.html                                       | HTML                    |        129 |          0 |         12 |        141 |
+| i:\Dext\windows\CMakeLists.txt                                        | CMake                   |        138 |          0 |         22 |        160 |
+| i:\Dext\windows\flutter\CMakeLists.txt                                | CMake                   |         98 |          0 |         12 |        110 |
+| i:\Dext\windows\flutter\generated_plugin_registrant.cc                | C++                     |         45 |          4 |          5 |         54 |
+| i:\Dext\windows\flutter\generated_plugin_registrant.h                 | C++                     |          5 |          5 |          6 |         16 |
+| i:\Dext\windows\flutter\generated_plugins.cmake                       | CMake                   |         32 |          0 |          6 |         38 |
+| i:\Dext\windows\runner\CMakeLists.txt                                 | CMake                   |         34 |          0 |          7 |         41 |
+| i:\Dext\windows\runner\flutter_window.cpp                             | C++                     |         49 |          7 |         16 |         72 |
+| i:\Dext\windows\runner\flutter_window.h                               | C++                     |         20 |          5 |          9 |         34 |
+| i:\Dext\windows\runner\main.cpp                                       | C++                     |         30 |          4 |         10 |         44 |
+| i:\Dext\windows\runner\resource.h                                     | C++                     |          9 |          6 |          2 |         17 |
+| i:\Dext\windows\runner\utils.cpp                                      | C++                     |         54 |          2 |         10 |         66 |
+| i:\Dext\windows\runner\utils.h                                        | C++                     |          8 |          6 |          6 |         20 |
+| i:\Dext\windows\runner\win32_window.cpp                               | C++                     |        210 |         24 |         55 |        289 |
+| i:\Dext\windows\runner\win32_window.h                                 | C++                     |         48 |         31 |         24 |        103 |
+| Total                                                                 |                         |    111,213 |      1,404 |     11,742 |    124,359 |
++-----------------------------------------------------------------------+-------------------------+------------+------------+------------+------------+
