@@ -9,6 +9,7 @@ import 'dart:io';
 import '../services/config.dart';
 import '../widgets/crop_image_dialog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'account_security_page.dart';
 
 class HomeSettingsContent extends StatefulWidget {
   final VoidCallback onLogout;
@@ -430,6 +431,18 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
       icon: Icons.settings_outlined,
       children: [
         _buildNoHighlightListTile(
+          leading: Icon(Icons.security, color: theme.colorScheme.primary),
+          title: const Text('账号安全'),
+          trailing: Icon(Icons.arrow_forward_ios,
+              size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
+          onTap: () => _navigateToAccountSecurity(context),
+        ),
+        Divider(
+          height: 1,
+          thickness: 1,
+          color: theme.dividerColor.withValues(alpha: 0.1),
+        ),
+        _buildNoHighlightListTile(
           leading: Icon(Icons.person_outline, color: theme.colorScheme.primary),
           title: const Text('修改头像'),
           trailing: Icon(Icons.arrow_forward_ios,
@@ -462,6 +475,57 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
           onTap: () => _confirmLogout(context, widget.onLogout),
         ),
       ],
+    );
+  }
+
+  // 导航到账号安全页面
+  void _navigateToAccountSecurity(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWide = screenWidth > 800;
+
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => AccountSecurityPage(
+          apiService: widget.apiService,
+          currentUser: _currentUser,
+          onUserUpdated: _fetchUserData,
+        ),
+        transitionDuration: const Duration(milliseconds: 400),
+        reverseTransitionDuration: const Duration(milliseconds: 400),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final fadeAnimation = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeInOut,
+          );
+
+          // 桌面端：淡入淡出 + 缩放
+          if (isWide) {
+            return FadeTransition(
+              opacity: fadeAnimation,
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 0.95, end: 1.0).animate(
+                  CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                ),
+                child: child,
+              ),
+            );
+          }
+          // 移动端：淡入淡出 + 滑动
+          return FadeTransition(
+            opacity: fadeAnimation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0.0, 0.1),
+                end: Offset.zero,
+              ).animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+              ),
+              child: child,
+            ),
+          );
+        },
+      ),
     );
   }
 

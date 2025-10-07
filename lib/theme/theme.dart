@@ -53,7 +53,7 @@ final ThemeData lightTheme = ThemeData(
   appBarTheme: const AppBarTheme(
     backgroundColor: Colors.transparent,
     elevation: 0,
-    systemOverlayStyle: SystemUiOverlayStyle.dark, // 状态栏图标
+    systemOverlayStyle: SystemUiOverlayStyle.dark,
   ),
   navigationRailTheme: NavigationRailThemeData(
     backgroundColor: Colors.transparent,
@@ -87,7 +87,7 @@ final ThemeData darkTheme = ThemeData(
   appBarTheme: const AppBarTheme(
     backgroundColor: Colors.transparent,
     elevation: 0,
-    systemOverlayStyle: SystemUiOverlayStyle.light, // 状态栏图标
+    systemOverlayStyle: SystemUiOverlayStyle.light,
   ),
   navigationRailTheme: NavigationRailThemeData(
     backgroundColor: Colors.transparent,
