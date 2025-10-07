@@ -67,19 +67,21 @@ class OAuthService {
 
   /// Web端Microsoft OAuth登录
   Future<Map<String, dynamic>> _signInWithMicrosoftWeb() async {
-    // 构建授权URL
-    final authUrl = Uri.https('login.microsoftonline.com', '/common/oauth2/v2.0/authorize', {
-      'client_id': microsoftClientId,
-      'response_type': 'code',
-      'redirect_uri': _redirectUri,
-      'scope': 'openid profile email User.Read',
-      'response_mode': 'query',
-      'state': DateTime.now().millisecondsSinceEpoch.toString(),
-    });
+    // 从后端获取授权URL
+    final authUrlResponse = await http.get(
+      Uri.parse('${ApiService.baseUrl}/api/auth/oauth/microsoft/url?redirect_uri=${Uri.encodeComponent(_redirectUri)}'),
+    );
+
+    if (authUrlResponse.statusCode != 200) {
+      throw Exception('获取授权URL失败: ${authUrlResponse.statusCode}');
+    }
+
+    final authUrlData = json.decode(authUrlResponse.body);
+    final authUrl = authUrlData['auth_url'];
 
     // 使用自定义处理器打开OAuth窗口
     final authCode = await WebOAuthHandler.authenticate(
-      authUrl: authUrl.toString(),
+      authUrl: authUrl,
       redirectUrl: _redirectUri,
       windowOptions: {
         'width': '500',
@@ -95,55 +97,17 @@ class OAuthService {
       throw Exception('未获取到授权码');
     }
 
-    // 交换访问令牌
-    final tokenResponse = await http.post(
-      Uri.parse('https://login.microsoftonline.com/common/oauth2/v2.0/token'),
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: {
-        'client_id': microsoftClientId,
-        'client_secret': microsoftClientSecret,
-        'code': code,
-        'grant_type': 'authorization_code',
-        'redirect_uri': _redirectUri,
-      },
-    );
-
-    if (tokenResponse.statusCode != 200) {
-      throw Exception('获取访问令牌失败: ${tokenResponse.statusCode}');
-    }
-
-    final tokenData = json.decode(tokenResponse.body);
-    final accessToken = tokenData['access_token'];
-
-    // 获取用户信息
-    final userResponse = await http.get(
-      Uri.parse('https://graph.microsoft.com/v1.0/me'),
-      headers: {'Authorization': 'Bearer $accessToken'},
-    );
-
-    if (userResponse.statusCode != 200) {
-      throw Exception('获取用户信息失败: ${userResponse.statusCode}');
-    }
-
-    final userInfo = json.decode(userResponse.body);
-    
-    // 调用后端OAuth接口
+    // 直接将授权码发送给后端，让后端处理令牌交换
     final result = await _authenticateWithBackend('microsoft', {
-      'access_token': accessToken,
-      'user_info': {
-        'id': userInfo['id'],
-        'email': userInfo['mail'] ?? userInfo['userPrincipalName'],
-        'name': userInfo['displayName'],
-        'picture': null,
-        'provider': 'microsoft',
-      },
+      'authorization_code': code,
+      'redirect_uri': _redirectUri,
     });
 
     return {
       'success': true,
       'token': result['token'],
       'expires': result['expires'],
-      'user': userInfo,
+      'user': result['user'],
     };
   }
 
@@ -161,7 +125,6 @@ class OAuthService {
       client,
       grantType: OAuth2Helper.authorizationCode,
       clientId: microsoftClientId,
-      clientSecret: microsoftClientSecret,
       scopes: ['openid', 'profile', 'email', 'User.Read'],
       webAuthOpts: {
         'windowName': 'Dext - Microsoft登录',
@@ -177,10 +140,11 @@ class OAuthService {
     
     if (response.statusCode == 200) {
       final userInfo = json.decode(response.body);
+      final accessToken = await helper.getToken();
       
-      // 调用后端OAuth接口
+      // 调用后端OAuth接口，只传递访问令牌
       final result = await _authenticateWithBackend('microsoft', {
-        'access_token': await helper.getToken(),
+        'access_token': accessToken?.accessToken,
         'user_info': {
           'id': userInfo['id'],
           'email': userInfo['mail'] ?? userInfo['userPrincipalName'],
@@ -232,18 +196,21 @@ class OAuthService {
 
   /// Web端Google OAuth登录
   Future<Map<String, dynamic>> _signInWithGoogleWeb() async {
-    // 构建授权URL
-    final authUrl = Uri.https('accounts.google.com', '/o/oauth2/v2/auth', {
-      'client_id': googleClientId,
-      'response_type': 'code',
-      'redirect_uri': _redirectUri,
-      'scope': 'openid profile email',
-      'state': DateTime.now().millisecondsSinceEpoch.toString(),
-    });
+    // 从后端获取授权URL
+    final authUrlResponse = await http.get(
+      Uri.parse('${ApiService.baseUrl}/api/auth/oauth/google/url?redirect_uri=${Uri.encodeComponent(_redirectUri)}'),
+    );
+
+    if (authUrlResponse.statusCode != 200) {
+      throw Exception('获取授权URL失败: ${authUrlResponse.statusCode}');
+    }
+
+    final authUrlData = json.decode(authUrlResponse.body);
+    final authUrl = authUrlData['auth_url'];
 
     // 使用自定义处理器打开OAuth窗口
     final authCode = await WebOAuthHandler.authenticate(
-      authUrl: authUrl.toString(),
+      authUrl: authUrl,
       redirectUrl: _redirectUri,
       windowOptions: {
         'width': '500',
@@ -259,55 +226,17 @@ class OAuthService {
       throw Exception('未获取到授权码');
     }
 
-    // 交换访问令牌
-    final tokenResponse = await http.post(
-      Uri.parse('https://oauth2.googleapis.com/token'),
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: {
-        'client_id': googleClientId,
-        'client_secret': googleClientSecret,
-        'code': code,
-        'grant_type': 'authorization_code',
-        'redirect_uri': _redirectUri,
-      },
-    );
-
-    if (tokenResponse.statusCode != 200) {
-      throw Exception('获取访问令牌失败: ${tokenResponse.statusCode}');
-    }
-
-    final tokenData = json.decode(tokenResponse.body);
-    final accessToken = tokenData['access_token'];
-
-    // 获取用户信息
-    final userResponse = await http.get(
-      Uri.parse('https://www.googleapis.com/oauth2/v2/userinfo'),
-      headers: {'Authorization': 'Bearer $accessToken'},
-    );
-
-    if (userResponse.statusCode != 200) {
-      throw Exception('获取用户信息失败: ${userResponse.statusCode}');
-    }
-
-    final userInfo = json.decode(userResponse.body);
-    
-    // 调用后端OAuth接口
+    // 直接将授权码发送给后端，让后端处理令牌交换
     final result = await _authenticateWithBackend('google', {
-      'access_token': accessToken,
-      'user_info': {
-        'id': userInfo['id'],
-        'email': userInfo['email'],
-        'name': userInfo['name'],
-        'picture': userInfo['picture'],
-        'provider': 'google',
-      },
+      'authorization_code': code,
+      'redirect_uri': _redirectUri,
     });
 
     return {
       'success': true,
       'token': result['token'],
       'expires': result['expires'],
-      'user': userInfo,
+      'user': result['user'],
     };
   }
 
@@ -322,7 +251,6 @@ class OAuthService {
       client,
       grantType: OAuth2Helper.authorizationCode,
       clientId: googleClientId,
-      clientSecret: googleClientSecret,
       scopes: ['openid', 'profile', 'email'],
       webAuthOpts: {
         'windowName': 'Dext - Google登录',
@@ -333,15 +261,21 @@ class OAuthService {
       },
     );
 
-    // 使用helper获取访问令牌
+    // 首先获取访问令牌
+    final accessToken = await helper.getToken();
+    if (accessToken?.accessToken == null) {
+      throw Exception('获取访问令牌失败');
+    }
+    
+    // 使用访问令牌获取用户信息
     final response = await helper.get('https://www.googleapis.com/oauth2/v2/userinfo');
     
     if (response.statusCode == 200) {
       final userInfo = json.decode(response.body);
       
-      // 调用后端OAuth接口
+      // 调用后端OAuth接口，只传递访问令牌
       final result = await _authenticateWithBackend('google', {
-        'access_token': await helper.getToken(),
+        'access_token': accessToken!.accessToken,
         'user_info': {
           'id': userInfo['id'],
           'email': userInfo['email'],
@@ -393,17 +327,21 @@ class OAuthService {
 
   /// Web端GitHub OAuth登录
   Future<Map<String, dynamic>> _signInWithGitHubWeb() async {
-    // 构建授权URL
-    final authUrl = Uri.https('github.com', '/login/oauth/authorize', {
-      'client_id': githubClientId,
-      'redirect_uri': _redirectUri,
-      'scope': 'user:email',
-      'state': DateTime.now().millisecondsSinceEpoch.toString(),
-    });
+    // 从后端获取授权URL
+    final authUrlResponse = await http.get(
+      Uri.parse('${ApiService.baseUrl}/api/auth/oauth/github/url?redirect_uri=${Uri.encodeComponent(_redirectUri)}'),
+    );
+
+    if (authUrlResponse.statusCode != 200) {
+      throw Exception('获取授权URL失败: ${authUrlResponse.statusCode}');
+    }
+
+    final authUrlData = json.decode(authUrlResponse.body);
+    final authUrl = authUrlData['auth_url'];
 
     // 使用自定义处理器打开OAuth窗口
     final authCode = await WebOAuthHandler.authenticate(
-      authUrl: authUrl.toString(),
+      authUrl: authUrl,
       redirectUrl: _redirectUri,
       windowOptions: {
         'width': '500',
@@ -419,76 +357,17 @@ class OAuthService {
       throw Exception('未获取到授权码');
     }
 
-    // 交换访问令牌
-    final tokenResponse = await http.post(
-      Uri.parse('https://github.com/login/oauth/access_token'),
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
-      },
-      body: {
-        'client_id': githubClientId,
-        'client_secret': githubClientSecret,
-        'code': code,
-      },
-    );
-
-    if (tokenResponse.statusCode != 200) {
-      throw Exception('获取访问令牌失败: ${tokenResponse.statusCode}');
-    }
-
-    final tokenData = json.decode(tokenResponse.body);
-    final accessToken = tokenData['access_token'];
-
-    // 获取用户基本信息
-    final userResponse = await http.get(
-      Uri.parse('https://api.github.com/user'),
-      headers: {'Authorization': 'Bearer $accessToken'},
-    );
-
-    if (userResponse.statusCode != 200) {
-      throw Exception('获取用户信息失败: ${userResponse.statusCode}');
-    }
-
-    final userInfo = json.decode(userResponse.body);
-    
-    // 获取用户邮箱
-    String? email = userInfo['email'];
-    if (email == null || email.isEmpty) {
-      final emailResponse = await http.get(
-        Uri.parse('https://api.github.com/user/emails'),
-        headers: {'Authorization': 'Bearer $accessToken'},
-      );
-      if (emailResponse.statusCode == 200) {
-        final emails = json.decode(emailResponse.body) as List;
-        final primaryEmail = emails.firstWhere(
-          (e) => e['primary'] == true,
-          orElse: () => emails.isNotEmpty ? emails.first : null,
-        );
-        email = primaryEmail?['email'];
-      }
-    }
-
-    final userInfoFormatted = {
-      'id': userInfo['id'].toString(),
-      'email': email ?? '',
-      'name': userInfo['name'] ?? userInfo['login'],
-      'picture': userInfo['avatar_url'],
-      'username': userInfo['login'],
-      'provider': 'github',
-    };
-    
-    // 调用后端OAuth接口
+    // 直接将授权码发送给后端，让后端处理令牌交换
     final result = await _authenticateWithBackend('github', {
-      'access_token': accessToken,
-      'user_info': userInfoFormatted,
+      'authorization_code': code,
+      'redirect_uri': _redirectUri,
     });
 
     return {
       'success': true,
       'token': result['token'],
       'expires': result['expires'],
-      'user': userInfoFormatted,
+      'user': result['user'],
     };
   }
 
@@ -503,7 +382,6 @@ class OAuthService {
       client,
       grantType: OAuth2Helper.authorizationCode,
       clientId: githubClientId,
-      clientSecret: githubClientSecret,
       scopes: ['user:email'],
       webAuthOpts: {
         'windowName': 'Dext - GitHub登录',
@@ -519,6 +397,7 @@ class OAuthService {
     
     if (userResponse.statusCode == 200) {
       final userInfo = json.decode(userResponse.body);
+      final accessToken = await helper.getToken();
       
       // 获取用户邮箱
       String? email = userInfo['email'];
@@ -543,9 +422,9 @@ class OAuthService {
         'provider': 'github',
       };
       
-      // 调用后端OAuth接口
+      // 调用后端OAuth接口，只传递访问令牌
       final result = await _authenticateWithBackend('github', {
-        'access_token': await helper.getToken(),
+        'access_token': accessToken?.accessToken,
         'user_info': userInfoFormatted,
       });
 
@@ -567,17 +446,16 @@ class OAuthService {
     Map<String, dynamic> oauthData,
   ) async {
     try {
-      // 这里调用后端的OAuth认证接口
-      // 后端会验证OAuth令牌并返回应用的JWT令牌
-      final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/api/auth/oauth'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: json.encode({
-          'provider': provider,
-          'oauth_data': oauthData,
-        }),
+      // 使用ApiService的加密请求方法
+      final requestData = {
+        'provider': provider,
+        'oauth_data': oauthData,
+      };
+      
+      final response = await ApiService().encryptedRequest(
+        'POST',
+        '${ApiService.baseUrl}/api/auth/oauth',
+        requestData,
       );
 
       if (response.statusCode == 200) {

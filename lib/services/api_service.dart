@@ -576,6 +576,185 @@ class ApiService {
     }
   }
 
+  // 发送邮箱验证码
+  Future<void> sendEmailVerificationCode({
+    required String email,
+    required String purpose, // 'register', 'reset_password', 'change_email'
+    required String captchaId,
+    required String captchaValue,
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在发送验证码...');
+      _updateStatus(RequestStatus.loading, '正在发送验证码...');
+
+      final requestData = {
+        'email': email,
+        'purpose': purpose,
+        'captchaId': captchaId,
+        'captchaValue': captchaValue,
+      };
+
+      final response = await _encryptedRequest(
+        'POST',
+        '$baseUrl/api/auth/email/send-code',
+        requestData,
+        onStatus: onStatus,
+      );
+
+      if (response.statusCode == 200) {
+        onStatus?.call(RequestStatus.success, '验证码已发送');
+        _updateStatus(RequestStatus.success, '验证码已发送');
+      } else {
+        final responseData = json.decode(response.body);
+        final errorMessage = responseData['message'] ?? responseData['error'] ?? '发送验证码失败';
+        
+        onStatus?.call(RequestStatus.error, errorMessage);
+        _updateStatus(RequestStatus.error, errorMessage);
+        
+        throw errorMessage;
+      }
+    } catch (e) {
+      final errorMsg = e.toString();
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
+    }
+  }
+
+  // 验证邮箱验证码
+  Future<bool> verifyEmailCode({
+    required String email,
+    required String code,
+    required String purpose,
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在验证...');
+      _updateStatus(RequestStatus.loading, '正在验证...');
+
+      final requestData = {
+        'email': email,
+        'code': code,
+        'purpose': purpose,
+      };
+
+      final response = await _encryptedRequest(
+        'POST',
+        '$baseUrl/api/auth/email/verify-code',
+        requestData,
+        onStatus: onStatus,
+      );
+
+      if (response.statusCode == 200) {
+        onStatus?.call(RequestStatus.success, '验证成功');
+        _updateStatus(RequestStatus.success, '验证成功');
+        return true;
+      } else {
+        final responseData = json.decode(response.body);
+        final errorMessage = responseData['message'] ?? responseData['error'] ?? '验证失败';
+        
+        onStatus?.call(RequestStatus.error, errorMessage);
+        _updateStatus(RequestStatus.error, errorMessage);
+        
+        throw errorMessage;
+      }
+    } catch (e) {
+      final errorMsg = e.toString();
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      return false;
+    }
+  }
+
+  // 重置密码
+  Future<void> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在重置密码...');
+      _updateStatus(RequestStatus.loading, '正在重置密码...');
+
+      final requestData = {
+        'email': email,
+        'code': code,
+        'newPassword': newPassword,
+      };
+
+      final response = await _encryptedRequest(
+        'POST',
+        '$baseUrl/api/auth/email/reset-password',
+        requestData,
+        onStatus: onStatus,
+      );
+
+      if (response.statusCode == 200) {
+        onStatus?.call(RequestStatus.success, '密码重置成功');
+        _updateStatus(RequestStatus.success, '密码重置成功');
+      } else {
+        final responseData = json.decode(response.body);
+        final errorMessage = responseData['message'] ?? responseData['error'] ?? '重置密码失败';
+        
+        onStatus?.call(RequestStatus.error, errorMessage);
+        _updateStatus(RequestStatus.error, errorMessage);
+        
+        throw errorMessage;
+      }
+    } catch (e) {
+      final errorMsg = e.toString();
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
+    }
+  }
+
+  // 更换邮箱
+  Future<void> changeEmail({
+    required String newEmail,
+    required String code,
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      await _ensureAuthTokenLoaded();
+      
+      onStatus?.call(RequestStatus.loading, '正在更换邮箱...');
+      _updateStatus(RequestStatus.loading, '正在更换邮箱...');
+
+      final requestData = {
+        'newEmail': newEmail,
+        'code': code,
+      };
+
+      final response = await _encryptedRequest(
+        'POST',
+        '$baseUrl/api/user/change-email',
+        requestData,
+        onStatus: onStatus,
+      );
+
+      if (response.statusCode == 200) {
+        onStatus?.call(RequestStatus.success, '邮箱更换成功');
+        _updateStatus(RequestStatus.success, '邮箱更换成功');
+      } else {
+        final responseData = json.decode(response.body);
+        final errorMessage = responseData['message'] ?? responseData['error'] ?? '更换邮箱失败';
+        
+        onStatus?.call(RequestStatus.error, errorMessage);
+        _updateStatus(RequestStatus.error, errorMessage);
+        
+        throw errorMessage;
+      }
+    } catch (e) {
+      final errorMsg = e.toString();
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
+    }
+  }
+
   // 注册方法
   Future<void> register({
     required String username,
@@ -583,6 +762,7 @@ class ApiService {
     required String captchaId,
     required String captchaValue,
     String? email,
+    String? emailCode,
     StatusCallback? onStatus,
   }) async {
     try {
@@ -598,6 +778,9 @@ class ApiService {
       
       if (email != null && email.isNotEmpty) {
         requestData['email'] = email;
+        if (emailCode != null && emailCode.isNotEmpty) {
+          requestData['emailCode'] = emailCode;
+        }
       }
 
       final response = await _encryptedRequest(

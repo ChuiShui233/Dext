@@ -10,7 +10,7 @@ import '../services/api_service.dart';
 import 'project_surveys_page.dart';
 import '../components/multi_select_actions.dart';
 import '../components/glass_card.dart';
-import 'frame_page.dart'; // 确保已导入
+import 'frame_page.dart';
 import '../widgets/frosted_glass_background.dart';
 
 class ProjectPage extends StatefulWidget {
@@ -721,7 +721,6 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                     ),
                   ],
                 ),
-                // 多选操作组件 - 进入多选模式即显示，带高度伸缩动画
                 AnimatedSize(
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeOutCubic,

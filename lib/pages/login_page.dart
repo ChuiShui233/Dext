@@ -31,19 +31,25 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
+  final _emailCodeController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _captchaController = TextEditingController();
   // 添加焦点控制
   final _usernameFocus = FocusNode();
   final _emailFocus = FocusNode();
+  final _emailCodeFocus = FocusNode();
   final _passwordFocus = FocusNode();
   final _confirmFocus = FocusNode();
   final _captchaFocus = FocusNode();
   
   bool _isLoading = false;
   bool _isRegistering = false;
+  bool _isResettingPassword = false;
   bool _agreeToTerms = false;
+  bool _emailCodeSent = false;
+  int _emailCodeCountdown = 0;
+  Timer? _countdownTimer;
 
   final _apiService = ApiService();
   final _oauthService = OAuthService();
@@ -160,14 +166,19 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   @override
   void dispose() {
     _usernameController.dispose();
+    _emailController.dispose();
+    _emailCodeController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _captchaController.dispose();
     _usernameFocus.dispose();
+    _emailFocus.dispose();
+    _emailCodeFocus.dispose();
     _passwordFocus.dispose();
     _confirmFocus.dispose();
     _captchaFocus.dispose();
     _brandAnimationController.dispose();
+    _countdownTimer?.cancel();
     super.dispose();
   }
 
@@ -386,6 +397,87 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     }
   }
 
+  // 发送邮箱验证码
+  Future<void> _sendEmailCode() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      showErrorDialog('请输入邮箱地址');
+      return;
+    }
+    if (!_isValidEmail(email)) {
+      showErrorDialog('邮箱格式不正确');
+      return;
+    }
+    if (_captchaController.text.trim().isEmpty) {
+      showErrorDialog('请先输入图形验证码');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final purpose = _isResettingPassword ? 'reset_password' : 'register';
+      await _apiService.sendEmailVerificationCode(
+        email: email,
+        purpose: purpose,
+        captchaId: _captchaId ?? '',
+        captchaValue: _captchaController.text.trim(),
+      );
+      
+      if (!mounted) return;
+      
+      setState(() {
+        _emailCodeSent = true;
+        _emailCodeCountdown = 60;
+      });
+      
+      // 启动倒计时
+      _countdownTimer?.cancel();
+      _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+        setState(() {
+          if (_emailCodeCountdown > 0) {
+            _emailCodeCountdown--;
+          } else {
+            timer.cancel();
+            _emailCodeSent = false;
+          }
+        });
+      });
+      
+      showAdaptiveDialog(
+        context: context,
+        builder: (context) => FDialog(
+          direction: Axis.horizontal,
+          title: const Text('验证码已发送'),
+          body: const Text('请查收邮件并输入6位验证码'),
+          actions: [
+            FButton(
+              style: FButtonStyle.outline,
+              child: const Text('确定'),
+              onPress: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      showErrorDialog(e.toString());
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        _fetchCaptcha();
+      }
+    }
+  }
+
   Future<void> _handleRegister() async {
     if (_isLoading || !_agreeToTerms) return;
     if (_usernameController.text.trim().isEmpty || _passwordController.text.trim().isEmpty) {
@@ -419,6 +511,17 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       showErrorDialog('邮箱格式不正确');
       return;
     }
+    
+    // 如果填写了邮箱，必须验证邮箱验证码
+    final emailCode = _emailCodeController.text.trim();
+    if (email.isNotEmpty && emailCode.isEmpty) {
+      showErrorDialog('请输入邮箱验证码');
+      return;
+    }
+    if (email.isNotEmpty && emailCode.length != 6) {
+      showErrorDialog('邮箱验证码应为6位数字');
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -431,6 +534,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         captchaId: _captchaId ?? '',
         captchaValue: _captchaController.text.trim(),
         email: email.isNotEmpty ? email : null,
+        emailCode: emailCode.isNotEmpty ? emailCode : null,
       );
       
       if (!mounted) return;
@@ -467,6 +571,102 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           _isLoading = false;
         });
         _fetchCaptcha();
+      }
+    }
+  }
+
+  // 重置密码
+  Future<void> _handleResetPassword() async {
+    if (_isLoading) return;
+    
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      showErrorDialog('请输入邮箱地址');
+      return;
+    }
+    if (!_isValidEmail(email)) {
+      showErrorDialog('邮箱格式不正确');
+      return;
+    }
+    
+    final emailCode = _emailCodeController.text.trim();
+    if (emailCode.isEmpty) {
+      showErrorDialog('请输入邮箱验证码');
+      return;
+    }
+    if (emailCode.length != 6) {
+      showErrorDialog('邮箱验证码应为6位数字');
+      return;
+    }
+    
+    if (_passwordController.text.trim().isEmpty) {
+      showErrorDialog('请输入新密码');
+      return;
+    }
+    if (_passwordController.text.length < 8 || _passwordController.text.length > 64) {
+      showErrorDialog('密码长度要在8到64个字符之间');
+      return;
+    }
+    if (_confirmPasswordController.text.trim().isEmpty) {
+      showErrorDialog('请再次输入确认密码');
+      return;
+    }
+    if (_passwordController.text != _confirmPasswordController.text) {
+      showErrorDialog('两次输入的密码不一致');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await _apiService.resetPassword(
+        email: email,
+        code: emailCode,
+        newPassword: hashPassword(_passwordController.text),
+      );
+      
+      if (!mounted) return;
+      
+      showAdaptiveDialog(
+        context: context,
+        builder: (context) => FDialog(
+          direction: Axis.horizontal,
+          title: const Text('密码重置成功'),
+          body: const Text('请使用新密码登录'),
+          actions: [
+            FButton(
+              style: FButtonStyle.outline,
+              child: const Text('确定'),
+              onPress: () {
+                Navigator.of(context).pop();
+                setState(() {
+                  _isResettingPassword = false;
+                  _usernameController.clear();
+                  _emailController.clear();
+                  _emailCodeController.clear();
+                  _passwordController.clear();
+                  _confirmPasswordController.clear();
+                  _captchaController.clear();
+                  _emailCodeSent = false;
+                  _emailCodeCountdown = 0;
+                  _countdownTimer?.cancel();
+                });
+                _fetchCaptcha();
+              },
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      showErrorDialog(e.toString());
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -549,7 +749,9 @@ Widget build(BuildContext context) {
         ),
       );
     },
-    child: _isRegistering ? _buildRegisterForm() : _buildLoginForm(),
+    child: _isResettingPassword
+        ? _buildResetPasswordForm()
+        : (_isRegistering ? _buildRegisterForm() : _buildLoginForm()),
   );
 
   final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -860,10 +1062,16 @@ Positioned.fill(
             focusNode: _captchaFocus,
             label: const Text('验证码'),
             hint: '请输入验证码',
-            textInputAction: TextInputAction.done,
-            onEditingComplete: () => _isRegistering
-                ? (_isLoading || !_agreeToTerms) ? null : _handleRegister()
-                : _isLoading ? null : _handleLogin(),
+            textInputAction: TextInputAction.next,
+            onEditingComplete: () {
+              if (_isResettingPassword) {
+                FocusScope.of(context).requestFocus(_emailCodeFocus);
+              } else if (_isRegistering) {
+                if (!_isLoading && _agreeToTerms) _handleRegister();
+              } else {
+                if (!_isLoading) _handleLogin();
+              }
+            },
           ),
         ),
       ],
@@ -975,6 +1183,39 @@ Positioned.fill(
         ),
         const SizedBox(height: 16),
         _buildCaptchaCard(),
+        const SizedBox(height: 16),
+        // 忘记密码链接
+        Align(
+          alignment: Alignment.centerRight,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: _isLoading ? null : () {
+                setState(() {
+                  _isResettingPassword = true;
+                  _usernameController.clear();
+                  _emailController.clear();
+                  _emailCodeController.clear();
+                  _passwordController.clear();
+                  _confirmPasswordController.clear();
+                  _captchaController.clear();
+                  _emailCodeSent = false;
+                  _emailCodeCountdown = 0;
+                  _countdownTimer?.cancel();
+                });
+                _fetchCaptcha();
+              },
+              child: Text(
+                '忘记密码？',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+        ),
         const SizedBox(height: 24),
         Container(
           width: double.infinity,
@@ -1249,12 +1490,76 @@ Widget _buildRegisterForm() {
                   FTextField(
                     controller: _emailController,
                     focusNode: _emailFocus,
-                    label: const Text('邮箱（可选）'),
-                    hint: '请输入邮箱地址',
+                    label: const Text('邮箱（建议填写）'),
+                    hint: '用于找回密码',
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
                     onEditingComplete: () =>
-                        FocusScope.of(context).requestFocus(_passwordFocus),
+                        FocusScope.of(context).requestFocus(_emailCodeFocus),
+                  ),
+                  const SizedBox(height: 16),
+                  // 邮箱验证码输入
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FTextField(
+                          controller: _emailCodeController,
+                          focusNode: _emailCodeFocus,
+                          label: const Text('邮箱验证码'),
+                          hint: '6位数字',
+                          keyboardType: TextInputType.number,
+                          textInputAction: TextInputAction.next,
+                          maxLength: 6,
+                          enabled: _emailController.text.trim().isNotEmpty,
+                          onEditingComplete: () =>
+                              FocusScope.of(context).requestFocus(_passwordFocus),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        height: 60,
+                        child: Container(
+                          decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: (_isLoading || _emailCodeSent || _emailController.text.trim().isEmpty)
+                                ? [
+                                    Colors.grey.withValues(alpha: 0.3),
+                                    Colors.grey.withValues(alpha: 0.2),
+                                  ]
+                                : [
+                                    Theme.of(context).colorScheme.primary,
+                                    Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                                  ],
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: (_isLoading || _emailCodeSent || _emailController.text.trim().isEmpty)
+                                ? null
+                                : _sendEmailCode,
+                            borderRadius: BorderRadius.circular(10),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: Center(
+                                child: Text(
+                                  _emailCodeSent
+                                      ? '$_emailCodeCountdown秒'
+                                      : '发送',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   FTextField(
@@ -1434,6 +1739,277 @@ Widget _buildRegisterForm() {
       padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 32),
       constraints: const BoxConstraints(maxWidth: 450),
       child: registerContent,
+    );
+  }
+
+  Widget _buildResetPasswordForm() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWide = screenWidth > 800;
+    
+    final resetPasswordContent = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned(
+              left: 0,
+              child: Container(
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  onPressed: _isLoading
+                      ? null
+                      : () {
+                          setState(() {
+                            _isResettingPassword = false;
+                            _usernameController.clear();
+                            _emailController.clear();
+                            _emailCodeController.clear();
+                            _passwordController.clear();
+                            _confirmPasswordController.clear();
+                            _captchaController.clear();
+                            _emailCodeSent = false;
+                            _emailCodeCountdown = 0;
+                            _countdownTimer?.cancel();
+                          });
+                          _fetchCaptcha();
+                        },
+                  icon: Icon(
+                    Icons.arrow_back,
+                    color: isDark ? Colors.white : Colors.black,
+                  ),
+                ),
+              ),
+            ),
+            Center(
+              child: ShaderMask(
+                shaderCallback: (bounds) => LinearGradient(
+                  colors: [
+                    Theme.of(context).colorScheme.primary,
+                    Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                  ],
+                ).createShader(bounds),
+                child: const Text(
+                  '重置密码',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    fontFamily: 'PingFangSC',
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '通过邮箱验证码重置您的密码',
+          style: TextStyle(
+            fontSize: 14,
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.6)
+                : Colors.black.withValues(alpha: 0.5),
+            fontFamily: 'PingFangSC',
+          ),
+        ),
+        const SizedBox(height: 32),
+        FTextField(
+          controller: _emailController,
+          focusNode: _emailFocus,
+          label: const Text('邮箱'),
+          hint: '请输入注册时的邮箱',
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.next,
+          onEditingComplete: () =>
+              FocusScope.of(context).requestFocus(_captchaFocus),
+        ),
+        const SizedBox(height: 16),
+        _buildCaptchaCard(),
+        const SizedBox(height: 16),
+        // 邮箱验证码输入
+        Row(
+          children: [
+            Expanded(
+              child: FTextField(
+                controller: _emailCodeController,
+                focusNode: _emailCodeFocus,
+                label: const Text('邮箱验证码'),
+                hint: '6位数字',
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.next,
+                maxLength: 6,
+                enabled: _emailController.text.trim().isNotEmpty,
+                onEditingComplete: () =>
+                    FocusScope.of(context).requestFocus(_passwordFocus),
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              height: 60,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: (_isLoading || _emailCodeSent || _emailController.text.trim().isEmpty)
+                        ? [
+                            Colors.grey.withValues(alpha: 0.3),
+                            Colors.grey.withValues(alpha: 0.2),
+                          ]
+                        : [
+                            Theme.of(context).colorScheme.primary,
+                            Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                          ],
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: (_isLoading || _emailCodeSent || _emailController.text.trim().isEmpty)
+                        ? null
+                        : _sendEmailCode,
+                    borderRadius: BorderRadius.circular(10),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Center(
+                        child: Text(
+                          _emailCodeSent
+                              ? '$_emailCodeCountdown秒'
+                              : '发送',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        FTextField(
+          controller: _passwordController,
+          focusNode: _passwordFocus,
+          label: const Text('新密码'),
+          hint: '8-64个字符',
+          obscureText: true,
+          textInputAction: TextInputAction.next,
+          onEditingComplete: () =>
+              FocusScope.of(context).requestFocus(_confirmFocus),
+        ),
+        const SizedBox(height: 16),
+        FTextField(
+          controller: _confirmPasswordController,
+          focusNode: _confirmFocus,
+          label: const Text('确认新密码'),
+          hint: '请再次输入新密码',
+          obscureText: true,
+          textInputAction: TextInputAction.done,
+          onEditingComplete: _isLoading ? null : _handleResetPassword,
+        ),
+        const SizedBox(height: 24),
+        Container(
+          width: double.infinity,
+          height: 50,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: _isLoading
+                  ? [
+                      Colors.grey.withValues(alpha: 0.3),
+                      Colors.grey.withValues(alpha: 0.2),
+                    ]
+                  : [
+                      Colors.black.withValues(alpha: 0.85),
+                      Colors.black.withValues(alpha: 0.7),
+                    ],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: (_isLoading || isDark)
+                ? []
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _isLoading ? null : _handleResetPassword,
+              borderRadius: BorderRadius.circular(12),
+              child: Center(
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text(
+                        '重置密码',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          fontFamily: 'PingFangSC',
+                        ),
+                      ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+    
+    if (isWide) {
+      return ClipRect(
+        key: const ValueKey('reset_password_form'),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isDark
+                  ? [
+                      Colors.black.withValues(alpha: 0.4),
+                      Colors.black.withValues(alpha: 0.3),
+                    ]
+                  : [
+                      Colors.white.withValues(alpha: 0.8),
+                      Colors.white.withValues(alpha: 0.6),
+                    ],
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 60,
+            vertical: 80,
+          ),
+          child: Center(
+            child: SingleChildScrollView(
+              child: resetPasswordContent,
+            ),
+          ),
+        ),
+      );
+    }
+    
+    // 移动端
+    return Container(
+      key: const ValueKey('reset_password_form'),
+      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 32),
+      constraints: const BoxConstraints(maxWidth: 450),
+      child: resetPasswordContent,
     );
   }
 }

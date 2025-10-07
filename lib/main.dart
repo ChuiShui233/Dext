@@ -179,9 +179,12 @@ void main() async {
   }
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 桌面窗口管理
   if (isDesktop) {
-    await _initDesktopWindowAndTray();
+    try {
+      await _initDesktopWindowAndTray();
+    } catch (e) {
+      // 啥玩意
+    }
   }
 
   // Android 状态栏透明
@@ -721,7 +724,6 @@ class _YuMeng233AppState extends State<YuMeng233App>
   }
 }
 
-// 创建问卷页面包装器，避免 FutureBuilder 重复请求
 class _CreateSurveyPageWrapper extends StatefulWidget {
   final String token;
   final Future<List<Project>> Function() fetchProjects;
