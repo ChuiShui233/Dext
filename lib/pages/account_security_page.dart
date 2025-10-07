@@ -1,7 +1,9 @@
 //ai太好用了你知道吗
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import '../services/api_service.dart';
+import '../services/oauth_service.dart';
 import '../models/user.dart';
 import 'dart:async';
 import '../widgets/frosted_glass_background.dart';
@@ -40,9 +42,14 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
         setState(() {
           _user = user;
         });
+        // 通知父组件用户信息已更新
+        widget.onUserUpdated();
       }
     } catch (e) {
       // 静默失败，使用传入的用户信息
+      if (kDebugMode) {
+        print('刷新用户信息失败: $e');
+      }
     }
   }
 
@@ -78,14 +85,16 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
                       // 邮箱绑定卡片
                       _buildSectionCard(
                         context,
-                        title: '邮箱绑定',
+                        title: '邮箱管理',
                         icon: Icons.email_outlined,
                         children: [
                           _buildListTile(
                             leading: Icon(Icons.email, color: theme.colorScheme.primary),
-                            title: Text(hasEmail ? '更换邮箱' : '绑定邮箱'),
+                            title: const Text('邮箱绑定'),
                             subtitle: Text(
-                              hasEmail ? (_user?.email ?? '') : '绑定邮箱后可用于找回密码',
+                              _user?.email.isNotEmpty == true 
+                                  ? '已绑定: ${_user!.email}' 
+                                  : '未绑定邮箱',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
@@ -135,52 +144,19 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
                         title: '第三方账号',
                         icon: Icons.link,
                         children: [
-                          _buildListTile(
-                            leading: const Icon(Icons.g_mobiledata, color: Color(0xFF4285F4)),
-                            title: const Text('Google账号'),
-                            subtitle: const Text(
-                              '未绑定',
-                              style: TextStyle(fontSize: 12, color: Colors.grey),
-                            ),
-                            trailing: TextButton(
-                              onPressed: () => _bindOAuthAccount('google'),
-                              child: const Text('绑定'),
-                            ),
-                          ),
+                          _buildOAuthListTile('google', Icons.g_mobiledata, Color(0xFF4285F4), 'Google账号'),
                           Divider(
                             height: 1,
                             thickness: 1,
                             color: theme.dividerColor.withValues(alpha: 0.1),
                           ),
-                          _buildListTile(
-                            leading: const Icon(Icons.code, color: Color(0xFF24292E)),
-                            title: const Text('GitHub账号'),
-                            subtitle: const Text(
-                              '未绑定',
-                              style: TextStyle(fontSize: 12, color: Colors.grey),
-                            ),
-                            trailing: TextButton(
-                              onPressed: () => _bindOAuthAccount('github'),
-                              child: const Text('绑定'),
-                            ),
-                          ),
+                          _buildOAuthListTile('github', Icons.code, Color(0xFF24292E), 'GitHub账号'),
                           Divider(
                             height: 1,
                             thickness: 1,
                             color: theme.dividerColor.withValues(alpha: 0.1),
                           ),
-                          _buildListTile(
-                            leading: const Icon(Icons.business, color: Color(0xFF00A4EF)),
-                            title: const Text('Microsoft账号'),
-                            subtitle: const Text(
-                              '未绑定',
-                              style: TextStyle(fontSize: 12, color: Colors.grey),
-                            ),
-                            trailing: TextButton(
-                              onPressed: () => _bindOAuthAccount('microsoft'),
-                              child: const Text('绑定'),
-                            ),
-                          ),
+                          _buildOAuthListTile('microsoft', Icons.business, Color(0xFF00A4EF), 'Microsoft账号'),
                         ],
                       ),
                     ],
@@ -258,6 +234,265 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
     );
   }
 
+  // 构建OAuth列表项
+  Widget _buildOAuthListTile(String provider, IconData icon, Color iconColor, String title) {
+    final oauthBindings = _user?.oauthBindings;
+    bool isBound = false;
+    String? providerName;
+    
+    if (oauthBindings != null) {
+      switch (provider) {
+        case 'google':
+          isBound = oauthBindings.googleBound;
+          break;
+        case 'github':
+          isBound = oauthBindings.githubBound;
+          break;
+        case 'microsoft':
+          isBound = oauthBindings.microsoftBound;
+          break;
+      }
+      
+      // 获取绑定的账号名称
+      final binding = oauthBindings.bindings
+          .where((b) => b.provider == provider)
+          .firstOrNull;
+      if (binding != null) {
+        providerName = binding.providerName ?? binding.providerUsername;
+      }
+    }
+
+    return _buildListTile(
+      leading: Icon(icon, color: iconColor),
+      title: Text(title),
+      subtitle: Text(
+        isBound 
+            ? '已绑定${providerName != null ? ': $providerName' : ''}' 
+            : '未绑定',
+        style: TextStyle(
+          fontSize: 12, 
+          color: isBound ? Colors.green : Colors.grey,
+        ),
+      ),
+      trailing: TextButton(
+        onPressed: () => isBound ? _unbindOAuth(provider) : _bindOAuth(provider),
+        child: Text(isBound ? '解绑' : '绑定'),
+      ),
+    );
+  }
+
+  // OAuth绑定操作
+  void _bindOAuth(String provider) async {
+    BuildContext? dialogContext;
+    bool dialogShown = false;
+    
+    void closeDialog() {
+      if (dialogShown && dialogContext != null) {
+        try {
+          Navigator.of(dialogContext!).pop();
+        } catch (_) {
+          // 忽略关闭对话框时的错误
+        }
+        dialogShown = false;
+        dialogContext = null;
+      }
+    }
+    
+    try {
+      // 显示加载对话框
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) {
+            dialogContext = context;
+            return AlertDialog(
+              content: Row(
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(width: 16),
+                  Text('正在绑定${_getProviderDisplayName(provider)}账号...'),
+                ],
+              ),
+            );
+          },
+        );
+        dialogShown = true;
+      }
+
+      // 获取OAuth服务实例
+      final oauthService = OAuthService();
+      
+      // 执行OAuth授权流程
+      Map<String, dynamic> result;
+      switch (provider) {
+        case 'google':
+          result = await oauthService.signInWithGoogle();
+          break;
+        case 'github':
+          result = await oauthService.signInWithGitHub();
+          break;
+        case 'microsoft':
+          result = await oauthService.signInWithMicrosoft();
+          break;
+        default:
+          throw Exception('不支持的OAuth提供商: $provider');
+      }
+      
+      if (result['success'] == true && result['token'] != null) {
+        // OAuth登录时已自动完成绑定，无需额外调用bind接口
+        
+        // 关闭加载对话框
+        closeDialog();
+        
+        // 清除用户信息缓存并刷新
+        await widget.apiService.clearUserCache();
+        await _refreshUserInfo();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${_getProviderDisplayName(provider)}账号绑定成功！'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        // 关闭加载对话框
+        closeDialog();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('OAuth授权失败，请重试'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      // 确保加载对话框被关闭
+      closeDialog();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('绑定失败：${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // OAuth解绑操作
+  void _unbindOAuth(String provider) async {
+    // 显示确认对话框
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('确认解绑'),
+        content: Text('确定要解绑${_getProviderDisplayName(provider)}账号吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: Text('确认'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    BuildContext? dialogContext;
+    bool dialogShown = false;
+    
+    void closeDialog() {
+      if (dialogShown && dialogContext != null) {
+        try {
+          Navigator.of(dialogContext!).pop();
+        } catch (_) {
+          // 忽略关闭对话框时的错误
+        }
+        dialogShown = false;
+        dialogContext = null;
+      }
+    }
+    
+    try {
+      // 显示加载对话框
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) {
+            dialogContext = context;
+            return AlertDialog(
+              content: Row(
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(width: 16),
+                  Text('正在解绑${_getProviderDisplayName(provider)}账号...'),
+                ],
+              ),
+            );
+          },
+        );
+        dialogShown = true;
+      }
+
+      // 调用解绑API
+      await widget.apiService.unbindOAuth(provider: provider);
+      
+      // 关闭加载对话框
+      closeDialog();
+      
+      // 清除用户信息缓存并刷新
+      await widget.apiService.clearUserCache();
+      await _refreshUserInfo();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${_getProviderDisplayName(provider)}账号解绑成功！'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      // 确保加载对话框被关闭
+      closeDialog();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('解绑失败：${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // 获取提供商显示名称
+  String _getProviderDisplayName(String provider) {
+    switch (provider) {
+      case 'google':
+        return 'Google';
+      case 'github':
+        return 'GitHub';
+      case 'microsoft':
+        return 'Microsoft';
+      default:
+        return provider;
+    }
+  }
+
   // 绑定邮箱对话框
   void _showBindEmailDialog() {
     showDialog(
@@ -303,15 +538,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
       ),
     );
   }
-
-  // 绑定OAuth账号
-  void _bindOAuthAccount(String provider) {
-    showFToast(
-      context: context,
-      title: const Text('功能开发中'),
-      description: Text('$provider账号绑定功能即将上线'),
-    );
-  }
 }
 
 // ==================== 绑定邮箱对话框 ====================
@@ -330,6 +556,7 @@ class _BindEmailDialog extends StatefulWidget {
 
 class _BindEmailDialogState extends State<_BindEmailDialog> {
   final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _captchaController = TextEditingController();
   final _emailCodeController = TextEditingController();
   
@@ -383,9 +610,8 @@ class _BindEmailDialogState extends State<_BindEmailDialog> {
     setState(() => _isLoading = true);
 
     try {
-      await widget.apiService.sendEmailVerificationCode(
+      await widget.apiService.sendChangeEmailCode(
         email: email,
-        purpose: 'change_email',
         captchaId: _captchaId ?? '',
         captchaValue: _captchaController.text.trim(),
       );
@@ -426,9 +652,10 @@ class _BindEmailDialogState extends State<_BindEmailDialog> {
 
   Future<void> _submit() async {
     final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
     final code = _emailCodeController.text.trim();
 
-    if (email.isEmpty || code.isEmpty) {
+    if (email.isEmpty || password.isEmpty || code.isEmpty) {
       _showError('请填写完整信息');
       return;
     }
@@ -436,9 +663,10 @@ class _BindEmailDialogState extends State<_BindEmailDialog> {
     setState(() => _isLoading = true);
 
     try {
-      // 调用绑定邮箱API（使用change_email目的，因为绑定和更换使用相同的验证流程）
+      // 调用绑定邮箱API（使用changeEmail，因为后端使用相同的验证流程）
       await widget.apiService.changeEmail(
         newEmail: email,
+        password: password,
         code: code,
       );
       
@@ -487,6 +715,13 @@ class _BindEmailDialogState extends State<_BindEmailDialog> {
             keyboardType: TextInputType.emailAddress,
           ),
           const SizedBox(height: 16),
+          FTextField(
+            controller: _passwordController,
+            label: const Text('账号密码'),
+            hint: '请输入密码以验证身份',
+            obscureText: true,
+          ),
+          const SizedBox(height: 16),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -497,18 +732,31 @@ class _BindEmailDialogState extends State<_BindEmailDialog> {
                     height: 50,
                     width: 120,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     clipBehavior: Clip.antiAlias,
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 200),
-                      switchInCurve: Curves.easeOut,
-                      switchOutCurve: Curves.easeIn,
-                      child: Image.memory(
-                        Uri.parse(_captchaImage!).data!.contentAsBytes(),
-                        key: ValueKey(_captchaId),
-                        fit: BoxFit.cover,
+                    child: RepaintBoundary(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        switchInCurve: Curves.easeOut,
+                        switchOutCurve: Curves.easeIn,
+                        child: Image.memory(
+                          Uri.parse(_captchaImage!).data!.contentAsBytes(),
+                          key: ValueKey(_captchaId),
+                          fit: BoxFit.fill,
+                          gaplessPlayback: true,
+                        ),
                       ),
                     ),
                   ),
@@ -518,7 +766,7 @@ class _BindEmailDialogState extends State<_BindEmailDialog> {
                   height: 50,
                   width: 120,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(12),
                     color: Colors.grey.withValues(alpha: 0.1),
                   ),
                   child: Row(
@@ -613,6 +861,7 @@ class _ChangeEmailDialog extends StatefulWidget {
 
 class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
   final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _captchaController = TextEditingController();
   final _emailCodeController = TextEditingController();
   
@@ -632,6 +881,7 @@ class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
   @override
   void dispose() {
     _emailController.dispose();
+    _passwordController.dispose();
     _captchaController.dispose();
     _emailCodeController.dispose();
     _timer?.cancel();
@@ -670,9 +920,8 @@ class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
     setState(() => _isLoading = true);
 
     try {
-      await widget.apiService.sendEmailVerificationCode(
+      await widget.apiService.sendChangeEmailCode(
         email: email,
-        purpose: 'change_email',
         captchaId: _captchaId ?? '',
         captchaValue: _captchaController.text.trim(),
       );
@@ -713,9 +962,10 @@ class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
 
   Future<void> _submit() async {
     final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
     final code = _emailCodeController.text.trim();
 
-    if (email.isEmpty || code.isEmpty) {
+    if (email.isEmpty || password.isEmpty || code.isEmpty) {
       _showError('请填写完整信息');
       return;
     }
@@ -723,9 +973,10 @@ class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
     setState(() => _isLoading = true);
 
     try {
-      // 调用更换邮箱API（使用公共方法）
+      // 调用更换邮箱API
       await widget.apiService.changeEmail(
         newEmail: email,
+        password: password,
         code: code,
       );
 
@@ -779,6 +1030,13 @@ class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
             keyboardType: TextInputType.emailAddress,
           ),
           const SizedBox(height: 16),
+          FTextField(
+            controller: _passwordController,
+            label: const Text('账号密码'),
+            hint: '请输入密码以验证身份',
+            obscureText: true,
+          ),
+          const SizedBox(height: 16),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -789,18 +1047,31 @@ class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
                     height: 50,
                     width: 120,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     clipBehavior: Clip.antiAlias,
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 200),
-                      switchInCurve: Curves.easeOut,
-                      switchOutCurve: Curves.easeIn,
-                      child: Image.memory(
-                        Uri.parse(_captchaImage!).data!.contentAsBytes(),
-                        key: ValueKey(_captchaId),
-                        fit: BoxFit.cover,
+                    child: RepaintBoundary(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        switchInCurve: Curves.easeOut,
+                        switchOutCurve: Curves.easeIn,
+                        child: Image.memory(
+                          Uri.parse(_captchaImage!).data!.contentAsBytes(),
+                          key: ValueKey(_captchaId),
+                          fit: BoxFit.fill,
+                          gaplessPlayback: true,
+                        ),
                       ),
                     ),
                   ),
@@ -810,7 +1081,7 @@ class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
                   height: 50,
                   width: 120,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(12),
                     color: Colors.grey.withValues(alpha: 0.1),
                   ),
                   child: Row(
@@ -907,22 +1178,70 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
   final _oldPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _emailCodeController = TextEditingController();
   
   bool _isLoading = false;
   bool _useEmailVerification = false;
+  bool _isCodeSending = false;
+  int _countdown = 0;
+  Timer? _countdownTimer;
 
   @override
   void dispose() {
     _oldPasswordController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
+    _emailCodeController.dispose();
+    _countdownTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _sendEmailCode() async {
+    setState(() => _isCodeSending = true);
+    
+    try {
+      // 获取当前用户信息
+      final user = await widget.apiService.getCurrentUserHandler();
+      if (user.email.isEmpty) {
+        _showError('您还未绑定邮箱，无法使用邮箱验证码修改密码');
+        return;
+      }
+      
+      // 发送验证码到用户邮箱
+      await widget.apiService.sendEmailCodeForPasswordChange();
+      
+      _showSuccess('验证码已发送到您的邮箱');
+      _startCountdown();
+    } catch (e) {
+      _showError('发送验证码失败：${e.toString()}');
+    } finally {
+      if (mounted) {
+        setState(() => _isCodeSending = false);
+      }
+    }
+  }
+  
+  void _startCountdown() {
+    setState(() => _countdown = 60);
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_countdown <= 1) {
+        timer.cancel();
+        if (mounted) {
+          setState(() => _countdown = 0);
+        }
+      } else {
+        if (mounted) {
+          setState(() => _countdown--);
+        }
+      }
+    });
   }
 
   Future<void> _submit() async {
     final oldPassword = _oldPasswordController.text.trim();
     final newPassword = _newPasswordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
+    final emailCode = _emailCodeController.text.trim();
 
     if (newPassword.isEmpty || confirmPassword.isEmpty) {
       _showError('请填写完整信息');
@@ -939,17 +1258,41 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
       return;
     }
 
-    if (!_useEmailVerification && oldPassword.isEmpty) {
-      _showError('请输入旧密码');
-      return;
+    if (_useEmailVerification) {
+      if (emailCode.isEmpty) {
+        _showError('请输入邮箱验证码');
+        return;
+      }
+    } else {
+      if (oldPassword.isEmpty) {
+        _showError('请输入旧密码');
+        return;
+      }
     }
 
     setState(() => _isLoading = true);
 
     try {
-      // 调用修改密码API（暂时使用模拟，等待后端实现）
-      // TODO: 后端需要实现 POST /api/user/change-password
-      await Future.delayed(const Duration(seconds: 1));
+      if (_useEmailVerification) {
+        // 获取当前用户邮箱
+        final user = await widget.apiService.getCurrentUserHandler();
+        if (user.email.isEmpty) {
+          _showError('您还未绑定邮箱，无法使用邮箱验证码修改密码');
+          return;
+        }
+        
+        // 使用邮箱验证码修改密码
+        await widget.apiService.changePasswordWithEmail(
+          code: emailCode,
+          newPassword: newPassword,
+        );
+      } else {
+        // 使用旧密码修改密码
+        await widget.apiService.changePassword(
+          oldPassword: oldPassword,
+          newPassword: newPassword,
+        );
+      }
       
       if (mounted) {
         Navigator.of(context).pop();
@@ -993,13 +1336,16 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
           if (widget.hasEmail)
             Row(
               children: [
-                Checkbox(
-                  value: _useEmailVerification,
-                  onChanged: (value) {
-                    setState(() {
-                      _useEmailVerification = value ?? false;
-                    });
-                  },
+                Material(
+                  color: Colors.transparent,
+                  child: Checkbox(
+                    value: _useEmailVerification,
+                    onChanged: (value) {
+                      setState(() {
+                        _useEmailVerification = value ?? false;
+                      });
+                    },
+                  ),
                 ),
                 const Text('使用邮箱验证码修改'),
               ],
@@ -1012,11 +1358,37 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
               hint: '请输入旧密码',
               obscureText: true,
             ),
-          if (_useEmailVerification)
-            const Text(
-              '邮箱验证码修改功能开发中...',
-              style: TextStyle(color: Colors.grey),
+          if (_useEmailVerification) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: FTextField(
+                    controller: _emailCodeController,
+                    label: const Text('邮箱验证码'),
+                    hint: '请输入6位验证码',
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FButton(
+                  style: FButtonStyle.outline,
+                  onPress: (_isCodeSending || _countdown > 0) ? null : _sendEmailCode,
+                  child: _isCodeSending
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(_countdown > 0 ? '${_countdown}s' : '发送验证码'),
+                ),
+              ],
             ),
+            const SizedBox(height: 8),
+            const Text(
+              '验证码将发送到您绑定的邮箱',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ],
           const SizedBox(height: 16),
           FTextField(
             controller: _newPasswordController,

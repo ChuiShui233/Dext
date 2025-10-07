@@ -45,13 +45,17 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
   Future<void> _loadAppVersion() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
-      setState(() {
-        _appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
-      });
+      if (mounted) {
+        setState(() {
+          _appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+        });
+      }
     } catch (e) {
-      setState(() {
-        _appVersion = '未知';
-      });
+      if (mounted) {
+        setState(() {
+          _appVersion = '未知';
+        });
+      }
     }
   }
 
@@ -61,9 +65,11 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
     try {
       final user = await widget.apiService.getCurrentUserHandler();
 
-      setState(() {
-        _currentUser = user;
-      });
+      if (mounted) {
+        setState(() {
+          _currentUser = user;
+        });
+      }
     } catch (e) {
       if (mounted) {
         showFToast(
@@ -122,12 +128,14 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
           fileName: file.name.isNotEmpty ? file.name : 'avatar.png',
         );
 
-        setState(() {
-          _currentUser = _currentUser?.copyWith(avatarUrl: avatarUrl);
-        });
-        
-        // 通知其他组件用户数据已更新
-        widget.userNotifier?.value = _currentUser;
+        if (mounted) {
+          setState(() {
+            _currentUser = _currentUser?.copyWith(avatarUrl: avatarUrl);
+          });
+          
+          // 通知其他组件用户数据已更新
+          widget.userNotifier?.value = _currentUser;
+        }
 
         if (mounted) {
           showFToast(

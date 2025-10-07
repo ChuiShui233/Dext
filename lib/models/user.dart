@@ -1,3 +1,61 @@
+// OAuth绑定信息类
+class OAuthBinding {
+  final String provider;
+  final String? providerUsername;
+  final String? providerName;
+  final String? providerAvatar;
+  final bool isPrimary;
+  final String createdAt;
+
+  OAuthBinding({
+    required this.provider,
+    this.providerUsername,
+    this.providerName,
+    this.providerAvatar,
+    required this.isPrimary,
+    required this.createdAt,
+  });
+
+  factory OAuthBinding.fromJson(Map<String, dynamic> json) {
+    return OAuthBinding(
+      provider: json['provider'] ?? '',
+      providerUsername: json['provider_username'],
+      providerName: json['provider_name'],
+      providerAvatar: json['provider_avatar'],
+      isPrimary: json['is_primary'] ?? false,
+      createdAt: json['created_at'] ?? '',
+    );
+  }
+}
+
+// OAuth绑定集合类
+class OAuthBindings {
+  final List<OAuthBinding> bindings;
+  final int count;
+  final bool googleBound;
+  final bool githubBound;
+  final bool microsoftBound;
+
+  OAuthBindings({
+    required this.bindings,
+    required this.count,
+    required this.googleBound,
+    required this.githubBound,
+    required this.microsoftBound,
+  });
+
+  factory OAuthBindings.fromJson(Map<String, dynamic> json) {
+    final bindingsList = json['bindings'] as List<dynamic>? ?? [];
+    return OAuthBindings(
+      bindings: bindingsList.map((b) => OAuthBinding.fromJson(b)).toList(),
+      count: json['count'] ?? 0,
+      googleBound: json['google_bound'] ?? false,
+      githubBound: json['github_bound'] ?? false,
+      microsoftBound: json['microsoft_bound'] ?? false,
+    );
+  }
+}
+
 // 用户结构体 - 参考Java端完善字段
 class User {
   final String id;                  // 用户ID
@@ -12,6 +70,7 @@ class User {
   final String createdAt;           // 创建时间
   final String updatedAt;           // 更新时间
   final int isDelete;               // 逻辑删除 0-未删除
+  final OAuthBindings? oauthBindings; // OAuth绑定信息
 
   User({
     required this.id,
@@ -26,6 +85,7 @@ class User {
     required this.createdAt,
     required this.updatedAt,
     required this.isDelete,
+    this.oauthBindings,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -42,6 +102,9 @@ class User {
       createdAt: json['createdAt']?.toString() ?? '',
       updatedAt: json['updatedAt']?.toString() ?? '',
       isDelete: json['isDelete'] as int? ?? 0,
+      oauthBindings: json['oauth_bindings'] != null 
+          ? OAuthBindings.fromJson(json['oauth_bindings'])
+          : null,
     );
   }
 

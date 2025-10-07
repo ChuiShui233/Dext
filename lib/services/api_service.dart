@@ -576,10 +576,10 @@ class ApiService {
     }
   }
 
-  // 发送邮箱验证码
+  // 发送邮箱验证码（注册/重置密码，无需登录）
   Future<void> sendEmailVerificationCode({
     required String email,
-    required String purpose, // 'register', 'reset_password', 'change_email'
+    required String purpose, // 'register', 'reset_password'
     required String captchaId,
     required String captchaValue,
     StatusCallback? onStatus,
@@ -598,6 +598,95 @@ class ApiService {
       final response = await _encryptedRequest(
         'POST',
         '$baseUrl/api/auth/email/send-code',
+        requestData,
+        onStatus: onStatus,
+      );
+
+      if (response.statusCode == 200) {
+        onStatus?.call(RequestStatus.success, '验证码已发送');
+        _updateStatus(RequestStatus.success, '验证码已发送');
+      } else {
+        final responseData = json.decode(response.body);
+        final errorMessage = responseData['message'] ?? responseData['error'] ?? '发送验证码失败';
+        
+        onStatus?.call(RequestStatus.error, errorMessage);
+        _updateStatus(RequestStatus.error, errorMessage);
+        
+        throw errorMessage;
+      }
+    } catch (e) {
+      final errorMsg = e.toString();
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
+    }
+  }
+
+  // OAuth绑定
+  Future<Map<String, dynamic>> bindOAuth({
+    required String provider,
+    required String accessToken,
+  }) async {
+    await _ensureAuthTokenLoaded();
+    
+    final response = await _encryptedRequest(
+      'POST',
+      '$baseUrl/api/oauth/$provider/bind',
+      {'access_token': accessToken},
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      final responseData = json.decode(response.body);
+      final errorMessage = responseData['message'] ?? responseData['error'] ?? 'OAuth绑定失败';
+      throw errorMessage;
+    }
+  }
+
+  // OAuth解绑
+  Future<Map<String, dynamic>> unbindOAuth({
+    required String provider,
+  }) async {
+    await _ensureAuthTokenLoaded();
+    
+    final response = await _encryptedRequest(
+      'DELETE',
+      '$baseUrl/api/oauth/$provider/unbind',
+      null,
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      final responseData = json.decode(response.body);
+      final errorMessage = responseData['message'] ?? responseData['error'] ?? 'OAuth解绑失败';
+      throw errorMessage;
+    }
+  }
+
+  // 发送更换邮箱验证码（需要登录）
+  Future<void> sendChangeEmailCode({
+    required String email,
+    required String captchaId,
+    required String captchaValue,
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      await _ensureAuthTokenLoaded();
+      
+      onStatus?.call(RequestStatus.loading, '正在发送验证码...');
+      _updateStatus(RequestStatus.loading, '正在发送验证码...');
+
+      final requestData = {
+        'email': email,
+        'captchaId': captchaId,
+        'captchaValue': captchaValue,
+      };
+
+      final response = await _encryptedRequest(
+        'POST',
+        '$baseUrl/api/user/send-email-code',
         requestData,
         onStatus: onStatus,
       );
@@ -714,6 +803,7 @@ class ApiService {
   // 更换邮箱
   Future<void> changeEmail({
     required String newEmail,
+    required String password,
     required String code,
     StatusCallback? onStatus,
   }) async {
@@ -725,6 +815,7 @@ class ApiService {
 
       final requestData = {
         'newEmail': newEmail,
+        'password': password,
         'code': code,
       };
 
@@ -741,6 +832,137 @@ class ApiService {
       } else {
         final responseData = json.decode(response.body);
         final errorMessage = responseData['message'] ?? responseData['error'] ?? '更换邮箱失败';
+        
+        onStatus?.call(RequestStatus.error, errorMessage);
+        _updateStatus(RequestStatus.error, errorMessage);
+        
+        throw errorMessage;
+      }
+    } catch (e) {
+      final errorMsg = e.toString();
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
+    }
+  }
+
+  // 修改密码
+  Future<void> changePassword({
+    required String oldPassword,
+    required String newPassword,
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      await _ensureAuthTokenLoaded();
+      
+      onStatus?.call(RequestStatus.loading, '正在修改密码...');
+      _updateStatus(RequestStatus.loading, '正在修改密码...');
+
+      final requestData = {
+        'oldPassword': oldPassword,
+        'newPassword': newPassword,
+      };
+
+      final response = await _encryptedRequest(
+        'POST',
+        '$baseUrl/api/user/change-password',
+        requestData,
+        onStatus: onStatus,
+      );
+
+      if (response.statusCode == 200) {
+        onStatus?.call(RequestStatus.success, '密码修改成功');
+        _updateStatus(RequestStatus.success, '密码修改成功');
+      } else {
+        final responseData = json.decode(response.body);
+        final errorMessage = responseData['message'] ?? responseData['error'] ?? '修改密码失败';
+        
+        onStatus?.call(RequestStatus.error, errorMessage);
+        _updateStatus(RequestStatus.error, errorMessage);
+        
+        throw errorMessage;
+      }
+    } catch (e) {
+      final errorMsg = e.toString();
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
+    }
+  }
+
+  // 发送邮箱验证码（已登录用户，用于修改密码）
+  Future<void> sendEmailCodeForPasswordChange({
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      await _ensureAuthTokenLoaded();
+      
+      onStatus?.call(RequestStatus.loading, '正在发送验证码...');
+      _updateStatus(RequestStatus.loading, '正在发送验证码...');
+
+      final requestData = {
+        'purpose': 'reset_password',
+        'captchaId': '',
+        'captchaValue': '',
+      };
+
+      final response = await _encryptedRequest(
+        'POST',
+        '$baseUrl/api/user/send-email-code',
+        requestData,
+        onStatus: onStatus,
+      );
+
+      if (response.statusCode == 200) {
+        onStatus?.call(RequestStatus.success, '验证码已发送');
+        _updateStatus(RequestStatus.success, '验证码已发送');
+      } else {
+        final responseData = json.decode(response.body);
+        final errorMessage = responseData['message'] ?? responseData['error'] ?? '发送验证码失败';
+        
+        onStatus?.call(RequestStatus.error, errorMessage);
+        _updateStatus(RequestStatus.error, errorMessage);
+        
+        throw errorMessage;
+      }
+    } catch (e) {
+      final errorMsg = e.toString();
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
+    }
+  }
+
+  // 使用邮箱验证码修改密码（需要登录）
+  Future<void> changePasswordWithEmail({
+    required String code,
+    required String newPassword,
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      await _ensureAuthTokenLoaded();
+      
+      onStatus?.call(RequestStatus.loading, '正在修改密码...');
+      _updateStatus(RequestStatus.loading, '正在修改密码...');
+
+      final requestData = {
+        'code': code,
+        'newPassword': newPassword,
+      };
+
+      final response = await _encryptedRequest(
+        'POST',
+        '$baseUrl/api/user/change-password-with-email',
+        requestData,
+        onStatus: onStatus,
+      );
+
+      if (response.statusCode == 200) {
+        onStatus?.call(RequestStatus.success, '密码修改成功');
+        _updateStatus(RequestStatus.success, '密码修改成功');
+      } else {
+        final responseData = json.decode(response.body);
+        final errorMessage = responseData['message'] ?? responseData['error'] ?? '修改密码失败';
         
         onStatus?.call(RequestStatus.error, errorMessage);
         _updateStatus(RequestStatus.error, errorMessage);
@@ -2994,6 +3216,12 @@ Future<Question> addQuestion(
     }
   }
 
+  /// 清除用户信息缓存
+  Future<void> clearUserCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('current_user_cache');
+  }
+
   /// 获取当前用户信息（带缓存）
   Future<User> getCurrentUserHandler({StatusCallback? onStatus}) async {
     final prefs = await SharedPreferences.getInstance();
@@ -3049,7 +3277,18 @@ Future<Question> addQuestion(
            a.email != b.email ||
            a.avatarUrl != b.avatarUrl ||
            a.gender != b.gender ||
-           a.userStatus != b.userStatus;
+           a.userStatus != b.userStatus ||
+           _oauthBindingsChanged(a.oauthBindings, b.oauthBindings);
+  }
+  
+  bool _oauthBindingsChanged(OAuthBindings? a, OAuthBindings? b) {
+    if (a == null && b == null) return false;
+    if (a == null || b == null) return true;
+    
+    return a.count != b.count ||
+           a.googleBound != b.googleBound ||
+           a.githubBound != b.githubBound ||
+           a.microsoftBound != b.microsoftBound;
   }
   
   Future<User> _refreshCurrentUser(
