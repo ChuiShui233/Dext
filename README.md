@@ -232,15 +232,6 @@ flutter build web --release
 - 数据导出功能
 - 详细的提交记录
 
-### 🔐 安全特性
-- **端到端加密** - RSA + AES-GCM
-
-### 🌐 网络功能
-- **智能剪切板监听** - 自动检测剪切板中的问卷链接并提示访问
-- **深度链接集成** - 支持 Universal Links 和 App Links
-- **公开问卷访问** - 无需注册即可通过链接填写问卷
-- **跨平台兼容** - Web、Android、iOS 三平台统一访问体验
-
 ## 贡献指南
 
 欢迎提交 Issue 和 Pull Request 来帮助改进项目。
@@ -253,7 +244,7 @@ flutter build web --release
 
 ## 开源协议
 
-本项目采用 MIT 协议 - 查看 [LICENSE](LICENSE) 文件了解详情。
+本项目采用 MPL2.0 协议 - 查看 [LICENSE](LICENSE.txt) 文件了解详情。
 
 ## 免责声明
 
