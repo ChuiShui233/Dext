@@ -229,7 +229,7 @@ jobs:
           $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           if (Test-Path $isccPath) {
             echo "✅ ISCC.exe 已安装到: $isccPath"
-            & $isccPath
+            echo "✅ Inno Setup 安装验证成功"
           } else {
             echo "⚠️ 默认路径未找到 ISCC.exe，查找其他位置..."
             Get-ChildItem "C:\Program Files*" -Name "*inno*" -Directory -ErrorAction SilentlyContinue | ForEach-Object {
@@ -237,40 +237,6 @@ jobs:
             }
           }
 
-      # 🔍 验证 Inno Setup 安装
-      - name: 验证 Inno Setup 安装
-        run: |
-          echo "查找 ISCC.exe 路径..."
-          # 检查常见安装路径
-          $possiblePaths = @(
-            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-            "C:\Program Files\Inno Setup 6\ISCC.exe",
-            "C:\tools\innosetup\ISCC.exe"
-          )
-          
-          $foundPath = $null
-          foreach ($path in $possiblePaths) {
-            if (Test-Path $path) {
-              $foundPath = $path
-              echo "✅ 找到 ISCC.exe: $path"
-              break
-            }
-          }
-          
-          if (-not $foundPath) {
-            echo "❌ 未找到 ISCC.exe，尝试从 PATH 查找..."
-            $innoPath = (Get-Command iscc -ErrorAction SilentlyContinue).Source
-            if ($innoPath) {
-              $foundPath = $innoPath
-              echo "✅ ISCC 在 PATH 中: $innoPath"
-            }
-          }
-          
-          if (-not $foundPath) {
-            echo "❌ 无法找到 Inno Setup，列出可能的位置："
-            Get-ChildItem "C:\Program Files*" -Name "*inno*" -ErrorAction SilentlyContinue
-            Get-ChildItem "C:\tools" -Name "*inno*" -ErrorAction SilentlyContinue
-          }
 
       # 🔨 使用 Inno Setup 打包安装程序
       - name: 打包 Windows 安装程序
