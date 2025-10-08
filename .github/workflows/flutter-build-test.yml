@@ -223,6 +223,19 @@ jobs:
           echo "安装 Inno Setup..."
           choco install innosetup -y
           echo "Inno Setup 安装完成 ✅"
+          
+          # 立即验证安装
+          echo "验证 Inno Setup 安装..."
+          $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (Test-Path $isccPath) {
+            echo "✅ ISCC.exe 已安装到: $isccPath"
+            & $isccPath
+          } else {
+            echo "⚠️ 默认路径未找到 ISCC.exe，查找其他位置..."
+            Get-ChildItem "C:\Program Files*" -Name "*inno*" -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+              echo "找到目录: $_"
+            }
+          }
 
       # 🔍 验证 Inno Setup 安装
       - name: 验证 Inno Setup 安装
@@ -263,44 +276,74 @@ jobs:
       - name: 打包 Windows 安装程序
         run: |
           echo "开始编译安装程序..."
-          # 查找 Inno Setup 安装路径
+          
+          # 定义可能的 ISCC.exe 路径
           $possiblePaths = @(
             "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
             "C:\Program Files\Inno Setup 6\ISCC.exe",
-            "C:\tools\innosetup\ISCC.exe"
+            "C:\tools\innosetup\ISCC.exe",
+            "C:\ProgramData\chocolatey\lib\innosetup\tools\ISCC.exe"
           )
           
           $isccPath = $null
+          
+          # 首先尝试预定义路径
           foreach ($path in $possiblePaths) {
             if (Test-Path $path) {
               $isccPath = $path
-              echo "✅ 使用 Inno Setup: $path"
+              echo "✅ 找到 ISCC.exe: $path"
               break
             }
           }
           
           # 如果没找到，尝试从 PATH 查找
           if (-not $isccPath) {
-            $pathCommand = (Get-Command iscc -ErrorAction SilentlyContinue)
-            if ($pathCommand) {
+            try {
+              $pathCommand = Get-Command iscc -ErrorAction Stop
               $isccPath = $pathCommand.Source
               echo "✅ 从 PATH 找到 ISCC: $isccPath"
+            } catch {
+              echo "⚠️ PATH 中未找到 iscc 命令"
             }
           }
           
+          # 如果还是没找到，进行深度搜索
           if (-not $isccPath) {
-            Write-Error "找不到 Inno Setup 编译器"
-            echo "尝试的路径："
-            foreach ($path in $possiblePaths) {
-              echo "  - $path ($(if (Test-Path $path) { '存在' } else { '不存在' }))"
+            echo "进行深度搜索..."
+            $searchPaths = @("C:\Program Files (x86)", "C:\Program Files", "C:\tools", "C:\ProgramData\chocolatey")
+            foreach ($searchPath in $searchPaths) {
+              if (Test-Path $searchPath) {
+                $found = Get-ChildItem -Path $searchPath -Name "ISCC.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($found) {
+                  $isccPath = Join-Path $searchPath $found
+                  echo "✅ 深度搜索找到 ISCC.exe: $isccPath"
+                  break
+                }
+              }
             }
-            exit 1
           }
           
-          # 使用找到的路径编译安装程序
-          echo "编译安装程序: installer.iss"
+          # 最终检查
+          if (-not $isccPath -or -not (Test-Path $isccPath)) {
+            echo "❌ 无法找到 Inno Setup 编译器"
+            echo "搜索的路径："
+            foreach ($path in $possiblePaths) {
+              $exists = Test-Path $path
+              echo "  - $path : $(if ($exists) { '✅ 存在' } else { '❌ 不存在' })"
+            }
+            throw "找不到 Inno Setup 编译器 (ISCC.exe)"
+          }
+          
+          # 编译安装程序
+          echo "使用编译器: $isccPath"
+          echo "编译脚本: installer.iss"
           & $isccPath installer.iss
-          echo "安装程序编译完成 ✅"
+          
+          if ($LASTEXITCODE -eq 0) {
+            echo "✅ 安装程序编译成功"
+          } else {
+            throw "安装程序编译失败，退出代码: $LASTEXITCODE"
+          }
 
       # 打包便携版
       - name: 打包便携版
