@@ -139,7 +139,6 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      # 🧱 缓存 CMake、Ninja、VS 构建工具
       - name: 缓存 Windows 构建工具
         id: cache-tools
         uses: actions/cache@v4
@@ -153,7 +152,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-vs-tools-
 
-      # ⚙️ 安装 CMake、Ninja、VS 构建工具（仅在缓存未命中时执行）
       - name: 安装 CMake 与 VS 构建工具
         if: steps.cache-tools.outputs.cache-hit != 'true'
         run: |
@@ -163,7 +161,6 @@ jobs:
           choco install visualstudio2022buildtools --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --includeOptional" -y
           echo "安装完成 ✅"
 
-      # 🔍 检查 VS 环境状态
       - name: 检查 VS 环境
         run: |
           echo "Visual Studio 环境检测中..."
@@ -173,7 +170,6 @@ jobs:
           echo "MSBuild 版本："
           & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" -version
 
-      # 🐦 设置 Flutter 环境
       - name: 设置 Flutter 环境
         uses: subosito/flutter-action@v2
         with:
@@ -181,7 +177,6 @@ jobs:
           channel: 'stable'
           cache: true
 
-      # 📦 缓存 Flutter 依赖
       - name: 缓存 Flutter 依赖
         uses: actions/cache@v4
         with:
@@ -192,7 +187,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-flutter-pub-
 
-      # 🧰 缓存 CMake 构建缓存（加快后续 Windows 构建）
       - name: 缓存 CMake 构建缓存
         uses: actions/cache@v4
         with:
@@ -204,17 +198,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cmake-
 
-      # 🪟 启用 Windows 桌面支持
       - name: 启用 Windows 桌面支持
         run: |
           flutter config --enable-windows-desktop
           flutter doctor -v
 
-      # 📥 获取依赖
       - name: 获取依赖
         run: flutter pub get
 
-      # 🧩 确保 Windows 平台存在
       - name: 确保 Windows 平台存在
         run: |
           if (!(Test-Path "windows")) {
@@ -222,33 +213,28 @@ jobs:
             flutter create --platforms=windows .
           }
 
-      # 🧹 清理旧构建缓存（可选）
-      - name: 清理构建缓存
-        run: flutter clean
-
-      # 🏗️ 构建 Windows 应用（详细日志）
       - name: 构建 Windows 应用（Release）
         run: |
           echo "开始构建 Release 版本..."
           flutter build windows --release -v
 
-      # 📦 安装 Inno Setup
       - name: 安装 Inno Setup
         run: |
           echo "安装 Inno Setup..."
           choco install innosetup -y
+          echo "C:\ProgramData\chocolatey\lib\innosetup\tools" >> $env:GITHUB_PATH
           echo "Inno Setup 安装完成 ✅"
 
       # 🔨 使用 Inno Setup 打包安装程序
       - name: 打包 Windows 安装程序
         run: |
           echo "开始编译安装程序..."
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+          ISCC.exe installer.iss
           echo "安装程序编译完成 "
 
       # 打包便携版
       - name: 打包便携版
-        run: |
+         run |
           Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath dext-windows-portable.zip
 
       # 生成 SHA256 校验和
