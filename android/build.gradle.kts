@@ -18,7 +18,6 @@ buildscript {
     }
 }
 
-// 注册构建完成监听器
 gradle.buildFinished {
     if (failure == null) {
         println("\n----------------------------------------")
@@ -57,7 +56,7 @@ subprojects {
             }
         }
         
-        // 在同步后修复 AndroidManifest.xml
+        // 自动修复 AndroidManifest.xml
         tasks.register("fixClipboardWatcherManifest") {
             doLast {
                 val manifestFile = file("${project.projectDir}/src/main/AndroidManifest.xml")

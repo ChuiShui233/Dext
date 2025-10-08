@@ -29,7 +29,7 @@ android {
 
     defaultConfig {
         applicationId "com.chuishui.Dext"
-        minSdkVersion 23    // radio_player 要求最低 SDK 23
+        minSdkVersion 23
         targetSdk 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName

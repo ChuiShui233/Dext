@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
-import 'package:dext/app_navigator.dart';
+import 'package:dext/widgets/app_navigator.dart';
 import 'package:dext/models/user.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, PlatformDispatcher, kDebugMode;
@@ -30,7 +30,6 @@ import 'widgets/window_caption.dart';
 import 'theme/zincx_theme.dart';
 import 'theme/theme.dart';
 
-// Web 平台不支持 window_manager
 bool get isDesktop {
   if (kIsWeb) return false;
   try {

@@ -242,10 +242,15 @@ jobs:
       - name: 打包 Windows 安装程序
         run: |
           echo "开始编译安装程序..."
-          # 刷新环境变量
-          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-          # 使用 iscc 命令（choco 会将其添加到 PATH）
-          iscc installer.iss
+          # 查找 Inno Setup 安装路径
+          $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $isccPath)) {
+            Write-Error "找不到 Inno Setup: $isccPath"
+            exit 1
+          }
+          echo "使用 Inno Setup: $isccPath"
+          # 使用完整路径调用 iscc
+          & $isccPath installer.iss
           echo "安装程序编译完成 ✅"
 
       # 打包便携版

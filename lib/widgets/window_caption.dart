@@ -1,7 +1,7 @@
 import 'package:forui/forui.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:dext/app_navigator.dart';
+import 'package:dext/widgets/app_navigator.dart';
 
 class WindowCaption extends StatefulWidget {
   const WindowCaption({super.key});
