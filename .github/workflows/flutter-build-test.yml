@@ -237,14 +237,31 @@ jobs:
         run: |
           echo "安装 Inno Setup..."
           choco install innosetup -y
+          refreshenv
           echo "Inno Setup 安装完成 ✅"
+
+      # 🔍 验证 Inno Setup 安装
+      - name: 验证 Inno Setup 安装
+        run: |
+          echo "查找 ISCC.exe 路径..."
+          Get-Command iscc -ErrorAction SilentlyContinue
+          if (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe") {
+            echo "✅ 找到 ISCC.exe: C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          }
+          $innoPath = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if ($innoPath) {
+            echo "✅ ISCC 在 PATH 中: $innoPath"
+          }
 
       # 🔨 使用 Inno Setup 打包安装程序
       - name: 打包 Windows 安装程序
         run: |
           echo "开始编译安装程序..."
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
-          echo "安装程序编译完成 "
+          # 刷新环境变量
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+          # 使用 iscc 命令（choco 会将其添加到 PATH）
+          iscc installer.iss
+          echo "安装程序编译完成 ✅"
 
       # 打包便携版
       - name: 打包便携版
