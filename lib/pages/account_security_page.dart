@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import '../services/api_service.dart';
 import '../services/oauth_service.dart';
+import '../services/uri_handler_service.dart';
 import '../models/user.dart';
 import 'dart:async';
 import '../widgets/frosted_glass_background.dart';
@@ -307,13 +308,35 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
           builder: (context) {
             dialogContext = context;
             return AlertDialog(
-              content: Row(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(width: 16),
-                  Text('正在绑定${_getProviderDisplayName(provider)}账号...'),
+                  Row(
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(width: 16),
+                      Expanded(
+                        child: Text('正在等待${_getProviderDisplayName(provider)}授权...'),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    '请在浏览器中完成授权，或点击取消',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                 ],
               ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    // 取消OAuth等待
+                    UriHandlerService.cancelAllPendingCallbacks();
+                    closeDialog();
+                  },
+                  child: Text('取消'),
+                ),
+              ],
             );
           },
         );

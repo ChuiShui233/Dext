@@ -10,7 +10,7 @@ const String appDomainUrl = 'https://dext.wucode.xyz';
 // ===== OAuth 配置 =====
 // 注意：前端只保留Client ID用于原生平台OAuth，Web端完全由后端处理
 // Google OAuth
-const String googleClientId = '1098222292927-26rbvt32p9kfu8bvin8btapknj5qomhk.apps.googleusercontent.com';
+const String googleClientId = '339404388031-krfjaiki8nade0j3a7thgcrca10claqa.apps.googleusercontent.com';
 
 // GitHub OAuth
 const String githubClientId = 'Ov23linQUMRmORjFIiXr';
@@ -19,10 +19,11 @@ const String githubClientId = 'Ov23linQUMRmORjFIiXr';
 const String microsoftClientId = '6358d1bc-76bd-4340-951b-b250570209d9';
 
 // ===== OAuth 重定向URI配置 =====
-const String oauthCallbackWeb = 'https://dext.wucode.xyz/oauth_callback.html';
-const String oauthCallbackAndroid = 'https://dext.wucode.xyz/oauth_callback.html';
-const String oauthCallbackIOS = 'https://dext.wucode.xyz/oauth_callback.html';
-const String oauthCallbackDesktop = 'https://dext.wucode.xyz/oauth_callback.html';
+// 使用后端代理服务，支持多平台回调
+const String oauthCallbackWeb = 'https://wucode.xyz:11222/api/auth/oauth/callback/web';
+const String oauthCallbackAndroid = 'https://wucode.xyz:11222/api/auth/oauth/callback/mobile';
+const String oauthCallbackIOS = 'https://wucode.xyz:11222/api/auth/oauth/callback/mobile';
+const String oauthCallbackDesktop = 'https://wucode.xyz:11222/api/auth/oauth/callback/desktop';
 
 // ===== Android/iOS URI Scheme =====
 const String uriSchemeAndroid = 'com.dext.app';

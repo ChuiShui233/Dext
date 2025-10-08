@@ -11,9 +11,11 @@ import 'package:forui/forui.dart';
 import 'package:layout/layout.dart';
 import 'package:window_manager/window_manager.dart' hide WindowCaption;
 import 'package:tray_manager/tray_manager.dart';
+import 'package:windows_single_instance/windows_single_instance.dart';
 
 import 'services/url_handler.dart';
 import 'services/clipboard_service.dart';
+import 'services/uri_handler_service.dart';
 import 'utils/network_reachability.dart';
 
 import 'models/project.dart';
@@ -104,6 +106,9 @@ Future<void> _initDesktopWindowAndTray() async {
   await windowManager.setPreventClose(true);
   windowManager.addListener(_AppWindowListener());
 
+  // 初始化URI处理服务
+  await UriHandlerService.initialize();
+
   // 托盘初始化
   await TrayManager.instance.setIcon('assets/images/Dext.ico');
   final menu = Menu(items: [
@@ -116,7 +121,7 @@ Future<void> _initDesktopWindowAndTray() async {
   TrayManager.instance.addListener(_AppTrayListener());
 }
 
-void main() async {
+void main(List<String> args) async {
   if (kDebugMode) {
     // 设置日志过滤器
     debugPrint = (String? message, {int? wrapWidth}) {
@@ -178,6 +183,39 @@ void main() async {
     };
   }
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Windows单实例检测
+  if (Platform.isWindows) {
+    await WindowsSingleInstance.ensureSingleInstance(
+      args, 
+      "dext_survey_app",
+      onSecondWindow: (args) async {
+        // 当尝试打开第二个实例时，激活现有窗口
+        if (await windowManager.isMinimized()) {
+          await windowManager.restore();
+        }
+        // 显示并聚焦窗口
+        await windowManager.show();
+        await windowManager.focus();
+        
+        // 如果有命令行参数（如dext://协议），处理它
+        if (args.isNotEmpty) {
+          final uriString = args.join(' ');
+          debugPrint('📨 第二实例收到参数: $uriString');
+          
+          // 尝试解析为URI
+          try {
+            if (uriString.startsWith('dext://')) {
+              final uri = Uri.parse(uriString);
+              UriHandlerService.handleIncomingUri(uri);
+            }
+          } catch (e) {
+            debugPrint('❌ 解析URI失败: $e');
+          }
+        }
+      },
+    );
+  }
 
   if (isDesktop) {
     try {
@@ -494,14 +532,27 @@ class _YuMeng233AppState extends State<YuMeng233App>
             : LoginPage(
                 onToggleTheme: _toggleTheme,
                 onLoginSuccess: (token, expiry) async {
+                  debugPrint('👉 main.dart onLoginSuccess 被调用');
+                  debugPrint('Token: ${token.substring(0, 20)}...');
+                  debugPrint('Expiry: $expiry');
+                  
                   await _storage.write(key: 'auth_token', value: token);
+                  debugPrint('✅ Token已保存到storage');
+                  
                   await _storage.write(
                     key: 'token_expiry',
                     value: expiry.toIso8601String(),
                   );
+                  debugPrint('✅ Expiry已保存到storage');
+                  
+                  debugPrint('🔄 调用 _checkAuthStatus()');
                   await _checkAuthStatus();
+                  debugPrint('✅ _checkAuthStatus() 完成');
+                  debugPrint('📊 当前状态: _token=${_token?.substring(0, 20)}, _tokenExpiry=$_tokenExpiry');
+                  
                   // 登录成功后启动定时刷新
                   _startTokenRefreshTimer();
+                  debugPrint('✅ onLoginSuccess 完成');
                 },
               ),
       );

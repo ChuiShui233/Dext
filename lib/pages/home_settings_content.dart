@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:forui/forui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../models/user.dart';
 import 'package:file_picker/file_picker.dart';
@@ -77,6 +78,15 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
           title: Text('获取用户信息失败: $e'),
         );
       }
+    }
+  }
+
+    Future<void> _launchPrivacyPolicy() async {
+    final Uri url = Uri.parse('https://cc12.eu.org');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    } else {
+      if (!mounted) return;
     }
   }
 
@@ -570,7 +580,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
           title: const Text('隐私政策'),
           trailing: Icon(Icons.arrow_forward_ios,
               size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
-          onTap: () {},
+          onTap: _launchPrivacyPolicy,
         ),
       ],
     );

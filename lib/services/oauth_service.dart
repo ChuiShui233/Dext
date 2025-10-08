@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:oauth2_client/oauth2_helper.dart';
 import 'package:oauth2_client/oauth2_client.dart';
@@ -8,6 +9,7 @@ import 'package:oauth2_client/github_oauth2_client.dart';
 import 'package:http/http.dart' as http;
 import 'api_service.dart';
 import 'config.dart';
+import 'uri_handler_service.dart';
 import 'web_oauth_handler.dart' if (dart.library.io) 'web_oauth_handler_stub.dart';
 
 class OAuthService {
@@ -20,7 +22,7 @@ class OAuthService {
     } else if (Platform.isIOS) {
       return uriSchemeIOS;
     } else {
-      return 'http';
+      return 'dext';
     }
   }
 
@@ -111,9 +113,69 @@ class OAuthService {
     };
   }
 
+  /// Windows桌面端Microsoft OAuth登录
+  Future<Map<String, dynamic>> _signInWithMicrosoftDesktop() async {
+    try {
+      final state = UriHandlerService.generateState();
+      
+      // 构建授权URL
+      final authParams = {
+        'client_id': microsoftClientId,
+        'response_type': 'code',
+        'redirect_uri': _redirectUri,
+        'scope': 'openid profile email User.Read',
+        'state': state,
+        'response_mode': 'query',
+      };
+      
+      final authUrl = Uri.https(
+        'login.microsoftonline.com',
+        '/common/oauth2/v2.0/authorize',
+        authParams,
+      ).toString();
+      
+      // 启动OAuth流程并等待回调
+      final result = await UriHandlerService.launchOAuthAndWaitForCallback(
+        authUrl: authUrl,
+        state: state,
+      );
+      
+      final authCode = result['code'];
+      if (authCode == null || authCode.isEmpty) {
+        throw Exception('未收到授权码');
+      }
+      
+      debugPrint('✅ 收到Microsoft授权码，发送给后端处理');
+      
+      // 直接将授权码发送给后端，让后端处理令牌交换
+      final authResult = await _authenticateWithBackend('microsoft', {
+        'authorization_code': authCode,
+        'redirect_uri': _redirectUri,
+      });
+      
+      return {
+        'success': true,
+        'token': authResult['token'],
+        'expires': authResult['expires'],
+        'user': authResult['user'],
+      };
+    } catch (e) {
+      debugPrint('❌ Microsoft桌面端登录失败: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
   /// 原生平台Microsoft OAuth登录
   Future<Map<String, dynamic>> _signInWithMicrosoftNative() async {
-    // 创建自定义的Microsoft OAuth2客户端
+    // Windows桌面端使用自定义URI处理
+    if (!kIsWeb && Platform.isWindows) {
+      return await _signInWithMicrosoftDesktop();
+    }
+    
+    // 其他平台使用原有逻辑
     final client = OAuth2Client(
       authorizeUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
       tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
@@ -127,10 +189,7 @@ class OAuthService {
       clientId: microsoftClientId,
       scopes: ['openid', 'profile', 'email', 'User.Read'],
       webAuthOpts: {
-        'windowName': 'Dext - Microsoft登录',
-        'windowTitle': 'Dext - Microsoft登录',
-        'windowIcon': 'assets/images/Dext.ico',
-        'useWebview': true,
+        'useWebview': false,
         'timeout': 300,
       },
     );
@@ -240,8 +299,69 @@ class OAuthService {
     };
   }
 
+  /// Windows桌面端Google OAuth登录
+  Future<Map<String, dynamic>> _signInWithGoogleDesktop() async {
+    try {
+      final state = UriHandlerService.generateState();
+      
+      // 构建授权URL
+      final authParams = {
+        'client_id': googleClientId,
+        'response_type': 'code',
+        'redirect_uri': _redirectUri,
+        'scope': 'openid profile email',
+        'state': state,
+        'access_type': 'offline',
+      };
+      
+      final authUrl = Uri.https(
+        'accounts.google.com',
+        '/o/oauth2/v2/auth',
+        authParams,
+      ).toString();
+      
+      // 启动OAuth流程并等待回调
+      final result = await UriHandlerService.launchOAuthAndWaitForCallback(
+        authUrl: authUrl,
+        state: state,
+      );
+      
+      final authCode = result['code'];
+      if (authCode == null || authCode.isEmpty) {
+        throw Exception('未收到授权码');
+      }
+      
+      debugPrint('✅ 收到Google授权码，发送给后端处理');
+      
+      // 直接将授权码发送给后端，让后端处理令牌交换
+      final authResult = await _authenticateWithBackend('google', {
+        'authorization_code': authCode,
+        'redirect_uri': _redirectUri,
+      });
+      
+      return {
+        'success': true,
+        'token': authResult['token'],
+        'expires': authResult['expires'],
+        'user': authResult['user'],
+      };
+    } catch (e) {
+      debugPrint('❌ Google桌面端登录失败: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
   /// 原生平台Google OAuth登录
   Future<Map<String, dynamic>> _signInWithGoogleNative() async {
+    // Windows桌面端使用自定义URI处理
+    if (!kIsWeb && Platform.isWindows) {
+      return await _signInWithGoogleDesktop();
+    }
+    
+    // 其他平台使用原有逻辑
     final client = GoogleOAuth2Client(
       redirectUri: _redirectUri,
       customUriScheme: _customUriScheme,
@@ -256,7 +376,7 @@ class OAuthService {
         'windowName': 'Dext - Google登录',
         'windowTitle': 'Dext - Google登录',
         'windowIcon': 'assets/images/Dext.ico',
-        'useWebview': true,
+        'useWebview': false,
         'timeout': 300,
       },
     );
@@ -371,8 +491,64 @@ class OAuthService {
     };
   }
 
+  /// Windows桌面端GitHub OAuth登录
+  Future<Map<String, dynamic>> _signInWithGitHubDesktop() async {
+    try {
+      final state = UriHandlerService.generateState();
+      
+      // 构建授权URL
+      final authParams = {
+        'client_id': githubClientId,
+        'redirect_uri': _redirectUri,
+        'scope': 'user:email',
+        'state': state,
+      };
+      
+      final authUrl = Uri.https(
+        'github.com',
+        '/login/oauth/authorize',
+        authParams,
+      ).toString();
+      
+      // 启动OAuth流程并等待回调
+      final result = await UriHandlerService.launchOAuthAndWaitForCallback(
+        authUrl: authUrl,
+        state: state,
+      );
+      
+      final authCode = result['code'];
+      if (authCode == null || authCode.isEmpty) {
+        throw Exception('未收到授权码');
+      }
+      
+      // 调用后端OAuth接口，直接传递授权码
+      final authResult = await _authenticateWithBackend('github', {
+        'authorization_code': authCode,
+        'redirect_uri': _redirectUri,
+      });
+      
+      return {
+        'success': true,
+        'token': authResult['token'],
+        'expires': authResult['expires'],
+        'user': authResult['user'],
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
   /// 原生平台GitHub OAuth登录
   Future<Map<String, dynamic>> _signInWithGitHubNative() async {
+    // Windows桌面端使用自定义URI处理
+    if (!kIsWeb && Platform.isWindows) {
+      return await _signInWithGitHubDesktop();
+    }
+    
+    // 其他平台使用原有逻辑
     final client = GitHubOAuth2Client(
       redirectUri: _redirectUri,
       customUriScheme: _customUriScheme,
@@ -387,7 +563,7 @@ class OAuthService {
         'windowName': 'Dext - GitHub登录',
         'windowTitle': 'Dext - GitHub登录',
         'windowIcon': 'assets/images/Dext.ico',
-        'useWebview': true,
+        'useWebview': false,
         'timeout': 300,
       },
     );
@@ -463,6 +639,7 @@ class OAuthService {
         return {
           'token': data['token'],
           'expires': DateTime.parse(data['expires']),
+          'user': data['user'], // 返回完整的用户信息
         };
       } else {
         final errorData = json.decode(response.body);

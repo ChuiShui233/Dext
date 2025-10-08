@@ -1,6 +1,6 @@
 [Setup]
 AppName=Dext
-AppVersion=1.0.2
+AppVersion=1.0.6
 AppPublisher=ChuiShui233
 AppPublisherURL=https://wucode.xyz
 AppSupportURL=https://wucode.xyz
@@ -72,6 +72,13 @@ Name: "{commonprograms}\Dext\卸载 Dext"; Filename: "{uninstallexe}"; Tasks: st
 
 [Run]
 Filename: "{app}\dext.exe"; Description: "运行 Dext"; Flags: nowait postinstall skipifsilent
+
+[Registry]
+; 注册 dext:// 自定义URI协议
+Root: HKCR; Subkey: "dext"; ValueType: string; ValueName: ""; ValueData: "Dext Protocol"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "dext"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Flags: uninsdeletekey
+Root: HKCR; Subkey: "dext\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\dext.exe,0"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "dext\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\dext.exe"" ""%1"""; Flags: uninsdeletekey
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"

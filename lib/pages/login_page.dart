@@ -10,6 +10,7 @@ import '../widgets/window_caption.dart';
 import '../main.dart' show isDesktop;
 import '../services/api_service.dart';
 import '../services/oauth_service.dart';
+import '../services/uri_handler_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginPage extends StatefulWidget {
@@ -275,12 +276,69 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Future<void> _handleGoogleLogin() async {
     if (_isLoading) return;
     
+    BuildContext? dialogContext;
+    bool dialogShown = false;
+    
+    void closeDialog() {
+      if (dialogShown && dialogContext != null) {
+        try {
+          Navigator.of(dialogContext!).pop();
+        } catch (_) {}
+        dialogShown = false;
+        dialogContext = null;
+      }
+    }
+    
     setState(() {
       _isLoading = true;
     });
 
     try {
+      // 显示等待对话框
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) {
+            dialogContext = context;
+            return AlertDialog(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(width: 16),
+                      Expanded(child: Text('正在等待Google授权...')),
+                    ],
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    '请在浏览器中完成授权，或点击取消',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    UriHandlerService.cancelAllPendingCallbacks();
+                    closeDialog();
+                  },
+                  child: Text('取消'),
+                ),
+              ],
+            );
+          },
+        );
+        dialogShown = true;
+      }
+      
       final result = await _oauthService.signInWithGoogle();
+      
+      closeDialog();
+      
+      debugPrint('🔍 Google OAuth结果: ${result.keys.join(", ")}');
       
       if (!mounted) return;
       
@@ -288,12 +346,17 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         final token = result['token'];
         final expires = result['expires'];
         
-        widget.onLoginSuccess(token, expires);
+        debugPrint('✅ Google登录成功，准备保存token');
+        debugPrint('Token前20字符: ${token?.substring(0, 20)}...');
+        debugPrint('过期时间: $expires');
+        
+        await widget.onLoginSuccess(token, expires);
+        debugPrint('✅ onLoginSuccess回调完成');
+        
         _recordLoginInfo(token, expires);
+        debugPrint('✅ 记录登录信息完成');
       } else {
-        // 检查是否是用户取消或超时
         if (result['cancelled'] == true) {
-          // 用户取消登录，不显示错误提示
           return;
         } else if (result['timeout'] == true) {
           showErrorDialog('登录超时，请重试');
@@ -302,6 +365,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         }
       }
     } catch (e) {
+      closeDialog();
       if (!mounted) return;
       showErrorDialog('Google登录失败: ${e.toString()}');
     } finally {
@@ -317,12 +381,66 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Future<void> _handleGitHubLogin() async {
     if (_isLoading) return;
     
+    BuildContext? dialogContext;
+    bool dialogShown = false;
+    
+    void closeDialog() {
+      if (dialogShown && dialogContext != null) {
+        try {
+          Navigator.of(dialogContext!).pop();
+        } catch (_) {}
+        dialogShown = false;
+        dialogContext = null;
+      }
+    }
+    
     setState(() {
       _isLoading = true;
     });
 
     try {
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) {
+            dialogContext = context;
+            return AlertDialog(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(width: 16),
+                      Expanded(child: Text('正在等待GitHub授权...')),
+                    ],
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    '请在浏览器中完成授权，或点击取消',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    UriHandlerService.cancelAllPendingCallbacks();
+                    closeDialog();
+                  },
+                  child: Text('取消'),
+                ),
+              ],
+            );
+          },
+        );
+        dialogShown = true;
+      }
+      
       final result = await _oauthService.signInWithGitHub();
+      
+      closeDialog();
       
       if (!mounted) return;
       
@@ -333,9 +451,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         widget.onLoginSuccess(token, expires);
         _recordLoginInfo(token, expires);
       } else {
-        // 检查是否是用户取消或超时
         if (result['cancelled'] == true) {
-          // 用户取消登录，不显示错误提示
           return;
         } else if (result['timeout'] == true) {
           showErrorDialog('登录超时，请重试');
@@ -344,6 +460,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         }
       }
     } catch (e) {
+      closeDialog();
       if (!mounted) return;
       showErrorDialog('GitHub登录失败: ${e.toString()}');
     } finally {
@@ -359,12 +476,66 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Future<void> _handleMicrosoftLogin() async {
     if (_isLoading) return;
     
+    BuildContext? dialogContext;
+    bool dialogShown = false;
+    
+    void closeDialog() {
+      if (dialogShown && dialogContext != null) {
+        try {
+          Navigator.of(dialogContext!).pop();
+        } catch (_) {}
+        dialogShown = false;
+        dialogContext = null;
+      }
+    }
+    
     setState(() {
       _isLoading = true;
     });
 
     try {
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) {
+            dialogContext = context;
+            return AlertDialog(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(width: 16),
+                      Expanded(child: Text('正在等待Microsoft授权...')),
+                    ],
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    '请在浏览器中完成授权，或点击取消',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    UriHandlerService.cancelAllPendingCallbacks();
+                    closeDialog();
+                  },
+                  child: Text('取消'),
+                ),
+              ],
+            );
+          },
+        );
+        dialogShown = true;
+      }
+      
       final result = await _oauthService.signInWithMicrosoft();
+      
+      closeDialog();
       
       if (!mounted) return;
       
@@ -375,9 +546,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         widget.onLoginSuccess(token, expires);
         _recordLoginInfo(token, expires);
       } else {
-        // 检查是否是用户取消或超时
         if (result['cancelled'] == true) {
-          // 用户取消登录，不显示错误提示
           return;
         } else if (result['timeout'] == true) {
           showErrorDialog('登录超时，请重试');
@@ -386,6 +555,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         }
       }
     } catch (e) {
+      closeDialog();
       if (!mounted) return;
       showErrorDialog('Microsoft登录失败: ${e.toString()}');
     } finally {

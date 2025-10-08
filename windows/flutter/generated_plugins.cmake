@@ -17,6 +17,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   video_player_win
   window_manager
   window_to_front
+  windows_single_instance
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

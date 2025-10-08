@@ -52,6 +52,7 @@ dependencies:
   clipboard_watcher: ^0.2.0
   pointycastle: ^4.0.0
   desktop_drop: ^0.6.1
+  windows_single_instance: ^1.0.1
   oauth2_client:
     git:
       url: https://github.com/ChuiShui233/oauth2_client-4.2.0_Plus.git
