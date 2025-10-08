@@ -222,15 +222,15 @@ jobs:
         run: |
           echo "安装 Inno Setup..."
           choco install innosetup -y
-          echo "C:\ProgramData\chocolatey\lib\innosetup\tools" >> $env:GITHUB_PATH
+          $isccPath = "C:\ProgramData\chocolatey\lib\innosetup\tools"
+          echo "$isccPath" >> $env:GITHUB_PATH
           echo "Inno Setup 安装完成 ✅"
 
-      # 🔨 使用 Inno Setup 打包安装程序
       - name: 打包 Windows 安装程序
         run: |
           echo "开始编译安装程序..."
           ISCC.exe installer.iss
-          echo "安装程序编译完成 "
+          echo "安装程序编译完成 ✅
 
       # 打包便携版
       - name: 打包便携版
