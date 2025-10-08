@@ -16,7 +16,7 @@ const String googleClientId = '339404388031-krfjaiki8nade0j3a7thgcrca10claqa.app
 const String githubClientId = 'Ov23linQUMRmORjFIiXr';
 
 // Microsoft OAuth
-const String microsoftClientId = '6358d1bc-76bd-4340-951b-b250570209d9';
+const String microsoftClientId = 'a936dc9c-08e4-44c6-acb5-6aa0548e5199';
 
 // ===== OAuth 重定向URI配置 =====
 // 使用后端代理服务，支持多平台回调

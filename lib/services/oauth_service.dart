@@ -130,7 +130,7 @@ class OAuthService {
       
       final authUrl = Uri.https(
         'login.microsoftonline.com',
-        '/common/oauth2/v2.0/authorize',
+        '/consumers/oauth2/v2.0/authorize',
         authParams,
       ).toString();
       

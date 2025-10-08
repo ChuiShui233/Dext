@@ -184,8 +184,8 @@ void main(List<String> args) async {
   }
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Windows单实例检测
-  if (Platform.isWindows) {
+  // Windows单实例检测（仅桌面平台）
+  if (!kIsWeb && Platform.isWindows) {
     await WindowsSingleInstance.ensureSingleInstance(
       args, 
       "dext_survey_app",

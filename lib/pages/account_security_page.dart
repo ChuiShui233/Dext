@@ -363,22 +363,40 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
       }
       
       if (result['success'] == true && result['token'] != null) {
-        // OAuth登录时已自动完成绑定，无需额外调用bind接口
-        
-        // 关闭加载对话框
-        closeDialog();
-        
-        // 清除用户信息缓存并刷新
-        await widget.apiService.clearUserCache();
-        await _refreshUserInfo();
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${_getProviderDisplayName(provider)}账号绑定成功！'),
-              backgroundColor: Colors.green,
-            ),
+        // OAuth授权成功，现在调用绑定API将OAuth账号绑定到当前主账号
+        try {
+          await widget.apiService.bindOAuth(
+            provider: provider,
+            accessToken: result['token'],
           );
+          
+          // 关闭加载对话框
+          closeDialog();
+          
+          // 清除用户信息缓存并刷新
+          await widget.apiService.clearUserCache();
+          await _refreshUserInfo();
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('${_getProviderDisplayName(provider)}账号绑定成功！'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } catch (bindError) {
+          // 绑定失败
+          closeDialog();
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('绑定失败：${bindError.toString()}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
         }
       } else {
         // 关闭加载对话框
