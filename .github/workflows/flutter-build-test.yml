@@ -234,7 +234,7 @@ jobs:
 
       # 打包便携版
       - name: 打包便携版
-         run |
+         run: |
           Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath dext-windows-portable.zip
 
       # 生成 SHA256 校验和
