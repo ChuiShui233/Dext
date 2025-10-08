@@ -22,27 +22,24 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
   late final FSelectController<int> _typeSelectController;
 
   bool _loading = false;
-  int? _selectedType; // 0 普通 1 限时 2 限次 3 自选
+  int? _selectedType;
   int _page = 1;
   final int _pageSize = 10;
   int _total = 0;
   List<Map<String, dynamic>> _items = [];
   Timer? _debounce;
   
-  // 分页相关
   FPaginationController _paginationController = FPaginationController(pages: 1);
 
   @override
   void initState() {
     super.initState();
     _typeSelectController = FSelectController<int>(vsync: this);
-    // 初次进入：先显示加载，再从本地缓存读取，最后发起网络请求
     _loading = true;
     _loadCachedHistory();
     _fetch();
   }
 
-  // 立即从本地缓存读取，避免初次渲染出现“无提交记录”闪烁
   Future<void> _loadCachedHistory() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -56,16 +53,14 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
         setState(() {
           _items = items;
           _total = total;
-          _loading = false; // 有缓存则直接显示
+          _loading = false;
         });
-        // 同步分页控制器
         final totalPages = (_total / _pageSize).ceil();
         _paginationController.dispose();
         _paginationController = FPaginationController(pages: totalPages > 0 ? totalPages : 1);
         _paginationController.page = (_page - 1).clamp(0, (totalPages - 1).clamp(0, double.infinity).toInt());
       }
     } catch (_) {
-      // 忽略缓存读取错误
     }
   }
 
@@ -87,7 +82,6 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
   Future<void> _fetch({bool resetPage = false}) async {
     if (!mounted) return;
     
-    // 延迟显示加载状态，如果缓存存在会立即返回
     Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
       if (mounted && _loading) {
         setState(() => _loading = true);
@@ -113,14 +107,12 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
         _total = (resp['total'] as num?)?.toInt() ?? items.length;
         _loading = false;
       });
-      // 写入本地缓存
       try {
         final prefs = await SharedPreferences.getInstance();
         final key = _buildCacheKey();
         await prefs.setString(key, json.encode({'items': items, 'total': _total}));
       } catch (_) {}
       
-      // 更新分页控制器
       final totalPages = (_total / _pageSize).ceil();
       _paginationController.dispose();
       _paginationController = FPaginationController(pages: totalPages > 0 ? totalPages : 1);
@@ -144,7 +136,6 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     _debounce = Timer(const Duration(milliseconds: 400), () => _fetch(resetPage: true));
   }
 
-  // 分页处理方法
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -571,7 +562,6 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     final isDark = theme.brightness == Brightness.dark;
     final bool isMobile = LayoutValue(xs: true, md: false).resolve(context);
 
-    // 确保分页控制器显示正确的当前页
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_paginationController.page != _page - 1) {
         _paginationController.page = (_page - 1).clamp(0, (totalPages - 1).clamp(0, double.infinity).toInt());

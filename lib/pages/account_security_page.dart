@@ -1,4 +1,3 @@
-//ai太好用了你知道吗
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
@@ -43,11 +42,9 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
         setState(() {
           _user = user;
         });
-        // 通知父组件用户信息已更新
         widget.onUserUpdated();
       }
     } catch (e) {
-      // 静默失败，使用传入的用户信息
       if (kDebugMode) {
         print('刷新用户信息失败: $e');
       }
@@ -83,7 +80,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
-                      // 邮箱绑定卡片
                       _buildSectionCard(
                         context,
                         title: '邮箱管理',
@@ -112,7 +108,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
                       ),
                       const SizedBox(height: 16),
 
-                      // 密码管理卡片
                       _buildSectionCard(
                         context,
                         title: '密码管理',
@@ -254,7 +249,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
           break;
       }
       
-      // 获取绑定的账号名称
       final binding = oauthBindings.bindings
           .where((b) => b.provider == provider)
           .firstOrNull;
@@ -292,7 +286,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
         try {
           Navigator.of(dialogContext!).pop();
         } catch (_) {
-          // 忽略关闭对话框时的错误
         }
         dialogShown = false;
         dialogContext = null;
@@ -300,7 +293,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
     }
     
     try {
-      // 显示加载对话框
       if (mounted) {
         showDialog(
           context: context,
@@ -370,10 +362,8 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
             accessToken: result['token'],
           );
           
-          // 关闭加载对话框
           closeDialog();
           
-          // 清除用户信息缓存并刷新
           await widget.apiService.clearUserCache();
           await _refreshUserInfo();
           
@@ -386,7 +376,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
             );
           }
         } catch (bindError) {
-          // 绑定失败
           closeDialog();
           
           if (mounted) {
@@ -399,7 +388,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
           }
         }
       } else {
-        // 关闭加载对话框
         closeDialog();
         
         if (mounted) {
@@ -412,7 +400,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
         }
       }
     } catch (e) {
-      // 确保加载对话框被关闭
       closeDialog();
       
       if (mounted) {
@@ -428,7 +415,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
 
   // OAuth解绑操作
   void _unbindOAuth(String provider) async {
-    // 显示确认对话框
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -458,7 +444,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
         try {
           Navigator.of(dialogContext!).pop();
         } catch (_) {
-          // 忽略关闭对话框时的错误
         }
         dialogShown = false;
         dialogContext = null;
@@ -466,7 +451,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
     }
     
     try {
-      // 显示加载对话框
       if (mounted) {
         showDialog(
           context: context,
@@ -490,10 +474,8 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
       // 调用解绑API
       await widget.apiService.unbindOAuth(provider: provider);
       
-      // 关闭加载对话框
       closeDialog();
       
-      // 清除用户信息缓存并刷新
       await widget.apiService.clearUserCache();
       await _refreshUserInfo();
       
@@ -506,7 +488,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
         );
       }
     } catch (e) {
-      // 确保加载对话框被关闭
       closeDialog();
       
       if (mounted) {
@@ -520,7 +501,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
     }
   }
 
-  // 获取提供商显示名称
   String _getProviderDisplayName(String provider) {
     switch (provider) {
       case 'google':
@@ -534,7 +514,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
     }
   }
 
-  // 绑定邮箱对话框
   void _showBindEmailDialog() {
     showDialog(
       context: context,
@@ -548,7 +527,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
     );
   }
 
-  // 更换邮箱对话框
   void _showChangeEmailDialog() {
     showDialog(
       context: context,
@@ -563,7 +541,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
     );
   }
 
-  // 修改密码对话框
   void _showChangePasswordDialog() {
     final email = _user?.email;
     final hasEmail = email != null && email.isNotEmpty;
@@ -1241,14 +1218,12 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
     setState(() => _isCodeSending = true);
     
     try {
-      // 获取当前用户信息
       final user = await widget.apiService.getCurrentUserHandler();
       if (user.email.isEmpty) {
         _showError('您还未绑定邮箱，无法使用邮箱验证码修改密码');
         return;
       }
       
-      // 发送验证码到用户邮箱
       await widget.apiService.sendEmailCodeForPasswordChange();
       
       _showSuccess('验证码已发送到您的邮箱');
@@ -1315,20 +1290,17 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
 
     try {
       if (_useEmailVerification) {
-        // 获取当前用户邮箱
         final user = await widget.apiService.getCurrentUserHandler();
         if (user.email.isEmpty) {
           _showError('您还未绑定邮箱，无法使用邮箱验证码修改密码');
           return;
         }
         
-        // 使用邮箱验证码修改密码
         await widget.apiService.changePasswordWithEmail(
           code: emailCode,
           newPassword: newPassword,
         );
       } else {
-        // 使用旧密码修改密码
         await widget.apiService.changePassword(
           oldPassword: oldPassword,
           newPassword: newPassword,

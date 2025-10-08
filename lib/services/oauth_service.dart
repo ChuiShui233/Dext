@@ -13,7 +13,6 @@ import 'uri_handler_service.dart';
 import 'web_oauth_handler.dart' if (dart.library.io) 'web_oauth_handler_stub.dart';
 
 class OAuthService {
-  // 重定向URI和自定义URI方案配置
   static String get _customUriScheme {
     if (kIsWeb) {
       return 'https';
@@ -38,7 +37,6 @@ class OAuthService {
     }
   }
 
-  /// Microsoft OAuth2 登录
   Future<Map<String, dynamic>> signInWithMicrosoft() async {
     try {
       if (kIsWeb) {

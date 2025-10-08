@@ -7,9 +7,7 @@ import '../services/api_service.dart';
 import '../services/config.dart';
 
 class RecentSurveyResponsesList extends StatefulWidget {
-  /// 当在桌面端需要与图表卡片等高时，传入一个固定高度以启用内部滚动
   final double? fixedHeight;
-  /// 传入的 ApiService 实例，避免重复创建
   final ApiService? apiService;
 
   const RecentSurveyResponsesList({super.key, this.fixedHeight, this.apiService});
@@ -31,7 +29,6 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
     _loadRecentSubmissions();
   }
   
-  // 立即从缓存加载数据
   Future<void> _loadCachedSubmissions() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -49,14 +46,12 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
         }
       }
     } catch (_) {
-      // 忽略错误，_loadRecentSubmissions 会处理
     }
   }
 
   Future<void> _loadRecentSubmissions() async {
     if (_hasLoaded) return;
     
-    // 延迟显示加载状态
     Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
       if (mounted && isLoading) {
         setState(() {
@@ -145,7 +140,6 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
     
     return Row(
       children: [
-        // 用户头像
         CircleAvatar(
           radius: 20,
           backgroundColor: isDark 
@@ -203,7 +197,6 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
     );
   }
 
-  // 静态（不滚动）内容：移动端或未指定高度时使用
   Widget _buildBodyStatic(ThemeData theme) {
     if (isLoading) {
       return const Center(
@@ -268,7 +261,6 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
     }
   }
 
-  // 可滚动内容：当提供 fixedHeight 时，使用 ListView 以避免溢出
   Widget _buildBodyScrollable(ThemeData theme) {
     if (isLoading) {
       return const Center(

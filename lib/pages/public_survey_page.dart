@@ -35,16 +35,14 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
   String description = '';
   List<Question> questions = [];
   SurveyRuntimeController? _runtime;
-  final Map<String, bool> _optionStates = {}; // 独立的选项状态管理
+  final Map<String, bool> _optionStates = {};
   String? _desktopBackground;
   String? _mobileBackground;
-  // 运行时状态与路径由控制器维护
   
   bool isLoading = true;
   bool isSubmitting = false;
   String? errorMessage;
   bool isSubmitted = false;
-  // 悬停评分（桌面端）提示值
   final Map<int, double?> _hoverRatings = {};
 
   @override
@@ -104,15 +102,12 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
         _desktopBackground = data['desktopBackground'] as String?;
         _mobileBackground = data['mobileBackground'] as String?;
         
-        // 解析问题数据
         final questionsData = data['questions'] as List? ?? [];
         questions = questionsData.map((q) {
-          // 解析选项
           List<QuestionOption> options = [];
           try {
             final optionsData = q['options'];
             if (optionsData is List) {
-              // 直接是数组格式
               options = optionsData.map((o) => QuestionOption.fromJson(o)).toList();
             } else if (optionsData is String) {
               // JSON字符串格式
@@ -150,10 +145,8 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
           );
         }).toList();
         
-        // 按顺序排序
         questions.sort((a, b) => a.order.compareTo(b.order));
         
-        // 初始化共享运行时控制器并计算可见题
         _runtime = SurveyRuntimeController(
           questions: questions,
           multiJumpStrategy: MultiJumpStrategy.first,
@@ -194,46 +187,35 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
     }
   }
 
-  // 生成选项的唯一键
   String _getOptionKey(int questionId, int optionIndex) {
     return 'q${questionId}_opt$optionIndex';
   }
 
-  // 更新单选题答案
   void _updateSingleChoiceAnswer(int questionId, String option, int optionIndex) {
     setState(() {
-      // 清除该题的所有选项状态
       for (int i = 0; i < questions.firstWhere((q) => q.id == questionId).options.length; i++) {
         _optionStates[_getOptionKey(questionId, i)] = false;
       }
-      // 设置当前选项为选中
       _optionStates[_getOptionKey(questionId, optionIndex)] = true;
       
-      // 更新答案并重算可见问题
       _runtime?.setAnswerSingle(questionId, option);
       _runtime?.recomputeVisible();
     });
     
-    // 自动滚动到底部
     _scrollToBottom();
   }
 
-  // 更新多选题答案
   void _updateMultipleChoiceAnswer(int questionId, String option, int optionIndex, bool isSelected) {
     setState(() {
-      // 更新选项状态
       _optionStates[_getOptionKey(questionId, optionIndex)] = !isSelected;
       
-      // 更新答案并重算可见问题
       _runtime?.toggleMultiple(questionId, option, !isSelected);
       _runtime?.recomputeVisible();
     });
     
-    // 自动滚动到底部
     _scrollToBottom();
   }
 
-  // 自动滚动到底部
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -246,7 +228,6 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
     });
   }
 
-  // 检查是否所有必答题都已回答
   bool _areAllRequiredQuestionsAnswered() {
     if (_runtime == null) return false;
     
@@ -262,9 +243,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
   }
 
 
-
   Future<void> _submitAnswers() async {
-    // 验证必答题（仅校验可见题）
     for (final question in questions.where((q) => _runtime!.visibleQuestionIds.contains(q.id))) {
       final a = _runtime!.answers[question.id];
       if (question.required && (a == null || a.isEmpty)) {
@@ -383,7 +362,6 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // 背景层
           Positioned.fill(
             child: (_desktopBackground != null && _desktopBackground!.isNotEmpty) ||
                    (_mobileBackground != null && _mobileBackground!.isNotEmpty)
@@ -404,7 +382,6 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
                 : const FrostedGlassBackground(),
           ),
 
-          // 内容层
           Column(
             children: [
               const TopSafeSpacer(),
@@ -537,7 +514,6 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
       controller: _scrollController,
       padding: const EdgeInsets.all(16),
       children: [
-        // 问卷信息卡片
         if (description.isNotEmpty)
           _buildGlassCard(
             child: Padding(
@@ -566,7 +542,6 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
           ),
         const SizedBox(height: 16),
 
-        // 问题列表（仅渲染可见题）
         ...visible.asMap().entries.map((entry) {
           final index = entry.key;
           final q = entry.value;
@@ -678,11 +653,6 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
   }
 
 
-
-
-
-
-  // 打开全屏媒体查看器
   void _openFullscreenViewer(String mediaUrl, List<String> allMediaUrls, int currentIndex) {
     Navigator.push(
       context,
@@ -721,7 +691,6 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
 
   /// 导航到公开访问页面，避免Web端路由SecurityError
   void _navigateToPublicAccess() {
-    // 直接返回主页
     Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
   }
 

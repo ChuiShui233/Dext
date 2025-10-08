@@ -32,11 +32,8 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
   late final ApiService _apiService;
   String? _desktopBackground;
   String? _mobileBackground;
-  // 共享控制器
   late final SurveyRuntimeController _runtime;
-  // 选项状态：按题目+索引管理，避免相同文本冲突
   final Map<String, bool> _optionStates = {};
-  // 悬停评分值（按题目ID记录），用于展示 Hover 标签
   final Map<int, double?> _hoverRatings = {};
 
   @override
@@ -44,7 +41,6 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
     super.initState();
     _apiService = ApiService(authToken: widget.token);
     _loadBackground();
-    // 初始化共享控制器（默认 first 策略）并计算可见题
     _runtime = SurveyRuntimeController(
       questions: widget.questions,
       multiJumpStrategy: MultiJumpStrategy.first,
@@ -78,7 +74,6 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // 背景层
           Positioned.fill(
             child: (_desktopBackground != null && _desktopBackground!.isNotEmpty) ||
                    (_mobileBackground != null && _mobileBackground!.isNotEmpty)
@@ -101,7 +96,6 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
                 : const FrostedGlassBackground(),
           ),
 
-          // 内容层
           Column(
             children: [
               const TopSafeSpacer(),
@@ -123,7 +117,6 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    // 问卷信息卡片
                     _buildGlassCard(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
@@ -151,7 +144,6 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
                     ),
                     const SizedBox(height: 16),
 
-                    // 问题列表（仅渲染可见题，且支持点击模拟）
                     ...widget.questions
                         .where((q) => _runtime.visibleQuestionIds.contains(q.id) || _runtime.visibleQuestionIds.isEmpty && q.order == 0)
                         .map((q) => _buildGlassCard(
@@ -165,11 +157,9 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
                                   hoverRatings: _hoverRatings,
                                   authToken: widget.token,
                                   onSingleChoiceChanged: (questionId, selectedOption, optionIndex) {
-                                    // 单选：先清空该题的其他选项状态
                                     for (int i = 0; i < q.options.length; i++) {
                                       _optionStates[_getOptionKey(questionId, i)] = false;
                                     }
-                                    // 设置选中的选项状态
                                     _optionStates[_getOptionKey(questionId, optionIndex)] = true;
                                     // 同步 runtime 的文本答案
                                     _runtime.setAnswerSingle(questionId, selectedOption);
@@ -177,9 +167,7 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
                                     setState(() {});
                                   },
                                   onMultipleChoiceChanged: (questionId, option, optionIndex, isSelected) {
-                                    // 多选：仅切换当前索引
                                     _optionStates[_getOptionKey(questionId, optionIndex)] = !isSelected;
-                                    // 将被选中的索引转换为文本
                                     final texts = <String>[];
                                     for (int i = 0; i < q.options.length; i++) {
                                       if (_optionStates[_getOptionKey(questionId, i)] ?? false) {
@@ -240,7 +228,6 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
   }
 
 
-  // 打开全屏媒体查看器
   void _openFullscreenViewer(String mediaUrl, List<String> allMediaUrls, int currentIndex) {
     Navigator.of(context).push(
       PageRouteBuilder(

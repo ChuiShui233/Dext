@@ -1,4 +1,3 @@
-// file: edit_question_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -13,10 +12,6 @@ import '../widgets/frosted_glass_background.dart';
 import '../components/video_player_widget.dart';
 import '../services/config.dart';
 
-
-// ###########################################################################
-// ## Edit Question Page
-// ###########################################################################
 
 class EditQuestionPage extends StatefulWidget {
   final String token;
@@ -35,10 +30,8 @@ class EditQuestionPage extends StatefulWidget {
 }
 
 class _EditQuestionPageState extends State<EditQuestionPage> {
-  // 自定义评级文本开关与输入
   bool _enableRatingLabels = false;
   final TextEditingController _ratingLabelsController = TextEditingController();
-  // 按星星数量生成的标签输入框控制器（1..stars）
   final List<TextEditingController> _perStarLabelCtrls = [];
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
@@ -58,12 +51,10 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
   bool _required = true;
   bool _isLoading = false;
   
-  // 上传进度管理
   final Map<String, double> _uploadProgress = {}; // 文件名 -> 进度(0.0-1.0)
   final Map<String, bool> _uploadingFiles = {}; // 文件名 -> 是否正在上传
   final Map<String, bool> _cancelledUploads = {}; // 文件名 -> 是否已取消
 
-  // 评级题（原滑块）相关属性
   double _minValue = 0.0;
   double _maxValue = 100.0;
   double _initialValue = 50.0;
@@ -77,7 +68,6 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
 
   List<Question> _allQuestions = [];
 
-  // 保证按当前星数生成足够的标签输入框控制器
   void _ensurePerStarLabelCtrls(int stars) {
     if (_perStarLabelCtrls.length < stars) {
       for (int i = _perStarLabelCtrls.length; i < stars; i++) {
@@ -105,7 +95,6 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
       _options.addAll(widget.question!.options);
       _mediaUrls.addAll(widget.question!.mediaUrls);
       _jumpLogic.addAll(widget.question!.jumpLogic);
-      // 将已有的选项目的地同步到跳题表，或将跳题表同步回选项
       for (int i = 0; i < _options.length; i++) {
         final opt = _options[i];
         final jl = _jumpLogic[opt.id];
@@ -202,7 +191,6 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
     }
   }
 
-  // 批量为当前题的所有选项设置相同的跳转目标
   Future<void> _batchSetJump() async {
     if (_options.isEmpty) return;
     final result = await showDialog<int>(
@@ -283,7 +271,6 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
         for (final file in result.files) {
           final fileName = file.name;
           
-          // 标记文件开始上传
           setState(() {
             _uploadingFiles[fileName] = true;
             _uploadProgress[fileName] = 0.0;
@@ -328,9 +315,7 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
               }
             }
             
-            // 检查是否已取消
             if (_cancelledUploads[fileName] ?? false) {
-              // 上传已取消，清理状态
               setState(() {
                 _uploadingFiles.remove(fileName);
                 _uploadProgress.remove(fileName);
@@ -339,21 +324,18 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
               continue;
             }
             
-            // 上传完成
             setState(() {
               _mediaUrls.add(url);
               _uploadingFiles.remove(fileName);
               _uploadProgress.remove(fileName);
             });
           } catch (e) {
-            // 上传失败或取消，清理状态
             setState(() {
               _uploadingFiles.remove(fileName);
               _uploadProgress.remove(fileName);
               _cancelledUploads.remove(fileName);
             });
             
-            // 如果不是取消操作，则重新抛出错误
             if (!(_cancelledUploads[fileName] ?? false)) {
               rethrow;
             }
@@ -412,7 +394,6 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
         }
         
         if (fileName != null && fileName.isNotEmpty) {
-          // 通过文件名删除媒体文件
           await _apiService.deleteMediaFileByName(
             widget.surveyId,
             fileName,
@@ -423,12 +404,10 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
           _showSuccessToast('媒体文件已从本地移除');
         }
         
-        // 无论服务器删除是否成功，都从本地列表中移除
         setState(() {
           _mediaUrls.remove(url);
         });
       } catch (e) {
-        // 删除失败时显示错误信息，但仍从本地移除
         _showErrorToast('删除媒体文件时出错，但已从本地移除', e.toString());
         
         setState(() {
@@ -740,7 +719,6 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
               onEditingComplete: () {
                 final n = int.tryParse(_starsCountController.text.trim()) ?? _starsCount;
                 setState(() {
-                  // 保存当前的文本值
                   final oldValues = <String, String>{};
                   if (_enableRatingLabels) {
                     final oldTotalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
@@ -757,13 +735,11 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
                   _starsCount = n.clamp(1, 10);
                   _starsCountController.text = _starsCount.toString();
                   
-                  // 重新生成输入框并恢复文本值
                   if (_enableRatingLabels) {
                     final newTotalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
                     _perStarLabelCtrls.clear();
                     _ensurePerStarLabelCtrls(newTotalSteps);
                     
-                    // 恢复文本值到对应的输入框
                     for (int i = 0; i < newTotalSteps; i++) {
                       final newValue = _allowHalf ? (i + 1) * 0.5 : (i + 1).toDouble();
                       final newKey = newValue % 1 == 0 ? newValue.toInt().toString() : newValue.toString();
@@ -782,7 +758,6 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
               label: const Text('允许半星'),
               value: _allowHalf,
               onChange: (v) => setState(() { 
-                // 保存当前的文本值
                 final oldValues = <String, String>{};
                 if (_enableRatingLabels) {
                   final oldTotalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
@@ -798,13 +773,11 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
                 
                 _allowHalf = v;
                 
-                // 重新生成输入框并恢复文本值
                 if (_enableRatingLabels) {
                   final newTotalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
                   _perStarLabelCtrls.clear();
                   _ensurePerStarLabelCtrls(newTotalSteps);
                   
-                  // 恢复文本值到对应的输入框
                   for (int i = 0; i < newTotalSteps; i++) {
                     final newValue = _allowHalf ? (i + 1) * 0.5 : (i + 1).toDouble();
                     final newKey = newValue % 1 == 0 ? newValue.toInt().toString() : newValue.toString();
@@ -1012,7 +985,6 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            // 显示已上传的媒体文件
             ..._mediaUrls.map((url) {
             Widget mediaWidget;
             final absUrl = toAbsoluteUrl(url);
@@ -1089,7 +1061,6 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
               ],
             );
             }),
-            // 显示正在上传的文件进度
             ..._uploadingFiles.keys.map((fileName) {
               final progress = _uploadProgress[fileName] ?? 0.0;
               final isImage = fileName.toLowerCase().endsWith('.jpg') || 
@@ -1111,7 +1082,6 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
                 ),
                 child: Stack(
                   children: [
-                    // 文件类型图标
                     Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -1137,7 +1107,6 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
                         ],
                       ),
                     ),
-                    // 进度条
                     Positioned(
                       bottom: 8,
                       left: 8,
@@ -1159,7 +1128,6 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
                         ],
                       ),
                     ),
-                    // 取消按钮
                     Positioned(
                       top: 4,
                       right: 4,
@@ -1323,7 +1291,6 @@ class _AddOptionDialogState extends State<AddOptionDialog> {
       );
     // ###################### FIX START ######################
     // Remove Center widget to align icons to the top-left.
-    // Add Padding for better visual spacing.
     } else if (url.toLowerCase().endsWith('.mp4')) {
       return const Padding(
         padding: EdgeInsets.all(8.0),

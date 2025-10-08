@@ -220,7 +220,6 @@ class _CreateSurveyPageState extends State<CreateSurveyPage> with TickerProvider
       return;
     }
 
-    // 提交上限均为可选项，留空表示不限制
 
     if (_selectedType == 1 && (_selectedDays == 0 && _selectedHours == 0 && _selectedMinutes == 0)) {
       if (!mounted) return;
@@ -331,7 +330,6 @@ class _CreateSurveyPageState extends State<CreateSurveyPage> with TickerProvider
 
   @override
   Widget build(BuildContext context) {
-    // 处理无项目的情况
     if (widget.projects.isEmpty) {
       return Scaffold(
         body: Stack(
@@ -459,7 +457,6 @@ class _CreateSurveyPageState extends State<CreateSurveyPage> with TickerProvider
                             onPress: _showTimeLimitDialog,
                           ),
                         ],
-                        // 提交次数限制（可选，留空表示不限制）
                         const SizedBox(height: 16),
                         FTextFormField(
                           controller: _totalTimesController,

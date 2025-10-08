@@ -31,13 +31,11 @@ class SurveyResultsPage extends StatefulWidget {
   State<SurveyResultsPage> createState() => _SurveyResultsPageState();
 }
 
-// 渐变平移，用于实现无缝循环的彩虹动画（配合 TileMode.repeated）
 class _SlideGradientTransform extends GradientTransform {
   const _SlideGradientTransform({required this.slide});
-  final double slide; // 0..1
+  final double slide;
   @override
   vmath.Matrix4 transform(Rect bounds, {TextDirection? textDirection}) {
-    // 将渐变按容器宽度进行周期性平移
     final dx = bounds.width * slide;
     return vmath.Matrix4.translationValues(dx, 0.0, 0.0);
   }
@@ -50,13 +48,12 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
   String? _errorMessage;
   Set<int> _selectedResults = {};
   bool _isSelectionMode = false;
-  bool _usePieChart = false; // 是否使用饼状图
+  bool _usePieChart = false;
   late final ApiService _apiService;
   String? _desktopBackground;
   String? _mobileBackground;
-  int? _hoveredResultId; // 桌面端悬停高亮
+  int? _hoveredResultId;
   final ScrollController _scrollController = ScrollController();
-  // 统计块缓存
   Widget? _statisticsCache;
   String _statisticsCacheKey = '';
   late final AnimationController _rainbowCtl;
@@ -195,7 +192,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                                             touchPos = null;
                                             return;
                                           }
-                                          // 有命中则获取索引并进行边界校验
                                           final idx = pieTouchResponse.touchedSection!.touchedSectionIndex;
                                           if (idx < 0 || idx >= entries.length) {
                                             touchedIndex = null;
@@ -250,7 +246,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                   },
                 );
 
-                // 图例（两种布局：顶部纵向、底部换行）
                 final Widget legendTop = Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: stats.entries.map((entry) {
@@ -364,7 +359,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                 }
               },
             ),
-            // 底部分割线移除，保留上方一条
           ],
         ),
       );
@@ -465,7 +459,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
   }
 
   
-
   Widget _buildRatingRow(Question q, String selectChoices) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -508,7 +501,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
         v = 1.0 + ratio * (stars - 1);
       }
     } else {
-      // 无法解析，显示未评分
       return Padding(
         padding: const EdgeInsets.only(left: 16, top: 4),
         child: Text(
@@ -521,7 +513,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
       );
     }
 
-    // 限制范围
     if (allowHalf) {
       v = v.clamp(0.5, stars.toDouble());
     } else {
@@ -597,7 +588,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
       );
     }
 
-    // 星星样式渲染
     List<Widget> starRow = List.generate(stars, (i) {
       final idx = i + 1;
       Widget starWidget;
@@ -616,7 +606,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
       );
     });
 
-    // 面包屑样式渲染
     Widget crumbRow() {
       const double width = 24.0;
       const double height = 12.0;
@@ -669,8 +658,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
     final double barUnitWidth = useCrumb ? 24.0 : starIconSize;
     final double barWidth = barUnitWidth * stars;
 
-    // 显示当前评分值和对应标签
-    final double key = (v * 2).round() / 2.0; // 规整到0.5步进
+    final double key = (v * 2).round() / 2.0;
     final String? mappedLabel = labelsMap[key];
     final String currentLabel = mappedLabel ?? (key % 1 == 0 ? '${key.toInt()} 星' : '${key.toStringAsFixed(1)} 星');
 
@@ -766,7 +754,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
     _rainbowCtl = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
   }
 
-  // 获取（或构建）统计块，带缓存以减少重建
   Widget _getStatisticsCard() {
     if (_results.isEmpty) return const SizedBox.shrink();
     final key = _computeStatsKey();
@@ -786,7 +773,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
     super.dispose();
   }
 
-  // 玻璃卡片（与预览页相同风格），支持高亮
   Widget _buildGlassCard({required Widget child, bool highlighted = false}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -819,7 +805,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
   }
 
   Future<void> _loadData() async {
-    // 延迟显示加载状态，如果缓存存在会立即返回
     Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
       if (mounted && _isLoading) {
         setState(() {
@@ -831,17 +816,14 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
 
     try {
       final apiService = _apiService;
-      // 获取问卷结果和问题
       final futures = await Future.wait([
         apiService.getSurveyResults(widget.survey.id),
         apiService.getSurveyQuestions(widget.survey.id),
       ]);
 
-      // 安全地处理返回的数据
       final resultsData = futures[0];
       final questionsData = futures[1];
 
-      // 确保数据类型正确
       final List<SurveyResult> results = resultsData is List<SurveyResult> 
           ? resultsData 
           : <SurveyResult>[];
@@ -859,13 +841,11 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
         _isLoading = false;
         _selectedResults.clear();
         _isSelectionMode = false;
-        // 数据更新后重置统计缓存
         _statisticsCache = null;
         _statisticsCacheKey = '';
       });
     } catch (e) {
       setState(() {
-        // 检查是否是空数据的情况
         if (e.toString().contains('Null') && e.toString().contains('List')) {
           _errorMessage = '暂无答案提交';
           _results = [];
@@ -888,7 +868,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
         _mobileBackground = data['mobileBackground'] as String?;
       });
     } catch (e) {
-      // 获取失败不影响主流程
       if (!mounted) return;
       setState(() {
         _desktopBackground = null;
@@ -1256,7 +1235,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
               style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 16),
-            // 饼图模式：使用网格布局并列显示（包括非评级题和评级题）
             if (_usePieChart)
               LayoutBuilder(builder: (context, constraints) {
                 final w = constraints.maxWidth;
@@ -1266,7 +1244,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                 
                 for (final question in _questions) {
                   if (question.type != QuestionType.slider) {
-                    // 非评级题
                     final questionStats = responsesByQuestion[question.id] ?? {};
                     pieCards.add(SizedBox(
                       width: cols > 1 ? (w - gap) / 2 : w,
@@ -1276,7 +1253,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                       ),
                     ));
                   } else {
-                    // 评级题
                     final int stars = question.ratingStars;
                     final bool allowHalf = question.ratingAllowHalf;
                     final double min = question.ratingMin;
@@ -1339,9 +1315,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                 return Wrap(spacing: gap, runSpacing: 0, children: pieCards);
               })
             else
-            // 条形图模式：原有布局
             ..._questions.map((question) {
-              // 非评级题：沿用选项统计
               if (question.type != QuestionType.slider) {
                 final questionStats = responsesByQuestion[question.id] ?? {};
                 return Padding(
@@ -1357,7 +1331,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                         ),
                       ),
                       const SizedBox(height: 8),
-                      // 响应式：两列或三列网格
                       LayoutBuilder(builder: (context, constraints) {
                         final w = constraints.maxWidth;
                         final cols = w >= 1200 ? 3 : (w >= 800 ? 2 : 1);
@@ -1412,8 +1385,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                 );
               }
 
-              // 评级题：统计各评级被选中的概率
-              // 解析配置
               final int stars = question.ratingStars;
               final bool allowHalf = question.ratingAllowHalf;
               final double min = question.ratingMin;
@@ -1459,7 +1430,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                 bins[key] = (bins[key] ?? 0) + 1;
               }
 
-              // 渲染
               final entries = bins.entries.toList()
                 ..sort((a, b) => a.key.compareTo(b.key));
 
@@ -1468,7 +1438,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 饼图模式下标题在卡片内，条形图模式下标题在外面
                     if (!_usePieChart) ...[
                       Text(
                         question.title,
@@ -1491,7 +1460,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                           ),
                         )
                     else if (_usePieChart) ...[
-                      // 将分桶数据映射为饼图需要的结构
                       Builder(builder: (_) {
                         final mappedStats = <int, int>{};
                         final labels = <QuestionOption>[];
@@ -1577,7 +1545,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
     return Scaffold(
       body: Stack(
         children: [
-          // 背景层
           Positioned.fill(
             child: (_desktopBackground != null && _desktopBackground!.isNotEmpty) ||
                    (_mobileBackground != null && _mobileBackground!.isNotEmpty)
@@ -1599,7 +1566,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                   )
                 : const FrostedGlassBackground(),
           ),
-          // 内容层
           Column(
             children: [
               const TopSafeSpacer(),
@@ -1729,7 +1695,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                               : Builder(
                                   builder: (context) {
                                     final width = MediaQuery.of(context).size.width;
-                                    // 扩大桌面端内容最大宽度上限，避免被 1100 限制导致列数上不去
                                     final double target = isDesktop ? 2000 : width;
                                     final double side = width > target ? (width - target) / 2 : 0;
                                     return ScrollConfiguration(

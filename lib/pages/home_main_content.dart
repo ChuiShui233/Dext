@@ -19,8 +19,8 @@ final sectionSpacing = LayoutValue(
 class HomeMainContent extends StatelessWidget {
   final int projectCount;
   final int surveyCount;
-  final int totalSubmits; // 总回复数
-  final int totalViews;   // 总浏览数
+  final int totalSubmits;
+  final int totalViews;
   final VoidCallback onProjectTap;
   final VoidCallback onSurveyTap;
   final FetchTrend? fetchTrend;
@@ -49,10 +49,8 @@ class HomeMainContent extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 仅为移动端添加顶部留白，避免与页面级留白叠加
                 const TopSafeSpacer(desktop: 0, web: 0, mobile: 24),
                 
-                // Dashboard标题
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -146,7 +144,6 @@ class HomeMainContent extends StatelessWidget {
                         ],
                       );
                     } else {
-                      // 桌面端：单行布局
                       return Row(
                         children: [
                           Expanded(
@@ -195,7 +192,6 @@ class HomeMainContent extends StatelessWidget {
                 LayoutBuilder(
                   builder: (context, constraints) {
                     if (constraints.maxWidth < 800) {
-                      // 移动端：垂直堆叠
                       return Column(
                         children: [
                           DashboardChart(fetchTrend: fetchTrend),
@@ -204,8 +200,6 @@ class HomeMainContent extends StatelessWidget {
                         ],
                       );
                     } else {
-                      // 桌面端：水平排列
-                      // 计算与图表一致的内容高度，供右侧卡片内部滚动使用
                       final screenH = MediaQuery.of(context).size.height;
                       final isCompact = constraints.maxWidth < 800;
                       final target = (screenH * (isCompact ? 0.28 : 0.36));
@@ -214,13 +208,11 @@ class HomeMainContent extends StatelessWidget {
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // 左侧图表区域
                           Expanded(
                             flex: 2,
                             child: DashboardChart(fetchTrend: fetchTrend),
                           ),
                           const SizedBox(width: 24),
-                          // 右侧问卷回复记录
                           Expanded(
                             flex: 1,
                             child: RecentSurveyResponsesList(fixedHeight: chartHeight, apiService: apiService),

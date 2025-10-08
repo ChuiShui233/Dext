@@ -61,7 +61,6 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
   }
 
 
-
   Future<void> _fetchUserData() async {
     try {
       final user = await widget.apiService.getCurrentUserHandler();
@@ -101,19 +100,16 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
         final file = result.files.first;
         Uint8List? imageBytes;
 
-        // 获取图片数据
         if (file.bytes != null) {
           // Web 和桌面端优先使用 bytes
           imageBytes = file.bytes!;
         } else if (file.path != null) {
-          // 移动端使用文件路径读取
           final imageFile = File(file.path!);
           imageBytes = await imageFile.readAsBytes();
         } else {
           throw '无法获取图片数据';
         }
 
-        // 显示裁剪对话框
         if (!mounted) return;
         final Uint8List? croppedBytes = await showDialog<Uint8List>(
           context: context,
@@ -122,7 +118,6 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
           ),
         );
 
-        // 用户取消裁剪
         if (croppedBytes == null) return;
 
         if (mounted) {
@@ -132,7 +127,6 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
           );
         }
 
-        // 上传裁剪后的图片
         final String avatarUrl = await widget.apiService.uploadAvatarUniversal(
           imageBytes: croppedBytes,
           fileName: file.name.isNotEmpty ? file.name : 'avatar.png',
@@ -143,7 +137,6 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
             _currentUser = _currentUser?.copyWith(avatarUrl: avatarUrl);
           });
           
-          // 通知其他组件用户数据已更新
           widget.userNotifier?.value = _currentUser;
         }
 
@@ -237,7 +230,6 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
             ),
             FButton(
               onPress: isLoading ? null : () async {
-                // 验证表单
                 if (!formKey.currentState!.validate()) {
                   return;
                 }
@@ -253,10 +245,8 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
                     newUsername: newUsername,
                   );
                   
-                  // 用户名更新成功后，重新获取用户信息确保数据一致性
                   await _fetchUserData();
                   
-                  // 通知其他组件用户数据已更新
                   widget.userNotifier?.value = _currentUser;
                   
                   if (context.mounted) {
@@ -496,7 +486,6 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
     );
   }
 
-  // 导航到账号安全页面
   void _navigateToAccountSecurity(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isWide = screenWidth > 800;
@@ -613,11 +602,9 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
       try {
         final prefs = await SharedPreferences.getInstance();
         
-        // 获取所有缓存键
         final keys = prefs.getKeys();
         int clearedCount = 0;
         
-        // 清除所有缓存数据（保留认证信息）
         for (final key in keys) {
           if (!key.startsWith('auth_') && 
               !key.startsWith('refresh_') && 
@@ -746,7 +733,6 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
                       : () async {
                           setState(() => isLoading = true);
                           try {
-                            // 调用服务端注销并清理所有本地数据
                             await widget.apiService.logoutStrict();
                             if (dialogContext.mounted) {
                               Navigator.pop(dialogContext, true);

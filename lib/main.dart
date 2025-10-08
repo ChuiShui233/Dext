@@ -43,7 +43,6 @@ bool get isDesktop {
 class _AppWindowListener with WindowListener {
   @override
   void onWindowClose() async {
-    // 拦截关闭，隐藏到托盘
     final isPrevent = await windowManager.isPreventClose();
     if (isPrevent) {
       await windowManager.hide();
@@ -54,7 +53,6 @@ class _AppWindowListener with WindowListener {
 class _AppTrayListener with TrayListener {
   @override
   void onTrayIconMouseDown() async {
-    // 单击切换显示/隐藏
     final visible = await windowManager.isVisible();
     if (visible) {
       await windowManager.hide();

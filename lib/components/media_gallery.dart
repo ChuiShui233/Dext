@@ -3,16 +3,14 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../components/video_player_widget.dart';
 import '../services/config.dart';
 
-/// 通用媒体画廊：支持图片/视频/音频/其他文件的缩略图展示
-/// - onOpen 可选：提供时点击缩略图会回调 (index, url, all)
 class MediaGallery extends StatelessWidget {
   final List<String> mediaUrls;
   final double imageItemSize;
-  final Size? videoItemSize; // 若提供则用于视频缩略尺寸
-  final bool enableVideoPlayer; // 为 true 时用 VideoPlayerWidget 渲染视频缩略图
-  final bool showVideoOverlay; // 视频覆盖播放图标
+  final Size? videoItemSize; 
+  final bool enableVideoPlayer;
+  final bool showVideoOverlay; 
   final void Function(int index, String url, List<String> all)? onOpen;
-  // 可选：为需要鉴权的资源提供 token
+
   final String? authToken;
 
   const MediaGallery({

@@ -14,7 +14,7 @@ class CropImageDialog extends StatefulWidget {
     super.key,
     this.imageBytes,
     this.imageFile,
-  }) : assert(imageBytes != null || imageFile != null, '必须提供 imageBytes 或 imageFile');
+  }) : assert(imageBytes != null || imageFile != null);
 
   @override
   State<CropImageDialog> createState() => _CropImageDialogState();
@@ -28,7 +28,7 @@ class _CropImageDialogState extends State<CropImageDialog> {
   void initState() {
     super.initState();
     _cropController = CropController(
-      aspectRatio: 1.0, // 1:1 比例
+      aspectRatio: 1.0,
       defaultCrop: const Rect.fromLTRB(0.1, 0.1, 0.9, 0.9),
     );
   }

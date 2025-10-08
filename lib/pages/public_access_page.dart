@@ -71,7 +71,6 @@ class _PublicAccessPageState extends State<PublicAccessPage> {
         final uri = Uri.tryParse(text);
         surveyId = uri?.queryParameters['id'] ?? text;
       } else if (text.contains('/')) {
-        // 如果是路径格式，提取最后一部分
         final parts = text.split('/');
         surveyId = parts.last;
       }
@@ -108,7 +107,6 @@ class _PublicAccessPageState extends State<PublicAccessPage> {
       body: Stack(
         children: [
           const FrostedGlassBackground(),
-          // 内容层
           Column(
             children: [
               const TopSafeSpacer(),
@@ -134,7 +132,6 @@ class _PublicAccessPageState extends State<PublicAccessPage> {
                     children: [
                       const SizedBox(height: 20),
                       
-                      // 主标题卡片
                       _buildGlassCard(
                         child: Padding(
                           padding: const EdgeInsets.all(24),
@@ -171,7 +168,6 @@ class _PublicAccessPageState extends State<PublicAccessPage> {
                       
                       const SizedBox(height: 24),
                       
-                      // 输入框卡片
                       _buildGlassCard(
                         child: Padding(
                           padding: const EdgeInsets.all(20),
@@ -238,7 +234,6 @@ class _PublicAccessPageState extends State<PublicAccessPage> {
                       
                       const SizedBox(height: 24),
                       
-                      // 访问按钮
                       _buildGlassCard(
                         child: Padding(
                           padding: const EdgeInsets.all(4),
@@ -279,7 +274,6 @@ class _PublicAccessPageState extends State<PublicAccessPage> {
                       
                       const SizedBox(height: 32),
                       
-                      // 使用说明卡片
                       _buildGlassCard(
                         child: Padding(
                           padding: const EdgeInsets.all(20),
@@ -323,7 +317,6 @@ class _PublicAccessPageState extends State<PublicAccessPage> {
                       
                       const SizedBox(height: 24),
                       
-                      // 底部提示
                       Text(
                         '如果您是问卷创建者，请在问卷管理界面获取公开链接',
                         style: TextStyle(
@@ -377,7 +370,6 @@ class _PublicAccessPageState extends State<PublicAccessPage> {
       // Web平台直接使用路由替换，清除历史记录
       Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
     } else {
-      // 移动平台使用路由导航
       Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
     }
   }

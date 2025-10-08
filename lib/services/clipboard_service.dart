@@ -6,9 +6,7 @@ import 'package:forui/forui.dart';
 import 'package:clipboard_watcher/clipboard_watcher.dart' if (dart.library.io) 'package:clipboard_watcher/clipboard_watcher.dart';
 import 'url_handler.dart';
 
-// Web 平台剪切板权限处理 - 使用 Flutter 的 Clipboard API
-
-/// 剪切板监听服务
+/// 服务
 class ClipboardService with ClipboardListener {
   static ClipboardService? _instance;
   static ClipboardService get instance => _instance ??= ClipboardService._();
@@ -21,7 +19,7 @@ class ClipboardService with ClipboardListener {
   Timer? _webClipboardTimer;
   bool _webClipboardPermissionGranted = false;
   
-  /// 开始监听剪切板
+  /// 监听剪切板
   Future<void> startListening({Function(String)? onSurveyIdDetected}) async {
     if (_isListening) return;
     
@@ -91,18 +89,15 @@ class ClipboardService with ClipboardListener {
     }
   }
   
-  /// 检查浏览器是否支持 Clipboard API
+  /// 检查浏览器
   bool _isClipboardApiSupported() {
-    // Web 平台使用 Flutter 的 Clipboard API，总是支持
     return kIsWeb;
   }
 
-  /// 读取 Web 平台剪切板内容
   Future<String?> _readWebClipboard() async {
     if (!kIsWeb || !_webClipboardPermissionGranted) return null;
     
     try {
-      // 使用 Flutter 的 Clipboard API 读取剪切板
       final clipboardData = await flutter_services.Clipboard.getData(flutter_services.Clipboard.kTextPlain);
       return clipboardData?.text;
     } catch (e) {

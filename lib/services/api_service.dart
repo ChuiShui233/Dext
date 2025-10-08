@@ -1,4 +1,3 @@
-// Modified by ChuiShui12 on 2025/10/07.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -24,7 +23,6 @@ import '../models/paginated_response.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-/// 令牌过期异常类
 class TokenExpired {
   final String message;
   TokenExpired(this.message);
@@ -33,7 +31,6 @@ class TokenExpired {
   String toString() => message;
 }
 
-// 统一复用 core 中的类型，避免类型不一致
 typedef RequestStatus = core.RequestStatus;
 typedef StatusCallback = core.StatusCallback;
 typedef ProgressCallback = core.ProgressCallback;
@@ -41,11 +38,9 @@ typedef ProgressCallback = core.ProgressCallback;
 class ApiService {
   static const String baseUrl = apiBaseUrl;
   static const Duration timeoutDuration = Duration(seconds: 15);
-  // 全局401未授权处理回调（由应用在启动时注册）
   static VoidCallback? onUnauthorized;
   String? authToken;
   final CryptoService _cryptoService = CryptoService();
-  // Facade over modular services
   late final core.ApiCore _core;
   late final AuthService _authService;
   late final ProjectService _projectService;
@@ -53,20 +48,16 @@ class ApiService {
   StreamSubscription<String>? _coreMsgSub;
   StreamSubscription<Map<String, dynamic>>? _coreDataSub;
   
-  // 实时响应相关
   RequestStatus _currentStatus = RequestStatus.idle;
   String? _lastErrorMessage;
   final StreamController<RequestStatus> _statusController = StreamController<RequestStatus>.broadcast();
   final StreamController<String> _messageController = StreamController<String>.broadcast();
   
-  // 数据更新流 - 用于通知UI数据已更新
   final StreamController<Map<String, dynamic>> _dataUpdateController = StreamController<Map<String, dynamic>>.broadcast();
 
-  // 获取当前状态
   RequestStatus get currentStatus => _currentStatus;
   String? get lastErrorMessage => _lastErrorMessage;
   
-  // 状态流
   Stream<RequestStatus> get statusStream => _statusController.stream;
   Stream<String> get messageStream => _messageController.stream;
   
@@ -85,7 +76,6 @@ class ApiService {
     _coreDataSub = _core.dataUpdateStream.listen((d) => _dataUpdateController.add(d));
   }
 
-  // 确保 authToken 已加载（例如应用重启后从本地恢复）
   Future<void> _ensureAuthTokenLoaded() async {
     if (authToken == null || authToken!.isEmpty) {
       try {
@@ -93,19 +83,15 @@ class ApiService {
         final t = prefs.getString('auth_token');
         if (t != null && t.isNotEmpty) {
           authToken = t;
-          // 同步到核心请求层，保证后续请求带上 Authorization 头
           _core.updateAuthToken(authToken);
         }
-        // 如果偏好存储没有，回退到安全存储（应用冷启动常见于此）
         if ((authToken == null || authToken!.isEmpty)) {
           try {
             const storage = FlutterSecureStorage();
             final st = await storage.read(key: 'auth_token');
             if (st != null && st.isNotEmpty) {
               authToken = st;
-              // 回写到 SharedPreferences，便于后续快速加载
               await prefs.setString('auth_token', st);
-              // 同步到核心请求层
               _core.updateAuthToken(authToken);
             }
           } catch (_) {}
@@ -114,7 +100,6 @@ class ApiService {
     }
   }
 
-  // 最近提交列表（用于仪表盘卡片）（带缓存）
   Future<List<Map<String, dynamic>>> getRecentSubmissions({StatusCallback? onStatus}) async {
     final prefs = await SharedPreferences.getInstance();
     const cacheKey = 'recent_submissions';
@@ -516,9 +501,7 @@ class ApiService {
         final token = responseData['token'];
         final expires = DateTime.parse(responseData['expires']);
         
-        // 持久化并同步内存 token
         authToken = token?.toString();
-        // 同步到核心请求层，避免加密/普通请求缺少 Authorization 头
         _core.updateAuthToken(authToken);
         try {
           final prefs = await SharedPreferences.getInstance();
@@ -536,7 +519,6 @@ class ApiService {
       } else {
         Map<String, dynamic> responseData;
         
-        // 检查错误响应是否也加密了
         
         if (response.headers['x-encrypted'] == 'aes') {
           try {
@@ -545,7 +527,6 @@ class ApiService {
             final decryptedJson = utf8.decode(decryptedBytes);
             responseData = json.decode(decryptedJson);
           } catch (e) {
-            // 解密失败，尝试直接解析
             try {
               responseData = json.decode(response.body);
             } catch (jsonError) {

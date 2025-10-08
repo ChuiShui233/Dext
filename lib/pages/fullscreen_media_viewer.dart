@@ -11,7 +11,6 @@ class FullscreenMediaViewer extends StatefulWidget {
   final String? title;
   final List<String>? allMediaUrls;
   final int? currentIndex;
-  // 可选：为受保护资源提供鉴权
   final String? authToken;
 
   const FullscreenMediaViewer({
@@ -45,11 +44,9 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
   bool _isZoomed = false;
   bool _isDismissing = false;
   
-  // 滑动关闭相关
   double _dragDistance = 0.0;
   bool _isDragging = false;
   
-  // 视频播放控制
   final GlobalKey<_FullscreenVideoPlayerState> _videoPlayerKey = GlobalKey();
 
   @override
@@ -61,19 +58,16 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
       vsync: this,
     );
     
-    // 入场动画控制器
     _entryAnimationController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
     
-    // 关闭动画控制器
     _dismissAnimationController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
     
-    // 媒体内容缩放动画
     _entryScaleAnimation = Tween<double>(
       begin: 0.7,
       end: 1.0,
@@ -82,7 +76,6 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
       curve: const Interval(0.2, 1.0, curve: Curves.easeOutBack),
     ));
     
-    // 媒体内容淡入动画
     _entryFadeAnimation = Tween<double>(
       begin: 0.0,
       end: 1.0,
@@ -91,7 +84,6 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
       curve: const Interval(0.0, 0.8, curve: Curves.easeOut),
     ));
     
-    // 关闭滑动动画
     _dismissSlideAnimation = Tween<Offset>(
       begin: Offset.zero,
       end: const Offset(0.0, -1.0),
@@ -100,7 +92,6 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
       curve: Curves.easeInCubic,
     ));
     
-    // 关闭缩放动画
     _dismissScaleAnimation = Tween<double>(
       begin: 1.0,
       end: 0.8,
@@ -111,10 +102,8 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
     
     _currentIndex = widget.currentIndex ?? 0;
     
-    // 隐藏状态栏
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
     
-    // 启动入场动画
     _entryAnimationController.forward();
     
     // 3秒后自动隐藏控制栏
@@ -127,7 +116,6 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
     _animationController.dispose();
     _entryAnimationController.dispose();
     _dismissAnimationController.dispose();
-    // 恢复状态栏
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
@@ -139,7 +127,6 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
           _showControls = false;
         });
         
-        // 同步隐藏视频控制栏
         if (_videoPlayerKey.currentState != null) {
           _videoPlayerKey.currentState!.updateControlsVisibility(false);
         }
@@ -152,7 +139,6 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
       _showControls = !_showControls;
     });
     
-    // 同步更新视频控制栏状态
     if (_videoPlayerKey.currentState != null) {
       _videoPlayerKey.currentState!.updateControlsVisibility(_showControls);
     }
@@ -205,7 +191,6 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
   }
 
   void _onInteractionUpdate(ScaleUpdateDetails details) {
-    // 检测是否处于缩放状态
     final scale = _transformationController.value.getMaxScaleOnAxis();
     setState(() {
       _isZoomed = scale > 1.0;
@@ -230,7 +215,6 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
     }
   }
 
-  // 处理垂直滑动手势
   void _onVerticalDragStart(DragStartDetails details) {
     if (_isZoomed) return; // 如果正在缩放，不处理滑动
     _isDragging = true;
@@ -242,7 +226,6 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
     
     setState(() {
       _dragDistance += details.delta.dy;
-      // 限制向下拖拽，只允许向上
       if (_dragDistance > 0) {
         _dragDistance = 0;
       }
@@ -254,19 +237,16 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
     
     _isDragging = false;
     
-    // 如果向上滑动距离超过阈值或速度足够快，则关闭
     const double dismissThreshold = -200.0;
     const double velocityThreshold = -300.0;
     
     if (_dragDistance < dismissThreshold || details.velocity.pixelsPerSecond.dy < velocityThreshold) {
       _dismissViewer();
     } else {
-      // 回弹到原位置，使用动画
       _animateBackToPosition();
     }
   }
 
-  // 回弹动画
   void _animateBackToPosition() {
     final startDistance = _dragDistance;
     final animationController = AnimationController(
@@ -293,7 +273,6 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
     });
   }
 
-  // 关闭查看器
   void _dismissViewer() {
     if (_isDismissing) return;
     
@@ -301,11 +280,9 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
       _isDismissing = true;
     });
     
-    // 从当前拖拽位置开始关闭动画
     final currentOffset = _dragDistance / MediaQuery.of(context).size.height;
     final currentScale = _entryScaleAnimation.value * (1.0 + (_dragDistance.abs() * 0.0005));
     
-    // 重新创建关闭动画，从当前位置开始
     _dismissSlideAnimation = Tween<Offset>(
       begin: Offset(0.0, currentOffset),
       end: const Offset(0.0, -1.0),
@@ -314,7 +291,6 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
       curve: Curves.easeInCubic,
     ));
     
-    // 重新创建缩放动画，从当前缩放开始
     _dismissScaleAnimation = Tween<double>(
       begin: currentScale,
       end: 0.7,
@@ -341,11 +317,9 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          // 半透明遮罩，保证露出下层页面但提供适度压暗
           Positioned.fill(
             child: Container(color: Colors.black.withValues(alpha: 0.5)),
           ),
-          // 主要内容区域
           Positioned.fill(
             child: GestureDetector(
               onVerticalDragStart: _onVerticalDragStart,
@@ -354,19 +328,15 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
               child: AnimatedBuilder(
                 animation: Listenable.merge([_entryAnimationController, _dismissAnimationController]),
                 builder: (context, child) {
-                  // 计算当前的变换
                   double currentScale = _entryScaleAnimation.value;
                   Offset currentOffset = Offset.zero;
                   
                   if (_isDismissing) {
-                    // 使用关闭动画
                     currentScale = _dismissScaleAnimation.value;
                     currentOffset = _dismissSlideAnimation.value;
                   } else if (_dragDistance != 0.0) {
-                    // 使用拖拽偏移，添加阻尼效果
                     final dampedDistance = _dragDistance * 0.7;
                     currentOffset = Offset(0.0, dampedDistance / MediaQuery.of(context).size.height);
-                    // 拖拽时轻微缩放
                     currentScale = _entryScaleAnimation.value * (1.0 + (_dragDistance.abs() * 0.0005));
                   }
                   
@@ -452,7 +422,6 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
             ),
           ),
 
-          // 顶部控制栏（视频模式下隐藏）
           if (!isVideo)
             AnimatedPositioned(
               duration: const Duration(milliseconds: 300),
@@ -520,9 +489,7 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
               ),
             ),
 
-          // 左右切换按钮（仅在有多个媒体文件时显示；视频模式下隐藏）
           if (hasMultipleMedia && _showControls && !isVideo) ...[
-            // 左侧切换按钮
             Positioned(
               left: 16,
               top: 0,
@@ -540,7 +507,6 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
                 ),
               ),
             ),
-            // 右侧切换按钮
             Positioned(
               right: 16,
               top: 0,
@@ -560,7 +526,6 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
             ),
           ],
 
-          // 底部信息栏（视频模式下隐藏页面信息条）
           if (!isVideo)
             AnimatedPositioned(
               duration: const Duration(milliseconds: 300),
@@ -664,28 +629,21 @@ class _FullscreenVideoPlayerState extends State<_FullscreenVideoPlayer> {
   final GlobalKey _volumeIconKey = GlobalKey();
   OverlayEntry? _volumeOverlayEntry;
   bool _volumeOverlayVisible = false;
-  // 进度条拖动动画状态
   bool _isScrubbing = false;
   // 拖动中的临时进度（0..1），仅在_scrubbing时生效
   double? _scrubFraction;
-  // 记录拖动前是否处于播放状态
   bool _wasPlayingBeforeScrub = false;
   // 进度条测量用 key
   final GlobalKey _barKey = GlobalKey();
-  // 键盘焦点节点
   final FocusNode _focusNode = FocusNode();
-  // 长按方向键调整音量的定时器
   Timer? _volumeAdjustTimer;
-  // 当前按下的键
   LogicalKeyboardKey? _currentPressedKey;
 
   @override
   void initState() {
     super.initState();
     _initializeVideo();
-    // 视频模式下默认显示自身控制条（与父组件解耦）
     _showVideoControls = true;
-    // 请求焦点以接收键盘事件
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
     });
@@ -707,10 +665,8 @@ class _FullscreenVideoPlayerState extends State<_FullscreenVideoPlayer> {
         if (widget.autoPlay) {
           _controller.play();
         }
-        // 初始化音量
         _controller.setVolume(_volume);
         
-        // 添加播放状态监听器，视频播放到结尾时自动暂停
         _controller.addListener(_videoListener);
       }
     } catch (e) {
@@ -734,7 +690,6 @@ class _FullscreenVideoPlayerState extends State<_FullscreenVideoPlayer> {
       // 当剩余时间少于100毫秒时暂停
       if (remaining <= const Duration(milliseconds: 100) && _controller.value.isPlaying) {
         _controller.pause();
-        // 将播放位置设置到结尾
         _controller.seekTo(duration);
         setState(() {});
       }
@@ -778,7 +733,6 @@ class _FullscreenVideoPlayerState extends State<_FullscreenVideoPlayer> {
       _isMuted = v == 0.0;
     });
     
-    // 如果音量浮层正在显示，触发重建以更新数值显示
     if (_volumeOverlayEntry != null) {
       _volumeOverlayEntry!.markNeedsBuild();
     }
@@ -797,12 +751,10 @@ class _FullscreenVideoPlayerState extends State<_FullscreenVideoPlayer> {
       if (event.logicalKey == LogicalKeyboardKey.arrowUp || 
           event.logicalKey == LogicalKeyboardKey.arrowDown) {
         
-        // 如果是新按键或不同的按键，先停止之前的定时器
         if (_currentPressedKey != event.logicalKey) {
           _volumeAdjustTimer?.cancel();
           _currentPressedKey = event.logicalKey;
           
-          // 立即执行一次音量调整
           _adjustVolume(event.logicalKey);
           
           // 启动定时器进行连续调整（延迟300ms开始，然后每100ms重复）
@@ -820,7 +772,6 @@ class _FullscreenVideoPlayerState extends State<_FullscreenVideoPlayer> {
         }
       }
     } else if (event is KeyUpEvent) {
-      // 按键释放时停止连续调整
       if (event.logicalKey == _currentPressedKey) {
         _volumeAdjustTimer?.cancel();
         _currentPressedKey = null;
@@ -830,11 +781,9 @@ class _FullscreenVideoPlayerState extends State<_FullscreenVideoPlayer> {
 
   void _adjustVolume(LogicalKeyboardKey key) {
     if (key == LogicalKeyboardKey.arrowUp) {
-      // 上方向键增加音量
       final newVolume = (_volume + 0.05).clamp(0.0, 1.0);
       _setVolume(newVolume);
     } else if (key == LogicalKeyboardKey.arrowDown) {
-      // 下方向键减少音量
       final newVolume = (_volume - 0.05).clamp(0.0, 1.0);
       _setVolume(newVolume);
     }
@@ -854,28 +803,23 @@ class _FullscreenVideoPlayerState extends State<_FullscreenVideoPlayer> {
     _volumeOverlayVisible = false; // 初始为不可见，用于入场动画
     _volumeOverlayEntry = OverlayEntry(
       builder: (context) {
-        // 每次重建时都获取最新的音量值
         double tempVolume = _volume;
         
-        // 实时获取图标位置，确保音量条始终固定在图标上方
         final RenderBox? iconBox = _volumeIconKey.currentContext?.findRenderObject() as RenderBox?;
         final RenderBox overlayBox = overlay.context.findRenderObject() as RenderBox;
         if (iconBox == null) {
           return const SizedBox.shrink();
         }
 
-        // 图标在屏幕中的位置
         final Offset iconGlobal = iconBox.localToGlobal(Offset.zero);
         final Size iconSize = iconBox.size;
 
-        // 计算弹层尺寸与位置（竖直条在图标上方）
         const double panelWidth = 56;
         const double panelHeight = 172;
         final double left = iconGlobal.dx + iconSize.width / 2 - panelWidth / 2;
         final double top = iconGlobal.dy - panelHeight - 16;
         return Stack(
           children: [
-            // 点击其它区域关闭
             Positioned.fill(
               child: GestureDetector(
                 behavior: HitTestBehavior.translucent,
@@ -964,7 +908,6 @@ class _FullscreenVideoPlayerState extends State<_FullscreenVideoPlayer> {
     );
 
     overlay.insert(_volumeOverlayEntry!);
-    // 下一帧切换为可见，触发入场动画
     Future.delayed(const Duration(milliseconds: 16), () {
       if (_volumeOverlayEntry == null) return;
       _volumeOverlayVisible = true;
@@ -976,7 +919,6 @@ class _FullscreenVideoPlayerState extends State<_FullscreenVideoPlayer> {
     if (_volumeOverlayEntry == null) return;
     _volumeOverlayVisible = false;
     _volumeOverlayEntry!.markNeedsBuild();
-    // 等待淡出动画完成后再移除
     Future.delayed(const Duration(milliseconds: 200), () {
       _volumeOverlayEntry?.remove();
       _volumeOverlayEntry = null;
@@ -1013,7 +955,6 @@ return KeyboardListener(
   onKeyEvent: _handleKeyEvent,
   child: GestureDetector(
     onTap: () {
-      // 点击视频：切换控制条显示，同时隐藏音量浮层
       _hideVolumeOverlay();
       setState(() {
         _showVideoControls = !_showVideoControls;
@@ -1077,7 +1018,6 @@ return KeyboardListener(
 
 
   Widget _buildVideoControls() {
-    // 根据父控制栏的显示状态动态调整视频控制栏位置
     double bottomPosition = widget.parentControlsVisible ? 120 : 40;
     
     return Positioned(
@@ -1140,7 +1080,6 @@ return KeyboardListener(
     if (totalMs > 0) {
       playedFraction = (position.inMilliseconds / totalMs).clamp(0.0, 1.0);
     }
-    // 拖动中优先用临时进度
     final effectivePlayed = (_isScrubbing && _scrubFraction != null)
         ? _scrubFraction!.clamp(0.0, 1.0)
         : playedFraction;
@@ -1164,7 +1103,6 @@ return KeyboardListener(
       behavior: HitTestBehavior.translucent,
       onTapDown: (details) => _seekByLocalDx(details.localPosition.dx),
       onHorizontalDragStart: (details) {
-        // 记录拖动前的播放状态，并在开始拖动时暂停，保证进度拖动后确实处于暂停态
         _wasPlayingBeforeScrub = _controller.value.isPlaying;
         if (_wasPlayingBeforeScrub) {
           _controller.pause();
@@ -1178,7 +1116,6 @@ return KeyboardListener(
       },
       onHorizontalDragEnd: (details) {
         _commitScrub();
-        // 不自动恢复播放，保持暂停，用户手动点击播放（与常见播放器一致）
       },
       onHorizontalDragCancel: () {
         setState(() {
@@ -1208,7 +1145,6 @@ return KeyboardListener(
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // 缓冲条
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Container(
@@ -1216,7 +1152,6 @@ return KeyboardListener(
                         color: bufferedColor,
                       ),
                     ),
-                    // 已播放
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Container(
@@ -1267,7 +1202,6 @@ return KeyboardListener(
   }
 
   void _seekByLocalDx(double localDx) {
-    // 点击定位进度
     final duration = _controller.value.duration;
     if (duration <= Duration.zero) return;
     // 通过进度条自身context计算宽度

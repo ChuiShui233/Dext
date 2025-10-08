@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 typedef FetchTrend = Future<Map<String, dynamic>> Function(String range);
 
 class DashboardChart extends StatefulWidget {
-  final FetchTrend? fetchTrend; // 父级提供的获取趋势方法（B 方案）
+  final FetchTrend? fetchTrend;
   const DashboardChart({super.key, this.fetchTrend});
 
   @override
@@ -25,9 +25,8 @@ class _DashboardChartState extends State<DashboardChart> {
   }
 
   Future<void> _loadTrend() async {
-    if (widget.fetchTrend == null) return; // 兼容占位
+    if (widget.fetchTrend == null) return;
     
-    // 延迟显示加载状态，如果缓存存在会立即返回
     Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
       if (mounted && _loading) {
         setState(() => _loading = true);
@@ -35,7 +34,6 @@ class _DashboardChartState extends State<DashboardChart> {
     });
     
     try {
-      // 记录加载前的总数，供动画起点使用
       final oldTotal = _counts.isNotEmpty ? _counts.fold<int>(0, (a, b) => a + b) : 0;
       final data = await widget.fetchTrend!.call(_range);
       loadingTimer.cancel();
@@ -51,14 +49,12 @@ class _DashboardChartState extends State<DashboardChart> {
       });
     } catch (_) {
       loadingTimer.cancel();
-      // 忽略，保持占位
       if (mounted) setState(() => _loading = false);
     }
   }
 
   void _setRange(String r) {
     if (_range == r) return;
-    // 切换范围前，记录当前合计作为动画起点
     final oldTotal = _counts.isNotEmpty ? _counts.fold<int>(0, (a, b) => a + b) : 0;
     setState(() {
       _prevTotalForRange = oldTotal.toDouble();
@@ -74,22 +70,17 @@ class _DashboardChartState extends State<DashboardChart> {
 
     final hasData = _labels.isNotEmpty && _counts.isNotEmpty && _labels.length == _counts.length;
     final maxCount = hasData ? (_counts.reduce((a, b) => a > b ? a : b)) : 100;
-    // 规范化标签显示：7日用 周几，月用 YY-MM（去掉前缀 20）
+    
     final displayLabels = hasData
         ? _labels.map((s) {
             if (_range == '7d') {
-              // 期望 YYYY-MM-DD -> 解析为周几
               try {
                 final dt = DateTime.parse(s);
-                // Dart: Monday=1 ... Sunday=7
                 const names = ['周一','周二','周三','周四','周五','周六','周日'];
                 final idx = (dt.weekday - 1).clamp(0, 6);
                 return names[idx];
-              } catch (_) {
-                // 回退：若无法解析，保留原串
-              }
+              } catch (_) {}
             } else if (_range == 'month') {
-              // 期望 YYYY-MM -> 去掉前缀 "20" 为 YY-MM
               if (s.length >= 7 && s.startsWith('20')) {
                 return s.substring(2, 7);
               }
@@ -98,19 +89,16 @@ class _DashboardChartState extends State<DashboardChart> {
           }).toList()
         : const <String>[];
 
-    // 按范围展示合计：7日显示“近7日合计”，按月显示“当月合计”
     final int? totalForRange = hasData ? _counts.fold<int>(0, (a, b) => a + b) : null;
     final String totalLabel = _range == 'month' ? '当月合计' : '近7日合计';
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // 根据可用空间自适应高度：移动端更紧凑，桌面端略高；并限制在合理范围内
         final screenH = MediaQuery.of(context).size.height;
         final isCompact = constraints.maxWidth < 800;
         final target = (screenH * (isCompact ? 0.28 : 0.36));
         final chartHeight = target.clamp(220.0, 420.0);
-        // 柱体最大高度：扣除顶部标题与内边距后的视觉高度
-        final barMaxHeight = chartHeight - 50; // 约留出标题、间距
+        final barMaxHeight = chartHeight - 50;
 
         return Container(
           padding: const EdgeInsets.all(24),
@@ -230,9 +218,8 @@ class _DashboardChartState extends State<DashboardChart> {
     final onSurface60 = theme.colorScheme.onSurface.withValues(alpha: 0.6);
     final onSurface80 = theme.colorScheme.onSurface.withValues(alpha: 0.8);
 
-    // 动态计算柱子宽度，避免溢出
     final itemCount = labels.length;
-    final availableWidth = MediaQuery.of(context).size.width - 80; // 减去padding
+    final availableWidth = MediaQuery.of(context).size.width - 80;
     final maxItemWidth = (availableWidth / itemCount).clamp(20.0, 60.0);
     final barWidth = (maxItemWidth * 0.4).clamp(12.0, 24.0);
     final labelWidth = maxItemWidth;
@@ -244,7 +231,6 @@ class _DashboardChartState extends State<DashboardChart> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            // 顶部显示数值
             Text(
               '${counts[i]}',
               style: TextStyle(color: onSurface80, fontSize: 10, fontWeight: FontWeight.w600),
@@ -277,7 +263,6 @@ class _DashboardChartState extends State<DashboardChart> {
   }
 
   Widget _buildPlaceholder(BuildContext context, double barMaxHeight) {
-    // 原静态示例作为占位
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       crossAxisAlignment: CrossAxisAlignment.end,

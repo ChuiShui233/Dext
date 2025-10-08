@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../pages/frame_page.dart';
 import '../services/api_service.dart';
 
-// 这是一个代理类，将功能转移到了FramePage
 class AppLayout extends StatelessWidget {
   final int selectedIndex;
   final Function(int) onIndexChanged;

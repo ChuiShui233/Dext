@@ -45,12 +45,10 @@ class _TimeLimitPageState extends State<TimeLimitPage> with TickerProviderStateM
   late int _hours;
   late int _minutes;
   
-  // 为时间选择器添加唯一的 key
   final _daysSelectKey = GlobalKey();
   final _hoursSelectKey = GlobalKey();
   final _minutesSelectKey = GlobalKey();
   
-  // 添加控制器
   late final FSelectController<int> _daysController;
   late final FSelectController<int> _hoursController;
   late final FSelectController<int> _minutesController;
@@ -62,12 +60,10 @@ class _TimeLimitPageState extends State<TimeLimitPage> with TickerProviderStateM
     _hours = widget.initialHours;
     _minutes = widget.initialMinutes;
     
-    // 初始化控制器
     _daysController = FSelectController<int>(vsync: this);
     _hoursController = FSelectController<int>(vsync: this);
     _minutesController = FSelectController<int>(vsync: this);
     
-    // 设置控制器的初始值
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _daysController.value = _days;
       _hoursController.value = _hours;
@@ -232,19 +228,16 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
     _typeSelectController = FSelectController<int>(vsync: this);
     _statusSelectController = FSelectController<int>(vsync: this);
 
-    // 初始化表单数据
     _titleController.text = widget.survey.surveyName;
     _descriptionController.text = widget.survey.description;
     _selectedProjectId = widget.survey.projectId;
     _selectedType = widget.survey.surveyType;
     _selectedStatus = widget.survey.surveyStatus;
-    // 初始化次数限制（均为可选）
     _totalTimesController.text = widget.survey.totalTimes > 0 ? widget.survey.totalTimes.toString() : '';
     _perUserLimitController.text = (widget.survey.perUserLimit != null && widget.survey.perUserLimit! > 0)
         ? widget.survey.perUserLimit!.toString()
         : '';
     
-    // 初始化截止时间
     if (widget.survey.surveyType == 1 && widget.survey.deadline != null) {
       try {
         final deadline = DateTime.parse(widget.survey.deadline!);
@@ -255,13 +248,11 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
           _selectedHours = difference.inHours.remainder(24);
           _selectedMinutes = difference.inMinutes.remainder(60);
         } else {
-          // 如果截止时间已经过期，设置为默认值
           _selectedDays = 0;
           _selectedHours = 0;
           _selectedMinutes = 0;
         }
       } catch (e) {
-        // 如果日期解析失败，设置为默认值
         _selectedDays = 0;
         _selectedHours = 0;
         _selectedMinutes = 0;
@@ -292,7 +283,6 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
   void didUpdateWidget(EditSurveyPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.survey.surveyType != widget.survey.surveyType) {
-      // 当问卷类型改变时，重置相关状态
       setState(() {
         _selectedDays = 0;
         _selectedHours = 0;
@@ -356,7 +346,6 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
 
   Future<void> _showTimeLimitDialog() async {
     if (!mounted) return;
-    // 已完结时不允许修改截止时间
     if (_selectedStatus == 2) {
       showFToast(
         context: context,
@@ -371,7 +360,6 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
     int tempHours = _selectedHours;
     int tempMinutes = _selectedMinutes;
 
-    // 创建时间选择控制器
     final daysController = FSelectController<int>(vsync: this);
     final hoursController = FSelectController<int>(vsync: this);
     final minutesController = FSelectController<int>(vsync: this);
@@ -380,7 +368,6 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
-          // 设置控制器的初始值
           WidgetsBinding.instance.addPostFrameCallback((_) {
             daysController.value = tempDays;
             hoursController.value = tempHours;
@@ -576,7 +563,6 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
       return;
     }
 
-    // 次数限制均为可选，留空表示不限制
 
     if (_selectedType == 1 && (_selectedDays == 0 && _selectedHours == 0 && _selectedMinutes == 0)) {
       if (!mounted) return;
@@ -764,7 +750,6 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
                             onPress: _showTimeLimitDialog,
                           ),
                         ],
-                        // 提交次数限制（可选，留空表示不限制）
                         const SizedBox(height: 16),
                         FTextFormField(
                           controller: _totalTimesController,
@@ -809,11 +794,9 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
                           hint: '请选择问卷状态',
                           format: (value) => _getSurveyStatusText(value),
                           onChange: (value) async {
-                            // 如果切换到发布中状态，显示确认对话框
                             if (value == 1 && _selectedStatus != 1) {
                               final confirmed = await _showPublishConfirmDialog();
                               if (!confirmed) {
-                                // 用户取消，回退到之前的状态
                                 _statusSelectController.value = _selectedStatus;
                                 return;
                               }

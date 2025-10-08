@@ -15,7 +15,6 @@ import 'survey_page.dart';
 import 'public_survey_page.dart';
 import '../services/config.dart';
 
-// 定义侧边栏显示逻辑
 final showSidebarInDrawer = LayoutValue(xs: true, md: false);
 final showSidebarInline = LayoutValue(xs: false, md: true);
 
@@ -48,10 +47,8 @@ class FramePageState extends State<FramePage> {
   int _projectCount = 0;
     int _surveyCount = 0;
     User? _currentUser;
-    // 右侧内容区域的嵌套 Navigator Key（保持跨布局切换的路由栈状态）
     final GlobalKey<NavigatorState> _contentNavigatorKey = GlobalKey<NavigatorState>();
     
-    // 公开方法：在内容区域中打开公开问卷页面
     void navigateToPublicSurvey(String surveyId) {
       final nav = _contentNavigatorKey.currentState;
       if (nav != null) {
@@ -67,7 +64,6 @@ class FramePageState extends State<FramePage> {
       return PublicSurveyPage(surveyUID: surveyId);
     }
     
-    // 缓存标志，避免重复请求
     bool _hasLoadedData = false;
     bool _hasLoadedUser = false;
     
@@ -84,7 +80,6 @@ class FramePageState extends State<FramePage> {
       _loadData();
       _fetchUserData();
       
-      // 监听用户数据更新
       widget.userNotifier?.addListener(_handleUserUpdate);
     }
     
@@ -155,7 +150,6 @@ class FramePageState extends State<FramePage> {
   }
 
   void handleTabChange(int index) {
-    // 如果已经在目标页面，不需要重新导航
     if (_currentTabIndex == index) {
       return;
     }
@@ -178,7 +172,6 @@ class FramePageState extends State<FramePage> {
   void _handleSurveyTap() {
     handleTabChange(4);
   }
-
 
 
   @override
@@ -251,7 +244,6 @@ class FramePageState extends State<FramePage> {
       handleTabChange(0);
       return false;
     }
-    // 已在首页且无法再返回：弹出确认对话框
     final shouldExit = await showDialog<bool>(
       context: context,
       barrierDismissible: true,
@@ -274,7 +266,6 @@ class FramePageState extends State<FramePage> {
     );
 
     if (shouldExit == true) {
-      // 主动退出应用
       await SystemNavigator.pop();
       return false;
     }
@@ -878,9 +869,7 @@ Widget _buildSidebarHeader(BuildContext context) {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
-          // 异步加载项目列表
           if (projects.isEmpty && !isLoadingProjects && !hasLoadedProjects) {
-            // 延迟显示加载状态，如果缓存存在会立即返回
             Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
               if (context.mounted && isLoadingProjects) {
                 setState(() {

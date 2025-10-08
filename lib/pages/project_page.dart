@@ -30,17 +30,13 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
   List<Project> _projects = [];
   bool _isLoading = true;
   
-  // 多选相关状态
   List<int> _selectedProjectIds = [];
   bool _isMultiSelectMode = false;
   
-  // 下拉刷新控制器
   final RefreshController _refreshController = RefreshController(initialRefresh: false);
   
-  // 自动刷新定时器
   Timer? _autoRefreshTimer;
   
-  // 分页相关
   final int _itemsPerPage = 10;
   int _currentPage = 1;
   int _totalPages = 1;
@@ -54,7 +50,6 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
     _apiService = ApiService(authToken: widget.token);
     _loadProjects();
     
-    // 启动自动刷新定时器（每30秒自动刷新一次）
     _startAutoRefresh();
   }
 
@@ -77,7 +72,6 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
     }
   }
 
-  // 启动自动刷新
   void _startAutoRefresh() {
     _autoRefreshTimer?.cancel();
     _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
@@ -87,12 +81,10 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
     });
   }
 
-  // 停止自动刷新
   void _stopAutoRefresh() {
     _autoRefreshTimer?.cancel();
   }
 
-  // 分页处理方法
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -110,16 +102,13 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
   }
 
 
-  // 下拉刷新回调
   void _onRefresh() async {
-    // 先显示刷新动画
     _refreshController.refreshToIdle();
     
     // 延迟1秒后实际刷新数据
     await Future.delayed(const Duration(seconds: 1));
     
     try {
-      // 使用强制刷新而不是普通加载
       final projects = await _apiService.forceRefreshProjects();
       
       if (!mounted) {
@@ -168,7 +157,6 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
   Future<void> _loadProjects({bool silent = false}) async {
     if (!mounted) return;
     
-    // 延迟显示加载状态，如果缓存存在会立即返回，用户不会看到加载动画
     Timer? loadingTimer;
     if (!silent) {
       loadingTimer = Timer(const Duration(milliseconds: 150), () {
@@ -193,7 +181,6 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
         _isLoading = false;
       });
       
-      // 更新分页控制器
       _paginationController.dispose();
       _paginationController = FPaginationController(pages: _totalPages > 0 ? _totalPages : 1);
       // 同步当前页码到分页控制器（转换为0-based）
@@ -305,7 +292,6 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                 if (!mounted) return;
                 if (!context.mounted) return;
                 Navigator.pop(context);
-                // 触发下拉刷新动画
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _refreshController.requestRefresh();
                 });
@@ -411,7 +397,6 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                 await _apiService.updateProject(updatedProject);
                 if (!context.mounted) return;
                 Navigator.pop(context);
-                // 触发下拉刷新动画
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _refreshController.requestRefresh();
                 });
@@ -461,11 +446,9 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
     );
   }
 
-  // 多选相关方法
   void _onSelectionChanged(List<int> selectedIds) {
     setState(() {
       _selectedProjectIds = selectedIds;
-      // 不根据选中项数量自动切换多选模式状态
     });
   }
 
@@ -480,7 +463,6 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
   void _onClearSelection() {
     setState(() {
       _selectedProjectIds = [];
-      // 保持多选模式
     });
   }
 
@@ -572,7 +554,6 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
 
     if (confirm == true) {
       try {
-        // 在清空选中项前，先保存数量
         final deletedCount = _selectedProjectIds.length;
         
         await _apiService.batchDeleteProjects(_selectedProjectIds);
@@ -582,9 +563,7 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
           _isMultiSelectMode = false;
         });
         
-        // 修改这里：不再使用下拉刷新，而是直接强制刷新数据
         if (mounted) {
-          // 强制刷新数据，忽略缓存
           final projects = await _apiService.forceRefreshProjects();
           
           setState(() {
@@ -936,7 +915,6 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                                                           try {
                                                             await _apiService.deleteProject(project.id);
                                                             if (!mounted) return;
-                                                            // 强制刷新列表
                                                             final projects = await _apiService.forceRefreshProjects();
                                                             if (!mounted) return;
                                                             setState(() {
@@ -980,7 +958,6 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                                     ),
                                   ),
                                 ),
-                                // 添加分页组件
                                 if (_totalPages > 1)
                                   _buildFPagination(context, _totalPages),
                               ],

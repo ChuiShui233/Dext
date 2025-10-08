@@ -73,7 +73,6 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
     _loadAnalytics();
   }
   
-  // 立即从缓存加载数据
   Future<void> _loadCachedAnalytics() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -97,7 +96,6 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
   Future<void> _loadAnalytics() async {
     if (_cachedAnalytics != null || _isLoadingAnalytics) return;
     
-    // 延迟显示加载状态，如果缓存存在会立即返回
     Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
       if (mounted && _isLoadingAnalytics) {
         setState(() => _isLoadingAnalytics = true);
@@ -151,7 +149,6 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
         onLogout: widget.onLogout,
         onThemeModeChange: widget.onThemeModeChange,
         onChangeAvatar: () {
-    // 这里写修改头像的逻辑
     if (kDebugMode) {
       print('修改头像');
     }
@@ -165,7 +162,6 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
       drawer: isMobileOrTablet ? _buildDrawer(context) : null,
       body: Stack(
         children: [
-          // 全局毛玻璃渐变背景（包含底部导航栏区域）
           const FrostedGlassBackground(
             count: 8,
             blurSigma: 120,

@@ -465,7 +465,6 @@ class _SubmissionDetailPageState extends State<SubmissionDetailPage> {
   }
 
 
-
   Widget _glass({required Widget child}) => GlassCard(child: child);
 
 

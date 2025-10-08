@@ -1,4 +1,3 @@
-// file: edit_survey_content_page.dart
 
 import 'dart:async';
 import 'dart:ui';
@@ -18,7 +17,6 @@ import '../components/glass_card.dart';
 import 'edit_question_page.dart';
 import 'survey_preview_page.dart';
 import '../services/config.dart';
-
 
 
 class EditSurveyContentPage extends StatefulWidget {
@@ -55,7 +53,6 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
   }
 
   Future<void> _loadQuestions() async {
-    // 延迟显示加载状态，如果缓存存在会立即返回
     Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
       if (mounted && _isLoading) {
         setState(() => _isLoading = true);
@@ -87,7 +84,7 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
         _mobileBackground = backgroundData['mobileBackground'] as String?;
       });
     } catch (e) {
-      // 如果获取背景失败，使用默认值（空），不显示错误提示
+      //静默失败了喵
     }
   }
 
@@ -227,7 +224,6 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
   }
 
   void _onReorderQuestions(int oldIndex, int newIndex) {
-    // 保存当前顺序用于撤回
     _previousQuestionOrder = List<Question>.from(_questions);
     
     setState(() {
@@ -266,7 +262,6 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
     
     final file = files.first;
     
-    // 检查文件类型
     if (!file.name.toLowerCase().endsWith('.jpg') && 
         !file.name.toLowerCase().endsWith('.jpeg') && 
         !file.name.toLowerCase().endsWith('.png') && 
@@ -451,7 +446,6 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
   final isDark = Theme.of(context).brightness == Brightness.dark;
   const double bottomHeight = 70; // 底部模糊/半透明容器高度
   const double minHeight = 150; // 最小高度，确保有足够空间显示按钮
-  // 根据设备类型设置不同的最大高度
   final double maxHeight = isDesktop ? 400 : 250; // 桌面端400px，移动端250px
 
   return Center(
@@ -496,7 +490,6 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                 constraints: const BoxConstraints(minHeight: minHeight),
                 child: Stack(
                   children: [
-            // 背景图片
             Container(
               width: double.infinity,
               constraints: BoxConstraints(
@@ -511,7 +504,6 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                 child: currentImage != null && currentImage.isNotEmpty
                     ? GestureDetector(
                         onPanUpdate: (details) {
-                          // 启用鼠标拖拽
                         },
                         child: InteractiveViewer(
                           panEnabled: true,
@@ -561,7 +553,6 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                       ),
               ),
             ),
-            // 模糊背景容器（仅有图片时显示）
             if (currentImage != null && currentImage.isNotEmpty)
               Positioned(
                 left: 0,
@@ -582,7 +573,6 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                   ),
                 ),
               ),
-            // 按钮固定显示在底部
             Positioned(
               left: 0,
               right: 0,
@@ -605,7 +595,6 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // 左下角 上传按钮
                     FButton(
                       style: FButtonStyle(
                         decoration: FWidgetStateMap.all(
@@ -647,7 +636,6 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                       onPress: () => _uploadBackground(isCurrentDesktop),
                       child: const Text('上传背景'),
                     ),
-                    // 右下角 切换按钮
                     FButton(
                       onPress: () {
                         setState(() {
@@ -711,7 +699,6 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                 ),
               ),
             ),
-            // 问题内容
             ListTile(
               title: Text(question.title),
               subtitle: Column(

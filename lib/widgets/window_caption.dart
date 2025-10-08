@@ -77,7 +77,6 @@ class _WindowCaptionState extends State<WindowCaption> with WindowListener {
                     style: FButtonStyle.outline,
                     onPress: () async {
                       Navigator.of(ctx).pop();
-                      // 直接销毁应用，绕过 preventClose 拦截
                       await windowManager.destroy();
                     },
                     child: const Text('关闭应用'),
@@ -95,19 +94,16 @@ class _WindowCaptionState extends State<WindowCaption> with WindowListener {
       color: Colors.transparent,
       child: Row(
         children: [
-          // 拖动区域
           Expanded(
             child: DragToMoveArea(
               child: Container(color: Colors.transparent),
             ),
           ),
-          // 最小化按钮
           _CaptionIconButton(
             icon: FIcons.minus,
             onPressed: () => windowManager.minimize(),
             color: iconColor,
           ),
-          // 最大化/还原切换按钮
           _CaptionIconButton(
             icon: _isMaximized ? FIcons.copy : FIcons.square,
             onPressed: () async {
@@ -119,7 +115,6 @@ class _WindowCaptionState extends State<WindowCaption> with WindowListener {
             },
             color: iconColor,
           ),
-          // 关闭按钮
           _CaptionIconButton(
             icon: FIcons.x,
             onPressed: showCloseConfirmDialog,
@@ -132,7 +127,6 @@ class _WindowCaptionState extends State<WindowCaption> with WindowListener {
   }
 }
 
-// 自定义方形按钮组件
 class _CaptionIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;

@@ -116,13 +116,11 @@ class _RotatingTextState extends State<RotatingText>
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // 背景框动画
           _AnimatedBox(
             text: currentText,
             textStyle: textStyle,
           ),
 
-          // 文字动画裁切在框内
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
             child: SizedBox(
@@ -131,7 +129,6 @@ class _RotatingTextState extends State<RotatingText>
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  // 旧文字退出动画
                   Row(
                     mainAxisAlignment: widget.alignment,
                     children: List.generate(_previousElements.length, (i) {
@@ -147,7 +144,6 @@ class _RotatingTextState extends State<RotatingText>
                     }),
                   ),
 
-                  // 新文字进入动画
                   Row(
                     mainAxisAlignment: widget.alignment,
                     children: List.generate(_currentElements.length, (i) {
@@ -247,7 +243,6 @@ class _AnimatedTextElementState extends State<AnimatedTextElement> {
   }
 }
 
-/// 背景框动画
 class _AnimatedBox extends StatefulWidget {
   final String text;
   final TextStyle? textStyle;

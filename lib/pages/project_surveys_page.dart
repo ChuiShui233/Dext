@@ -29,10 +29,8 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
   List<Survey> _surveys = [];
   bool _isLoading = true;
   
-  // 下拉刷新控制器
   final RefreshController _refreshController = RefreshController(initialRefresh: false);
   
-  // 自动刷新定时器
   Timer? _autoRefreshTimer;
 
   @override
@@ -42,7 +40,6 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
     _apiService = ApiService(authToken: widget.token);
     _loadSurveys();
     
-    // 启动自动刷新定时器（每30秒自动刷新一次）
     _startAutoRefresh();
   }
 
@@ -64,7 +61,6 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
     }
   }
 
-  // 启动自动刷新
   void _startAutoRefresh() {
     _autoRefreshTimer?.cancel();
     _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
@@ -74,12 +70,10 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
     });
   }
 
-  // 停止自动刷新
   void _stopAutoRefresh() {
     _autoRefreshTimer?.cancel();
   }
 
-  // 下拉刷新回调
   void _onRefresh() async {
     await _loadSurveys(silent: false);
     _refreshController.refreshCompleted();
@@ -334,7 +328,6 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
                                           ],
                                         ),
                                       ),
-                                      // 右下角操作区：使用铺满宽度的底部栏，内部靠右排布，避免越界
                                       Positioned(
                                         left: 0,
                                         right: 0,

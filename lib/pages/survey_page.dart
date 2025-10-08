@@ -41,24 +41,18 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   final bool _isAllExpanded = false;
   final Key _listKey = UniqueKey();
   
-  // 分页相关
   int _currentPage = 1;
   int _totalPages = 1;
   int _totalItems = 0;
   FPaginationController _paginationController = FPaginationController(pages: 1);
   
-  // 多选相关状态
   List<int> _selectedSurveyIds = [];
   bool _isMultiSelectMode = false;
   
-  // 下拉刷新控制器
   final RefreshController _refreshController = RefreshController(initialRefresh: false);
   
-  // 自动刷新定时器
   Timer? _autoRefreshTimer;
-  // 倒计时刷新定时器（每秒一次）
   Timer? _countdownTimer;
-  // 已经提示过到期的问卷，避免重复弹窗
   final Set<int> _expiryNotified = {};
 
   @override
@@ -100,7 +94,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     }
   }
 
-  // 启动自动刷新
   void _startAutoRefresh() {
     _autoRefreshTimer?.cancel();
     _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
@@ -110,28 +103,23 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     });
   }
 
-  // 停止自动刷新
   void _stopAutoRefresh() {
     _autoRefreshTimer?.cancel();
   }
 
-  // 启动倒计时刷新
   void _startCountdown() {
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
-      // 检查是否有问卷刚刚到期，进行一次性提醒
       _detectAndNotifyExpiry();
       setState(() {}); // 触发UI中倒计时文本刷新
     });
   }
 
-  // 停止倒计时刷新
   void _stopCountdown() {
     _countdownTimer?.cancel();
   }
 
-  // 检测问卷是否到期并提示一次，同时触发刷新以同步服务端状态
   void _detectAndNotifyExpiry() {
     if (_surveys.isEmpty) return;
     final now = DateTime.now();
@@ -141,7 +129,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
       if (now.isAfter(dl) || now.isAtSameMomentAs(dl)) {
         if (!_expiryNotified.contains(s.id)) {
           _expiryNotified.add(s.id);
-          // 弹出提醒
           if (mounted) {
             showFToast(
               context: context,
@@ -149,7 +136,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
               title: const Text('问卷已到期'),
               description: Text('“${s.surveyName}” 已到达截止时间，状态将自动更新为已完结。'),
             );
-            // 触发一次静默刷新，尽快获取到服务端自动完结后的状态
             _loadData(silent: true);
           }
         }
@@ -184,16 +170,13 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     return '${two(hh)}:${two(mm)}:${two(ss)}';
   }
 
-  // 下拉刷新回调
   void _onRefresh() async {
-    // 先显示刷新动画
     _refreshController.refreshToIdle();
     
     // 延迟1秒后实际刷新数据
     await Future.delayed(const Duration(seconds: 1));
     
     try {
-      // 使用强制刷新而不是普通加载
       final surveys = await _apiService.forceRefreshSurveys();
       final projects = await _apiService.forceRefreshProjects();
       
@@ -208,7 +191,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
         _isLoading = false;
       });
       
-      // 异步加载统计信息
       _loadSurveyStats();
       
       _refreshController.refreshCompleted();
@@ -248,7 +230,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     if (!mounted) return;
     final context = this.context;
     
-    // 延迟显示加载状态，如果缓存存在会立即返回，用户不会看到加载动画
     Timer? loadingTimer;
     if (!silent) {
       loadingTimer = Timer(const Duration(milliseconds: 150), () {
@@ -278,13 +259,11 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
         _isLoading = false;
       });
       
-      // 更新分页控制器
       _paginationController.dispose();
       _paginationController = FPaginationController(pages: _totalPages > 0 ? _totalPages : 1);
       // 同步当前页码到分页控制器（转换为0-based）
       _paginationController.page = (_currentPage - 1).clamp(0, (_totalPages - 1).clamp(0, double.infinity).toInt());
       
-      // 异步加载统计信息
       _loadSurveyStats();
     } catch (e) {
       loadingTimer?.cancel();
@@ -317,7 +296,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     }
   }
 
-  // 异步加载统计信息
   Future<void> _loadSurveyStats() async {
     try {
       final stats = await _apiService.getAllSurveyStats();
@@ -383,7 +361,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   }
 
 
-  // 分页处理方法
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -605,7 +582,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                         ) : null;
                         
                         if (result == true) {
-                          // 触发下拉刷新动画
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             _refreshController.requestRefresh();
                           });
@@ -740,7 +716,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                           ) : null;
                                           
                                           if (result == true) {
-                                            // 触发下拉刷新动画
                                             WidgetsBinding.instance.addPostFrameCallback((_) {
                                               _refreshController.requestRefresh();
                                             });
@@ -1095,11 +1070,9 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     );
   }
 
-  // 多选相关方法
   void _onSelectionChanged(List<int> selectedIds) {
     setState(() {
       _selectedSurveyIds = selectedIds;
-      // 不根据选中项数量自动切换多选模式状态
     });
   }
 
@@ -1114,7 +1087,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   void _onClearSelection() {
     setState(() {
       _selectedSurveyIds = [];
-      // 保持多选模式
     });
   }
 
@@ -1206,7 +1178,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
 
     if (confirm == true) {
       try {
-        // 在清空选中项前，先保存数量
         final deletedCount = _selectedSurveyIds.length;
         
         await _apiService.batchDeleteSurveys(_selectedSurveyIds);
@@ -1216,9 +1187,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
           _isMultiSelectMode = false;
         });
         
-        // 修改这里：不再使用下拉刷新，而是直接强制刷新数据
         if (mounted) {
-          // 强制刷新数据，忽略缓存
           final surveys = await _apiService.forceRefreshSurveys();
           final projects = await _apiService.getProjects();
           
@@ -1227,7 +1196,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
             _projects = {for (var p in projects) p.id: p};
           });
           
-          // 异步加载统计信息
           _loadSurveyStats();
         }
         

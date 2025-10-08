@@ -10,7 +10,6 @@ class TokenExpired {
   String toString() => message;
 }
 
-/// 认证相关服务（登录/注册/刷新令牌/校验/注销）
 class AuthService {
   final ApiCore core;
   AuthService(this.core);

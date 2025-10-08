@@ -36,7 +36,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _captchaController = TextEditingController();
-  // 添加焦点控制
   final _usernameFocus = FocusNode();
   final _emailFocus = FocusNode();
   final _emailCodeFocus = FocusNode();
@@ -56,10 +55,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   final _oauthService = OAuthService();
   String? _captchaId;
   String? _captchaImage;
-  // 缓存解码后的验证码字节，避免每次build解码导致闪烁
   Uint8List? _captchaBytes;
   
-  // 品牌展示区域的动画控制器
   late AnimationController _brandAnimationController;
   late Animation<double> _titleFadeAnimation;
   late Animation<Offset> _titleSlideAnimation;
@@ -81,7 +78,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       vsync: this,
     );
     
-    // 主标题动画
     _titleFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _brandAnimationController,
@@ -106,7 +102,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       ),
     );
     
-    // 副标题动画
     _subtitleFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _brandAnimationController,
@@ -131,7 +126,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       ),
     );
     
-    // 描述文本
     _descriptionFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _brandAnimationController,
@@ -156,7 +150,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       ),
     );
     
-    // 延迟启动
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) {
         _brandAnimationController.forward();
@@ -200,7 +193,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Future<void> _fetchCaptcha() async {
     try {
       final captcha = await ApiService().getTextCaptcha();
-      // 预解码
       final String data = captcha['data'];
       final String raw = data.startsWith('data:image') ? data.split(',').last : data;
       final decoded = base64Decode(raw);
@@ -222,7 +214,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     }
   }
 
-  // 在登录成功后记录信息
   void _recordLoginInfo(String token, DateTime expires) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('auth_token', token);
@@ -294,7 +285,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     });
 
     try {
-      // 显示等待对话框
       if (mounted) {
         showDialog(
           context: context,
@@ -567,7 +557,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     }
   }
 
-  // 发送邮箱验证码
   Future<void> _sendEmailCode() async {
     final email = _emailController.text.trim();
     if (email.isEmpty) {
@@ -603,7 +592,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         _emailCodeCountdown = 60;
       });
       
-      // 启动倒计时
       _countdownTimer?.cancel();
       _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
         if (!mounted) {
@@ -675,14 +663,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       return;
     }
     
-    // 验证邮箱格式（如果填写）
     final email = _emailController.text.trim();
     if (email.isNotEmpty && !_isValidEmail(email)) {
       showErrorDialog('邮箱格式不正确');
       return;
     }
     
-    // 如果填写了邮箱，必须验证邮箱验证码
     final emailCode = _emailCodeController.text.trim();
     if (email.isNotEmpty && emailCode.isEmpty) {
       showErrorDialog('请输入邮箱验证码');
@@ -745,7 +731,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     }
   }
 
-  // 重置密码
   Future<void> _handleResetPassword() async {
     if (_isLoading) return;
     
@@ -842,7 +827,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }
 
   bool _isValidEmail(String email) {
-    // 简单的邮箱格式验证
     if (email.length < 3 || email.length > 255) {
       return false;
     }
@@ -887,7 +871,6 @@ Widget build(BuildContext context) {
     switchInCurve: Curves.easeInOut,
     switchOutCurve: Curves.easeInOut,
     transitionBuilder: (child, animation) {
-      // 为淡入淡出添加独立的曲线控制
       final fadeAnimation = CurvedAnimation(
         parent: animation,
         curve: Curves.easeInOut,
@@ -929,7 +912,6 @@ Widget build(BuildContext context) {
   return Scaffold(
     body: Stack(
       children: [
-        // 背景层
 Positioned.fill(
   child: Stack(
     children: [
@@ -955,7 +937,6 @@ Positioned.fill(
           ),
         ),
       ),
-      // 渐变遮罩
       Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -994,7 +975,6 @@ Positioned.fill(
           Positioned.fill(
             child: Row(
               children: [
-                // 左侧品牌展示区域
                 Expanded(
                   child: AnimatedSlide(
                     duration: const Duration(milliseconds: 600),
@@ -1088,7 +1068,6 @@ Positioned.fill(
                     ),
                   ),
                 ),
-                // 右侧登录表单
                 ClipRect(
                   child: BackdropFilter(
                     filter: ImageFilter.blur(
@@ -1354,7 +1333,6 @@ Positioned.fill(
         const SizedBox(height: 16),
         _buildCaptchaCard(),
         const SizedBox(height: 16),
-        // 忘记密码链接
         Align(
           alignment: Alignment.centerRight,
           child: MouseRegion(
@@ -1544,7 +1522,6 @@ Positioned.fill(
     );
     
     if (isWide) {
-      // 桌面端
       return ClipRect(
         key: const ValueKey('login_form'),
         child: Container(
@@ -1576,7 +1553,6 @@ Positioned.fill(
       );
     }
     
-    // 移动端
     return Container(
       key: const ValueKey('login_form'),
       padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 32),
@@ -1668,7 +1644,6 @@ Widget _buildRegisterForm() {
                         FocusScope.of(context).requestFocus(_emailCodeFocus),
                   ),
                   const SizedBox(height: 16),
-                  // 邮箱验证码输入
                   Row(
                     children: [
                       Expanded(
@@ -1903,7 +1878,6 @@ Widget _buildRegisterForm() {
       );
     }
     
-    // 移动端
     return Container(
       key: const ValueKey('register_form'),
       padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 32),
@@ -2000,7 +1974,6 @@ Widget _buildRegisterForm() {
         const SizedBox(height: 16),
         _buildCaptchaCard(),
         const SizedBox(height: 16),
-        // 邮箱验证码输入
         Row(
           children: [
             Expanded(
@@ -2174,7 +2147,6 @@ Widget _buildRegisterForm() {
       );
     }
     
-    // 移动端
     return Container(
       key: const ValueKey('reset_password_form'),
       padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 32),
