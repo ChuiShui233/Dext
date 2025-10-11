@@ -300,15 +300,19 @@ jobs:
             throw "找不到 Inno Setup 编译器 (ISCC.exe)"
           }
           
-          # 编译安装程序
+          # 编译安装程序 - 使用完整路径和绝对路径参数
           echo "使用编译器: $isccPath"
-          echo "编译脚本: installer.iss"
-          & $isccPath installer.iss
+          $scriptPath = Join-Path $PWD "installer.iss"
+          echo "编译脚本: $scriptPath"
           
-          if ($LASTEXITCODE -eq 0) {
+          # 使用 Start-Process 确保正确的工作目录和路径解析
+          $process = Start-Process -FilePath $isccPath -ArgumentList "`"$scriptPath`"" -Wait -NoNewWindow -PassThru
+          
+          if ($process.ExitCode -eq 0) {
             echo "✅ 安装程序编译成功"
           } else {
-            throw "安装程序编译失败，退出代码: $LASTEXITCODE"
+            echo "❌ 编译失败，退出代码: $($process.ExitCode)"
+            throw "安装程序编译失败，退出代码: $($process.ExitCode)"
           }
 
       # 打包便携版
