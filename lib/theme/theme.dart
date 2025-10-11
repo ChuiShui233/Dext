@@ -43,6 +43,35 @@ final ThemeData lightTheme = ThemeData(
   splashColor: Colors.transparent,
   highlightColor: Colors.transparent,
   hoverColor: Colors.transparent,
+  splashFactory: NoSplash.splashFactory,
+  textButtonTheme: TextButtonThemeData(
+    style: ButtonStyle(
+      overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      enableFeedback: false,
+    ),
+  ),
+  elevatedButtonTheme: ElevatedButtonThemeData(
+    style: ButtonStyle(
+      overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      enableFeedback: false,
+    ),
+  ),
+  outlinedButtonTheme: OutlinedButtonThemeData(
+    style: ButtonStyle(
+      overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      enableFeedback: false,
+    ),
+  ),
+  iconButtonTheme: IconButtonThemeData(
+    style: ButtonStyle(
+      overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      enableFeedback: false,
+    ),
+  ),
   colorScheme: ColorScheme.light(
     surface: const Color.fromARGB(248, 255, 255, 255),
     primary: Colors.black.withValues(alpha: 0.87),
@@ -77,6 +106,35 @@ final ThemeData darkTheme = ThemeData(
   splashColor: Colors.transparent,
   highlightColor: Colors.transparent,
   hoverColor: Colors.transparent,
+  splashFactory: NoSplash.splashFactory,
+  textButtonTheme: TextButtonThemeData(
+    style: ButtonStyle(
+      overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      enableFeedback: false,
+    ),
+  ),
+  elevatedButtonTheme: ElevatedButtonThemeData(
+    style: ButtonStyle(
+      overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      enableFeedback: false,
+    ),
+  ),
+  outlinedButtonTheme: OutlinedButtonThemeData(
+    style: ButtonStyle(
+      overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      enableFeedback: false,
+    ),
+  ),
+  iconButtonTheme: IconButtonThemeData(
+    style: ButtonStyle(
+      overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      enableFeedback: false,
+    ),
+  ),
   colorScheme: ColorScheme.dark(
     surface: const Color(0xFF121212),
     primary: Colors.white.withValues(alpha: 0.87),

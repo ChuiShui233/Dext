@@ -183,6 +183,11 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
                                     _runtime.recomputeVisible();
                                     setState(() {});
                                   },
+                                  onTextInputChanged: (questionId, value) {
+                                    _runtime.setAnswerSingle(questionId, value);
+                                    _runtime.recomputeVisible();
+                                    setState(() {});
+                                  },
                                   onMediaOpen: (url, all, index) => _openFullscreenViewer(url, all, index),
                                 ),
                               ),

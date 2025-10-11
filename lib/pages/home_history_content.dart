@@ -253,20 +253,13 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
       decoration: BoxDecoration(
         color: isDark 
           ? Colors.white.withValues(alpha: 0.05)
-          : Colors.white.withValues(alpha: 0.5),
+          : Colors.white.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark 
             ? Colors.white.withValues(alpha: 0.1)
             : Colors.black.withValues(alpha: 0.1),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

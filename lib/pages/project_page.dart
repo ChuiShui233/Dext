@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
@@ -10,6 +9,7 @@ import '../services/api_service.dart';
 import 'project_surveys_page.dart';
 import '../components/multi_select_actions.dart';
 import '../components/glass_card.dart';
+import '../components/pull_to_refresh_wrapper.dart';
 import 'frame_page.dart';
 import '../widgets/frosted_glass_background.dart';
 
@@ -758,47 +758,27 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                           : Column(
                               children: [
                                 Expanded(
-                                  child: ScrollConfiguration(
-                                    behavior: ScrollConfiguration.of(context).copyWith(
-                                      scrollbars: false,
-                                      dragDevices: const {
-                                        PointerDeviceKind.touch,
-                                        PointerDeviceKind.mouse,
-                                        PointerDeviceKind.trackpad,
-                                        PointerDeviceKind.stylus,
-                                      },
-                                    ),
-                                    child: SmartRefresher(
-                                      controller: _refreshController,
-                                      onRefresh: _onRefresh,
-                                      enablePullDown: true,
-                                      enablePullUp: false,
-                                      physics: const BouncingScrollPhysics(
-                                        parent: AlwaysScrollableScrollPhysics(),
-                                      ),
-                                      header: const ClassicHeader(
-                                        refreshStyle: RefreshStyle.Follow,
-                                        textStyle: TextStyle(color: Colors.grey),
-                                        iconPos: IconPosition.top,
-                                      ),
-                                      child: ListView.builder(
-                                        itemCount: _projects.length,
-                                        itemBuilder: (context, index) {
-                                          final project = _projects[index];
-                                          final isSelected = _selectedProjectIds.contains(project.id);
+                                  child: PullToRefreshWrapper(
+                                    controller: _refreshController,
+                                    onRefresh: _onRefresh,
+                                    child: ListView.builder(
+                                      itemCount: _projects.length,
+                                      itemBuilder: (context, index) {
+                                        final project = _projects[index];
+                                        final isSelected = _selectedProjectIds.contains(project.id);
                                   
-                                          final glassCard = GlassCard(
-                                            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(12),
-                                              side: BorderSide(
-                                                color: isSelected 
-                                                  ? Theme.of(context).colorScheme.primary
-                                                  : Colors.transparent,
-                                                width: isSelected ? 2 : 0,
-                                              ),
+                                        final glassCard = GlassCard(
+                                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                            side: BorderSide(
+                                              color: isSelected 
+                                                ? Theme.of(context).colorScheme.primary
+                                                : Colors.transparent,
+                                              width: isSelected ? 2 : 0,
                                             ),
-                                            child: ListTile(
+                                          ),
+                                          child: ListTile(
                                               leading: _isMultiSelectMode
                                                   ? GestureDetector(
                                                       behavior: HitTestBehavior.opaque,
@@ -957,7 +937,6 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                                       ),
                                     ),
                                   ),
-                                ),
                                 if (_totalPages > 1)
                                   _buildFPagination(context, _totalPages),
                               ],

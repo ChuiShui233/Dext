@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../widgets/top_safe_spacer.dart';
 import 'package:forui/forui.dart';
@@ -13,6 +12,7 @@ import '../utils/date_format.dart';
 import '../components/survey_actions.dart';
 import '../components/multi_select_actions.dart';
 import '../components/glass_card.dart';
+import '../components/pull_to_refresh_wrapper.dart';
 import 'frame_page.dart';
 import '../widgets/frosted_glass_background.dart';
 
@@ -63,13 +63,9 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     _typeSelectController = FSelectController<String>(vsync: this);
     _loadData();
     
-    // 启动自动刷新定时器（每30秒自动刷新一次）
     _startAutoRefresh();
-    // 启动倒计时刷新（每秒更新UI）
     _startCountdown();
   }
-
-  // 全局统一的时间格式化请使用 DateFormatUtils（lib/utils/date_format.dart）
 
   @override
   void dispose() {
@@ -112,7 +108,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       _detectAndNotifyExpiry();
-      setState(() {}); // 触发UI中倒计时文本刷新
+      setState(() {}); // 触发刷新
     });
   }
 
@@ -146,10 +142,9 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   DateTime? _parseDeadline(String? deadline) {
     if (deadline == null || deadline.isEmpty) return null;
     try {
-      // 后端返回格式通常为 "YYYY-MM-DD HH:MM:SS"（本地/UTC由DB驱动决定），统一按本地解析
+      // "YYYY-MM-DD HH:MM:SS"
       return DateTime.parse(deadline).toLocal();
     } catch (_) {
-      // 尝试将空格替换为T再解析
       try {
         return DateTime.parse(deadline.replaceFirst(' ', 'T')).toLocal();
       } catch (_) {
@@ -590,7 +585,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                     ),
                   ],
                 ),
-                // 多选操作组件 - 进入多选模式即显示，带高度伸缩动画
                 AnimatedSize(
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeOutCubic,
@@ -727,29 +721,9 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                 ],
                               ),
                             )
-                          : ScrollConfiguration(
-                              behavior: ScrollConfiguration.of(context).copyWith(
-                                scrollbars: false,
-                                dragDevices: const {
-                                  PointerDeviceKind.touch,
-                                  PointerDeviceKind.mouse,
-                                  PointerDeviceKind.trackpad,
-                                  PointerDeviceKind.stylus,
-                                },
-                              ),
-                              child: SmartRefresher(
+                          : PullToRefreshWrapper(
                                 controller: _refreshController,
                                 onRefresh: _onRefresh,
-                                enablePullDown: true,
-                                enablePullUp: false,
-                                physics: const BouncingScrollPhysics(
-                                  parent: AlwaysScrollableScrollPhysics(),
-                                ),
-                                header: const ClassicHeader(
-                                  refreshStyle: RefreshStyle.Follow,
-                                  textStyle: TextStyle(color: Colors.grey),
-                                  iconPos: IconPosition.top,
-                                ),
                                 child: ListView.builder(
                                   key: _listKey,
                                   primary: true,
@@ -993,9 +967,8 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                   );
                                 },
                               ),
-                              ),
                             ),
-                ),
+                          ),
                 if (_totalPages > 1)
                   _buildFPagination(context, _totalPages),
               ],

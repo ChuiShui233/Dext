@@ -220,6 +220,8 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
   int _selectedDays = 0;
   int _selectedHours = 0;
   int _selectedMinutes = 0;
+  bool _autoSubmit = false;
+  bool _allowAnonymous = false;
 
   @override
   void initState() {
@@ -237,6 +239,8 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
     _perUserLimitController.text = (widget.survey.perUserLimit != null && widget.survey.perUserLimit! > 0)
         ? widget.survey.perUserLimit!.toString()
         : '';
+    _autoSubmit = widget.survey.autoSubmit;
+    _allowAnonymous = widget.survey.allowAnonymous;
     
     if (widget.survey.surveyType == 1 && widget.survey.deadline != null) {
       try {
@@ -622,6 +626,8 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
         perUserLimit: perUserLimit,
         deadline: deadline,
         updateTime: now.toIso8601String(),
+        autoSubmit: _autoSubmit,
+        allowAnonymous: _allowAnonymous,
       );
 
       await apiService.updateSurvey(survey);
@@ -841,6 +847,80 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
                             }
                             return null;
                           },
+                        ),
+                        const SizedBox(height: 24),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  '自动提交',
+                                  style: Theme.of(context).textTheme.titleMedium,
+                                ),
+                              ),
+                            ),
+                            FormField<bool>(
+                              initialValue: _autoSubmit,
+                              onSaved: (value) {
+                                _autoSubmit = value ?? false;
+                              },
+                              builder: (state) => FSwitch(
+                                value: state.value ?? false,
+                                onChange: (value) {
+                                  state.didChange(value);
+                                  setState(() {
+                                    _autoSubmit = value;
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '开启后，用户回答完所有必答题时会自动提交问卷',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  '允许匿名提交',
+                                  style: Theme.of(context).textTheme.titleMedium,
+                                ),
+                              ),
+                            ),
+                            FormField<bool>(
+                              initialValue: _allowAnonymous,
+                              onSaved: (value) {
+                                _allowAnonymous = value ?? false;
+                              },
+                              builder: (state) => FSwitch(
+                                value: state.value ?? false,
+                                onChange: (value) {
+                                  state.didChange(value);
+                                  setState(() {
+                                    _allowAnonymous = value;
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '开启后，未登录用户也可以提交问卷答案',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.grey[600],
+                          ),
                         ),
                         const SizedBox(height: 24),
                         FButton(

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import '../widgets/frosted_oauth_dialog.dart';
 import '../services/api_service.dart';
 import '../services/oauth_service.dart';
 import '../services/uri_handler_service.dart';
@@ -299,36 +300,14 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
           barrierDismissible: false,
           builder: (context) {
             dialogContext = context;
-            return AlertDialog(
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(width: 16),
-                      Expanded(
-                        child: Text('正在等待${_getProviderDisplayName(provider)}授权...'),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    '请在浏览器中完成授权，或点击取消',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    // 取消OAuth等待
-                    UriHandlerService.cancelAllPendingCallbacks();
-                    closeDialog();
-                  },
-                  child: Text('取消'),
-                ),
-              ],
+            return FrostedOAuthDialog(
+              providerName: _getProviderDisplayName(provider),
+              waitingText: '请在浏览器中完成授权，或点击取消',
+              onCancel: () {
+                // 取消OAuth等待
+                UriHandlerService.cancelAllPendingCallbacks();
+                closeDialog();
+              },
             );
           },
         );
@@ -457,14 +436,13 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
           barrierDismissible: false,
           builder: (context) {
             dialogContext = context;
-            return AlertDialog(
-              content: Row(
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(width: 16),
-                  Text('正在解绑${_getProviderDisplayName(provider)}账号...'),
-                ],
-              ),
+            return FrostedOAuthDialog(
+              providerName: _getProviderDisplayName(provider),
+              waitingText: '正在解绑账号，请稍候…',
+              onCancel: () {
+                // 解绑过程不支持取消请求，这里仅关闭提示框
+                closeDialog();
+              },
             );
           },
         );

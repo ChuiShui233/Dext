@@ -15,6 +15,7 @@ import '../main.dart' show isDesktop;
 import '../utils/date_format.dart';
 import 'dart:ui' as ui;
 import '../widgets/frosted_glass_background.dart';
+import '../widgets/markdown_text_widget.dart';
 import '../services/config.dart';
 
 class SurveyResultsPage extends StatefulWidget {
@@ -1124,8 +1125,8 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          questionTitle,
+                        MarkdownTextWidget(
+                          text: questionTitle,
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
@@ -1134,6 +1135,25 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                         const SizedBox(height: 4),
                         if (question.type == QuestionType.slider)
                           _buildRatingRow(question, answer.selectChoices)
+                        else if (question.type == QuestionType.textInput && answer.selectChoices.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 16, top: 2),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Text(
+                                answer.selectChoices,
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ),
+                          )
                         else if (answer.selectedOptions.isNotEmpty)
                           ...answer.selectedOptions.map((optionIndex) {
                             final optionText = _getOptionText(answer.questionId, optionIndex);
@@ -1238,12 +1258,35 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
             if (_usePieChart)
               LayoutBuilder(builder: (context, constraints) {
                 final w = constraints.maxWidth;
-                final cols = w >= 750 ? 2 : 1; // 屏幕够宽显示2列
+                final cols = w >= 750 ? 2 : 1;
                 const gap = 16.0;
                 final pieCards = <Widget>[];
                 
                 for (final question in _questions) {
-                  if (question.type != QuestionType.slider) {
+                  if (question.type == QuestionType.textInput) {
+                    // 填写题统计
+                    final textAnswers = _results
+                        .map((r) => r.questions.firstWhere(
+                              (d) => d.questionId == question.id,
+                              orElse: () => AnswerDetail(
+                                id: 0,
+                                answerId: r.id,
+                                questionId: question.id,
+                                selectedOptions: const [],
+                                selectChoices: '',
+                              ),
+                            ))
+                        .where((a) => a.selectChoices.isNotEmpty)
+                        .toList();
+                    
+                    pieCards.add(SizedBox(
+                      width: cols > 1 ? (w - gap) / 2 : w,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: _buildTextInputSummary(question, textAnswers),
+                      ),
+                    ));
+                  } else if (question.type != QuestionType.slider) {
                     final questionStats = responsesByQuestion[question.id] ?? {};
                     pieCards.add(SizedBox(
                       width: cols > 1 ? (w - gap) / 2 : w,
@@ -1316,15 +1359,35 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
               })
             else
             ..._questions.map((question) {
-              if (question.type != QuestionType.slider) {
+              if (question.type == QuestionType.textInput) {
+                // 填写题统计
+                final textAnswers = _results
+                    .map((r) => r.questions.firstWhere(
+                          (d) => d.questionId == question.id,
+                          orElse: () => AnswerDetail(
+                            id: 0,
+                            answerId: r.id,
+                            questionId: question.id,
+                            selectedOptions: const [],
+                            selectChoices: '',
+                          ),
+                        ))
+                    .where((a) => a.selectChoices.isNotEmpty)
+                    .toList();
+                
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: _buildTextInputSummary(question, textAnswers),
+                );
+              } else if (question.type != QuestionType.slider) {
                 final questionStats = responsesByQuestion[question.id] ?? {};
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        question.title,
+                      MarkdownTextWidget(
+                        text: question.title,
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
@@ -1439,8 +1502,8 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (!_usePieChart) ...[
-                      Text(
-                        question.title,
+                      MarkdownTextWidget(
+                        text: question.title,
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
@@ -1809,6 +1872,241 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTextInputSummary(Question question, List<AnswerDetail> textAnswers) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    return _buildGlassCard(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            MarkdownTextWidget(
+              text: question.title,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(
+                  Icons.edit_note,
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '填写题统计',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '回复数量: ${textAnswers.length}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        '回复率: ${textAnswers.isEmpty ? '0' : (textAnswers.length / _results.length * 100).toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (textAnswers.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    const Text(
+                      '最近回复预览:',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...textAnswers.take(3).map((answer) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.grey[800] : Colors.grey[100],
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          answer.selectChoices.length > 50 
+                              ? '${answer.selectChoices.substring(0, 50)}...'
+                              : answer.selectChoices,
+                          style: const TextStyle(fontSize: 12),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FButton(
+                        style: FButtonStyle.outline,
+                        onPress: () => _showTextInputDetails(question, textAnswers),
+                        child: const Text('查看所有回复'),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showTextInputDetails(Question question, List<AnswerDetail> textAnswers) {
+    // 创建一个映射，将每个答案与其对应的结果关联
+    final answerToResult = <AnswerDetail, SurveyResult>{};
+    for (final answer in textAnswers) {
+      for (final result in _results) {
+        if (result.questions.any((q) => q.id == answer.id)) {
+          answerToResult[answer] = result;
+          break;
+        }
+      }
+    }
+    
+    showAdaptiveDialog(
+      context: context,
+      builder: (context) => FDialog(
+        direction: Axis.vertical,
+        title: MarkdownTextWidget(
+          text: question.title,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        body: SizedBox(
+          width: MediaQuery.of(context).size.width * 0.8,
+          height: MediaQuery.of(context).size.height * 0.6,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '共 ${textAnswers.length} 条回复',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: textAnswers.length,
+                  itemBuilder: (context, index) {
+                    final answer = textAnswers[index];
+                    final result = answerToResult[answer] ?? SurveyResult(
+                      id: 0,
+                      surveyId: 0,
+                      userId: '',
+                      userAccount: '未知用户',
+                      createTime: '',
+                      questions: [],
+                    );
+                    
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.person,
+                                  size: 16,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  result.userAccount.isEmpty ? '匿名用户' : result.userAccount,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  DateFormatUtils.formatIsoString(result.createTime),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Text(
+                                answer.selectChoices,
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          FButton(
+            style: FButtonStyle.outline,
+            onPress: () => Navigator.of(context).pop(),
+            child: const Text('关闭'),
           ),
         ],
       ),

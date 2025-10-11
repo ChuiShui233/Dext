@@ -14,7 +14,7 @@ import '../services/api_service.dart';
 import '../main.dart' show isDesktop;
 import '../widgets/frosted_glass_background.dart';
 import '../components/glass_card.dart';
-import 'edit_question_page.dart';
+import 'edit_question/edit_question_page.dart';
 import 'survey_preview_page.dart';
 import '../services/config.dart';
 
@@ -746,8 +746,8 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
         return '多选题';
       case QuestionType.slider:
         return '滑块题';
-      case QuestionType.matrix:
-        return '矩阵题';
+      case QuestionType.textInput:
+        return '填写题';
     }
   }
 }

@@ -9,6 +9,7 @@ import '../services/api_service.dart';
 import '../components/survey_actions.dart';
 import '../widgets/frosted_glass_background.dart';
 import '../components/glass_card.dart';
+import '../components/pull_to_refresh_wrapper.dart';
 
 class ProjectSurveysPage extends StatefulWidget {
   final String token;
@@ -241,7 +242,7 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
                               ],
                             ),
                           )
-                        : SmartRefresher(
+                        : PullToRefreshWrapper(
                             controller: _refreshController,
                             onRefresh: _onRefresh,
                             child: ListView.builder(

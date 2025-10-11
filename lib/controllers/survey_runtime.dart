@@ -87,37 +87,41 @@ class SurveyRuntimeController {
       int? nextIdx;
       final selected = answers[q.id];
       if (selected != null && selected.isNotEmpty) {
-        // 选择 pivot 用于跳题
-        String pivot = selected.first;
-        switch (multiJumpStrategy) {
-          case MultiJumpStrategy.last:
-            pivot = selected.last;
+        // 只有选择题才处理跳题逻辑
+        if (q.options.isNotEmpty) {
+          // 选择 pivot 用于跳题
+          String pivot = selected.first;
+          switch (multiJumpStrategy) {
+            case MultiJumpStrategy.last:
+              pivot = selected.last;
+              break;
+            case MultiJumpStrategy.none:
+              if (selected.length > 1) pivot = '';
+              break;
+            case MultiJumpStrategy.first:
+              // 已默认 first
+              break;
+          }
+
+          final opt = q.options.firstWhere(
+            (o) => o.text == pivot,
+            orElse: () => q.options.first,
+          );
+
+          if (opt.destination == -1) {
+            ended = true;
             break;
-          case MultiJumpStrategy.none:
-            if (selected.length > 1) pivot = '';
-            break;
-          case MultiJumpStrategy.first:
-            // 已默认 first
-            break;
+          }
+          if (opt.destination != null && idToIndex.containsKey(opt.destination)) {
+            nextIdx = idToIndex[opt.destination!];
+          }
         }
-
-        final opt = q.options.firstWhere(
-          (o) => o.text == pivot,
-          orElse: () => q.options.isNotEmpty
-              ? q.options.first
-              : QuestionOption(id: 0, text: ''),
-        );
-
-        if (opt.destination == -1) {
-          ended = true;
+        // 文本题/评分题已作答，继续下一题
+      } else {
+        // 未作答：必答题停止，非必答题继续
+        if (q.required) {
           break;
         }
-        if (opt.destination != null && idToIndex.containsKey(opt.destination)) {
-          nextIdx = idToIndex[opt.destination!];
-        }
-      } else {
-        // 未作答则停在当前题
-        break;
       }
 
       nextIdx ??= idx + 1;

@@ -11,6 +11,8 @@ class Survey {
   final String? deadline;
   final String createTime;
   final String updateTime;
+  final bool autoSubmit; // 自动提交
+  final bool allowAnonymous; // 允许匿名提交
 
   Survey({
     required this.id,
@@ -21,10 +23,12 @@ class Survey {
     required this.surveyStatus,
     required this.totalTimes,
     this.perUserLimit,
-    required this.projectId, // 必须包含
+    required this.projectId,
     this.deadline,
     required this.createTime,
     required this.updateTime,
+    this.autoSubmit = false,
+    this.allowAnonymous = false,
   });
 
   Survey copyWith({
@@ -40,6 +44,8 @@ class Survey {
     String? deadline,
     String? createTime,
     String? updateTime,
+    bool? autoSubmit,
+    bool? allowAnonymous,
   }) {
     return Survey(
       id: id ?? this.id,
@@ -54,6 +60,8 @@ class Survey {
       deadline: deadline ?? this.deadline,
       createTime: createTime ?? this.createTime,
       updateTime: updateTime ?? this.updateTime,
+      autoSubmit: autoSubmit ?? this.autoSubmit,
+      allowAnonymous: allowAnonymous ?? this.allowAnonymous,
     );
   }
 
@@ -71,6 +79,8 @@ class Survey {
       deadline: json['deadline'] as String?,
       createTime: json['createTime'] as String? ?? '',
       updateTime: json['updateTime'] as String? ?? '',
+      autoSubmit: json['autoSubmit'] as bool? ?? json['auto_submit'] as bool? ?? false,
+      allowAnonymous: json['allowAnonymous'] as bool? ?? json['allow_anonymous'] as bool? ?? false,
     );
   }
 
@@ -88,6 +98,8 @@ class Survey {
       'deadline': deadline,
       'createTime': createTime,
       'updateTime': updateTime,
+      'auto_submit': autoSubmit,
+      'allow_anonymous': allowAnonymous,
     };
   }
 }

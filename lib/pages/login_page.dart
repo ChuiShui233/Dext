@@ -10,6 +10,7 @@ import '../widgets/window_caption.dart';
 import '../main.dart' show isDesktop;
 import '../services/api_service.dart';
 import '../services/oauth_service.dart';
+import '../widgets/frosted_oauth_dialog.dart';
 import '../services/uri_handler_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -291,33 +292,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           barrierDismissible: false,
           builder: (context) {
             dialogContext = context;
-            return AlertDialog(
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(width: 16),
-                      Expanded(child: Text('正在等待Google授权...')),
-                    ],
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    '请在浏览器中完成授权，或点击取消',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    UriHandlerService.cancelAllPendingCallbacks();
-                    closeDialog();
-                  },
-                  child: Text('取消'),
-                ),
-              ],
+            return FrostedOAuthDialog(
+              providerName: 'Google',
+              waitingText: '请在浏览器中完成授权，或点击取消',
+              onCancel: () {
+                UriHandlerService.cancelAllPendingCallbacks();
+                closeDialog();
+              },
             );
           },
         );
@@ -395,33 +376,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           barrierDismissible: false,
           builder: (context) {
             dialogContext = context;
-            return AlertDialog(
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(width: 16),
-                      Expanded(child: Text('正在等待GitHub授权...')),
-                    ],
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    '请在浏览器中完成授权，或点击取消',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    UriHandlerService.cancelAllPendingCallbacks();
-                    closeDialog();
-                  },
-                  child: Text('取消'),
-                ),
-              ],
+            return FrostedOAuthDialog(
+              providerName: 'GitHub',
+              waitingText: '请在浏览器中完成授权，或点击取消',
+              onCancel: () {
+                UriHandlerService.cancelAllPendingCallbacks();
+                closeDialog();
+              },
             );
           },
         );
@@ -490,33 +451,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           barrierDismissible: false,
           builder: (context) {
             dialogContext = context;
-            return AlertDialog(
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(width: 16),
-                      Expanded(child: Text('正在等待Microsoft授权...')),
-                    ],
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    '请在浏览器中完成授权，或点击取消',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    UriHandlerService.cancelAllPendingCallbacks();
-                    closeDialog();
-                  },
-                  child: Text('取消'),
-                ),
-              ],
+            return FrostedOAuthDialog(
+              providerName: 'Microsoft',
+              waitingText: '请在浏览器中完成授权，或点击取消',
+              onCancel: () {
+                UriHandlerService.cancelAllPendingCallbacks();
+                closeDialog();
+              },
             );
           },
         );

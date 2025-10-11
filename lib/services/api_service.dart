@@ -1257,6 +1257,59 @@ class ApiService {
   }
 
 
+  // 公共API请求方法
+  Future<http.Response> _publicRequest(
+    String method,
+    String url, {
+    Map<String, dynamic>? data,
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在发送请求...');
+      _updateStatus(RequestStatus.loading, '正在发送请求...');
+      
+      final uri = Uri.parse(url);
+      http.Response response;
+
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+      };
+
+      final upperMethod = method.toUpperCase();
+      switch (upperMethod) {
+        case 'GET':
+          response = await http
+              .get(uri, headers: headers)
+              .timeout(timeoutDuration);
+          break;
+        case 'POST':
+          response = await http
+              .post(uri, headers: headers, body: data != null ? json.encode(data) : null)
+              .timeout(timeoutDuration);
+          break;
+        case 'PUT':
+          response = await http
+              .put(uri, headers: headers, body: data != null ? json.encode(data) : null)
+              .timeout(timeoutDuration);
+          break;
+        case 'DELETE':
+          response = await http
+              .delete(uri, headers: headers, body: data != null ? json.encode(data) : null)
+              .timeout(timeoutDuration);
+          break;
+        default:
+          throw '不支持的HTTP方法: $method';
+      }
+
+      return response;
+    } catch (e) {
+      final errorMsg = '网络请求失败: $e';
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
+    }
+  }
+
   // 普通HTTP请求方法（带实时响应）
   Future<http.Response> _httpRequest(
     String method,
@@ -3492,15 +3545,12 @@ Future<Question> addQuestion(
   }
 
   // 公开访问问卷信息（无需认证）
-  Future<Map<String, dynamic>> getPublicSurvey(
-    String surveyUID, {
-    StatusCallback? onStatus,
-  }) async {
+  Future<Map<String, dynamic>> getPublicSurvey(String surveyUID, {StatusCallback? onStatus}) async {
     try {
       onStatus?.call(RequestStatus.loading, '正在获取问卷信息...');
       _updateStatus(RequestStatus.loading, '正在获取问卷信息...');
       
-      final response = await _httpRequest(
+      final response = await _publicRequest(
         'GET',
         '$baseUrl/api/public/survey/$surveyUID',
         onStatus: onStatus,
@@ -3524,7 +3574,7 @@ Future<Question> addQuestion(
     }
   }
 
-  // 公开提交问卷答案（无需认证）
+  // 公开提交问卷答案（无需认证，但后端要求加密通道）
   Future<void> submitPublicAnswer(
     String surveyUID,
     Map<String, dynamic> answers, {
@@ -3534,6 +3584,7 @@ Future<Question> addQuestion(
       onStatus?.call(RequestStatus.loading, '正在提交答案...');
       _updateStatus(RequestStatus.loading, '正在提交答案...');
       
+      // 注意：后端 DecryptMiddleware 要求 POST 使用加密
       final response = await _encryptedRequest(
         'POST',
         '$baseUrl/api/public/survey/$surveyUID/submit',

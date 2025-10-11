@@ -53,10 +53,7 @@ dependencies:
   pointycastle: ^4.0.0
   desktop_drop: ^0.6.1
   windows_single_instance: ^1.0.1
-  oauth2_client:
-    git:
-      url: https://github.com/ChuiShui233/oauth2_client-4.2.0_Plus.git
-      ref: main
+  oauth2_client: ^4.2.0
   flutter_speed_dial: ^7.0.0
   connectivity_plus: ^7.0.0
   fl_chart: ^0.69.0
@@ -93,14 +90,3 @@ flutter_launcher_icons:
   android: true
   ios: true
   adaptive_icon_background: "#FFFFFF"
-
-dependency_overrides:
-  flutter_web_auth_2:
-    git:
-      url: https://github.com/ChuiShui233/flutter_web_auth_2-5.0.0-alpha.4_Plus.git
-      ref: main
-  desktop_webview_window:
-    git:
-      url: https://github.com/ChuiShui233/desktop_webview_window_Plus.git
-      ref: main
-  

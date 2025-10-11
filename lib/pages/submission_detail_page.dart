@@ -447,7 +447,7 @@ class _SubmissionDetailPageState extends State<SubmissionDetailPage> {
         questionType = QuestionType.slider;
         break;
       case 4:
-        questionType = QuestionType.matrix;
+        questionType = QuestionType.textInput;
         break;
       default:
         questionType = QuestionType.singleChoice;

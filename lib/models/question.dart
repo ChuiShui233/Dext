@@ -4,7 +4,7 @@ enum QuestionType {
   singleChoice,    // 单选题
   multipleChoice,  // 多选题
   slider,          // 滑块题
-  matrix,          // 矩阵题
+  textInput,       // 填写题
 }
 
 class Question {
@@ -16,6 +16,7 @@ class Question {
   final Map<int, int> jumpLogic; // 跳题逻辑，key为选项ID，value为目标问题ID
   final bool required;           // 是否必答
   final int order;               // 问题顺序
+  final double imageScale;       // 图片显示比例 (0.5-2.0)
 
   Question({
     required this.id,
@@ -26,6 +27,7 @@ class Question {
     this.jumpLogic = const {},
     this.required = true,
     required this.order,
+    this.imageScale = 1.0,
   });
 
   factory Question.fromJson(Map<String, dynamic> json) {
@@ -63,6 +65,7 @@ class Question {
       jumpLogic: parsedJumpLogic,
       required: json['required'] ?? true,
       order: json['order'] ?? 0,
+      imageScale: (json['imageScale'] as num?)?.toDouble() ?? 1.0,
     );
   }
 
@@ -76,7 +79,7 @@ class Question {
         case 3:
           return QuestionType.slider;
         case 4:
-          return QuestionType.matrix;
+          return QuestionType.textInput;
         default:
           return QuestionType.singleChoice;
       }
@@ -88,8 +91,8 @@ class Question {
           return QuestionType.multipleChoice;
         case 'slider':
           return QuestionType.slider;
-        case 'matrix':
-          return QuestionType.matrix;
+        case 'textinput':
+          return QuestionType.textInput;
         default:
           return QuestionType.singleChoice;
       }
@@ -110,6 +113,7 @@ class Question {
       'jumpLogic': { for (final e in jumpLogic.entries) e.key.toString(): e.value },
       'required': required,
       'order': order,
+      'imageScale': imageScale,
     };
   }
 
@@ -122,6 +126,7 @@ class Question {
     Map<int, int>? jumpLogic,
     bool? required,
     int? order,
+    double? imageScale,
   }) {
     return Question(
       id: id ?? this.id,
@@ -132,6 +137,7 @@ class Question {
       jumpLogic: jumpLogic ?? this.jumpLogic,
       required: required ?? this.required,
       order: order ?? this.order,
+      imageScale: imageScale ?? this.imageScale,
     );
   }
 

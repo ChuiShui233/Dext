@@ -5,6 +5,7 @@ import '../components/glass_card.dart';
 import '../components/media_gallery.dart';
 import '../pages/fullscreen_media_viewer.dart';
 import '../services/config.dart';
+import 'markdown_text_widget.dart';
 
 /// 问题显示模式
 enum QuestionDisplayMode {
@@ -23,6 +24,7 @@ class QuestionDisplayWidget extends StatefulWidget {
   final Function(int questionId, String selectedOption, int optionIndex)? onSingleChoiceChanged;
   final Function(int questionId, String option, int optionIndex, bool isSelected)? onMultipleChoiceChanged;
   final Function(int questionId, String value)? onRatingChanged;
+  final Function(int questionId, String value)? onTextInputChanged;
   final Function(String mediaUrl, List<String> allMediaUrls, int currentIndex)? onMediaOpen;
   // 可选：受保护媒体需要鉴权
   final String? authToken;
@@ -37,6 +39,7 @@ class QuestionDisplayWidget extends StatefulWidget {
     this.onSingleChoiceChanged,
     this.onMultipleChoiceChanged,
     this.onRatingChanged,
+    this.onTextInputChanged,
     this.onMediaOpen,
     this.authToken,
   });
@@ -65,8 +68,8 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
         Row(
           children: [
             Expanded(
-              child: Text(
-                widget.question.title,
+              child: MarkdownTextWidget(
+                text: widget.question.title,
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -112,8 +115,11 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
             const SizedBox(height: 8),
             MediaGallery(
               mediaUrls: widget.question.mediaUrls,
-              imageItemSize: 120,
-              videoItemSize: const Size(240, 180),
+              imageItemSize: (120 * widget.question.imageScale).clamp(60, 240),
+              videoItemSize: Size(
+                (240 * widget.question.imageScale).clamp(120, 480),
+                (180 * widget.question.imageScale).clamp(90, 360),
+              ),
               enableVideoPlayer: true,
               showVideoOverlay: true,
               authToken: widget.authToken,
@@ -135,8 +141,8 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
         return _buildMultipleChoiceWidget();
       case QuestionType.slider:
         return _buildRatingWidget();
-      case QuestionType.matrix:
-        return _buildMatrixWidget();
+      case QuestionType.textInput:
+        return _buildTextInputWidget();
     }
   }
 
@@ -609,11 +615,98 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
     );
   }
 
-  Widget _buildMatrixWidget() {
+  Widget _buildTextInputWidget() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Text(
-      '矩阵题暂不支持预览',
-      style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+    
+    // 从问题的选项中获取填写题配置（如果有的话）
+    String placeholder = '请输入您的答案...';
+    int maxLength = 500;
+    bool multiline = false;
+    
+    // 如果问题有选项，从第一个选项的文本中解析配置
+    if (widget.question.options.isNotEmpty) {
+      final firstOption = widget.question.options.first;
+      try {
+        // 尝试解析JSON配置
+        final config = firstOption.text;
+        if (config.contains('placeholder:')) {
+          final parts = config.split('|');
+          for (final part in parts) {
+            if (part.startsWith('placeholder:')) {
+              placeholder = part.substring('placeholder:'.length).trim();
+            } else if (part.startsWith('maxLength:')) {
+              maxLength = int.tryParse(part.substring('maxLength:'.length).trim()) ?? 500;
+            } else if (part.startsWith('multiline:')) {
+              multiline = part.substring('multiline:'.length).trim().toLowerCase() == 'true';
+            }
+          }
+        }
+      } catch (e) {
+        // 如果解析失败，使用默认值
+      }
+    }
+    
+    // 获取当前答案
+    String currentAnswer = '';
+    if (widget.selectedAnswers.isNotEmpty) {
+      currentAnswer = widget.selectedAnswers.first;
+    }
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.grey[800]?.withValues(alpha: 0.3) : Colors.grey[100]?.withValues(alpha: 0.7),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark ? Colors.grey[600]! : Colors.grey[300]!,
+              width: 1,
+            ),
+          ),
+          child: widget.mode == QuestionDisplayMode.readonly
+              ? Text(
+                  currentAnswer.isEmpty ? '未填写' : currentAnswer,
+                  style: TextStyle(
+                    color: isDark ? Colors.white : Colors.black87,
+                    fontSize: 16,
+                  ),
+                )
+              : TextFormField(
+                  initialValue: currentAnswer,
+                  maxLines: multiline ? 5 : 1,
+                  maxLength: maxLength > 0 ? maxLength : null,
+                  decoration: InputDecoration(
+                    hintText: placeholder,
+                    hintStyle: TextStyle(
+                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                    ),
+                    border: InputBorder.none,
+                    counterStyle: TextStyle(
+                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      fontSize: 12,
+                    ),
+                  ),
+                  style: TextStyle(
+                    color: isDark ? Colors.white : Colors.black87,
+                    fontSize: 16,
+                  ),
+                  onChanged: (value) {
+                    widget.onTextInputChanged?.call(widget.question.id, value);
+                  },
+                ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '${multiline ? '多行' : '单行'}输入框，最多 $maxLength 个字符',
+          style: TextStyle(
+            fontSize: 12,
+            color: isDark ? Colors.grey[400] : Colors.grey[600],
+          ),
+        ),
+      ],
     );
   }
 

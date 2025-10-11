@@ -38,6 +38,8 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
   final Map<String, bool> _optionStates = {};
   String? _desktopBackground;
   String? _mobileBackground;
+  bool autoSubmit = false;
+  bool allowAnonymous = false;
   
   bool isLoading = true;
   bool isSubmitting = false;
@@ -61,19 +63,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
   Future<void> _initializeAndLoad() async {
     try {
       final token = await _storage.read(key: 'auth_token');
-      if (token == null || token.isEmpty) {
-        if (mounted) {
-          showFToast(
-            context: context,
-            alignment: FToastAlignment.bottomRight,
-            title: const Text('需要登录'),
-            description: const Text('请先登录再访问问卷'),
-          );
-          Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
-        }
-        return;
-      }
-      _apiService = ApiService(authToken: token);
+      _apiService = ApiService(authToken: token ?? '');
       await _loadSurvey();
     } catch (e) {
       if (!mounted) return;
@@ -101,6 +91,8 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
         description = data['description'] ?? '';
         _desktopBackground = data['desktopBackground'] as String?;
         _mobileBackground = data['mobileBackground'] as String?;
+        autoSubmit = data['autoSubmit'] ?? false;
+        allowAnonymous = data['allowAnonymous'] ?? false;
         
         final questionsData = data['questions'] as List? ?? [];
         questions = questionsData.map((q) {
@@ -142,6 +134,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
             required: q['required'] ?? true,
             order: q['order'] ?? 0,
             mediaUrls: mediaUrls,
+            imageScale: (q['imageScale'] as num?)?.toDouble() ?? 1.0,
           );
         }).toList();
         
@@ -181,7 +174,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
       case 3:
         return QuestionType.slider;
       case 4:
-        return QuestionType.matrix;
+        return QuestionType.textInput;
       default:
         return QuestionType.singleChoice;
     }
@@ -203,6 +196,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
     });
     
     _scrollToBottom();
+    _checkAutoSubmit();
   }
 
   void _updateMultipleChoiceAnswer(int questionId, String option, int optionIndex, bool isSelected) {
@@ -214,6 +208,15 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
     });
     
     _scrollToBottom();
+    _checkAutoSubmit();
+  }
+
+  void _updateTextInputAnswer(int questionId, String value) {
+    setState(() {
+      _runtime?.setAnswerSingle(questionId, value);
+      _runtime?.recomputeVisible();
+    });
+    _checkAutoSubmit();
   }
 
   void _scrollToBottom() {
@@ -231,7 +234,8 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
   bool _areAllRequiredQuestionsAnswered() {
     if (_runtime == null) return false;
     
-    for (final question in questions.where((q) => _runtime!.visibleQuestionIds.contains(q.id))) {
+    // 检查所有必答题是否都已回答（不仅限于当前可见的题目）
+    for (final question in questions) {
       if (question.required) {
         final answer = _runtime!.answers[question.id];
         if (answer == null || answer.isEmpty) {
@@ -240,6 +244,17 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
       }
     }
     return true;
+  }
+
+  void _checkAutoSubmit() {
+    if (!autoSubmit || isSubmitting || isSubmitted) return;
+    
+    // 延迟检查，避免在状态更新过程中触发
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_areAllRequiredQuestionsAnswered()) {
+        _submitAnswers();
+      }
+    });
   }
 
 
@@ -313,13 +328,23 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
       setState(() {
         isSubmitting = false;
       });
-      showFToast(
-        context: context,
-        alignment: FToastAlignment.bottomRight,
-        title: const Text('登录过期'),
-        description: const Text('登录已过期，请重新登录'),
-      );
-      Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+      // 如果允许匿名提交，不需要跳转到登录页面
+      if (!allowAnonymous) {
+        showFToast(
+          context: context,
+          alignment: FToastAlignment.bottomRight,
+          title: const Text('登录过期'),
+          description: const Text('登录已过期，请重新登录'),
+        );
+        Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+      } else {
+        showFToast(
+          context: context,
+          alignment: FToastAlignment.bottomRight,
+          title: const Text('提交失败'),
+          description: const Text('网络错误，请稍后重试'),
+        );
+      }
     } catch (e) {
       setState(() {
         isSubmitting = false;
@@ -571,11 +596,13 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
                             onSingleChoiceChanged: _updateSingleChoiceAnswer,
                             onMultipleChoiceChanged: _updateMultipleChoiceAnswer,
                             onRatingChanged: (questionId, value) {
-                              _runtime?.setAnswerSingle(questionId, value);
-                              _runtime?.recomputeVisible();
-                              setState(() {});
-                              _scrollToBottom();
+                              setState(() {
+                                _runtime?.setAnswerSingle(questionId, value);
+                                _runtime?.recomputeVisible();
+                              });
+                              _checkAutoSubmit();
                             },
+                            onTextInputChanged: _updateTextInputAnswer,
                             onMediaOpen: (url, all, index) => _openFullscreenViewer(url, all, index),
                           ),
                         ),
