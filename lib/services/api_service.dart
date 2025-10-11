@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:http_parser/http_parser.dart';
@@ -1437,26 +1438,40 @@ class ApiService {
   // 自动刷新token并重试的通用方法
   Future<bool> _refreshToken() async {
     try {
+      if (kDebugMode) {
+        print('[RefreshToken] 开始刷新令牌...');
+        print('[RefreshToken] 当前内存 token: ${authToken?.substring(0, min(20, authToken?.length ?? 0))}...');
+      }
+      
       // 优先使用当前内存 token
       String? token = authToken;
       // 如无内存token，尝试从本地取
       if (token == null || token.isEmpty) {
+        if (kDebugMode) print('[RefreshToken] 内存 token 为空，从本地存储读取...');
         final prefs = await SharedPreferences.getInstance();
         token = prefs.getString('auth_token');
-        if (token!.isNotEmpty) {
+        if (token != null && token.isNotEmpty) {
           authToken = token;
           // 同步到核心层，确保headers中包含Authorization
           _core.updateAuthToken(authToken);
+          if (kDebugMode) print('[RefreshToken] 从本地存储恢复 token: ${token.substring(0, min(20, token.length))}...');
+        } else {
+          if (kDebugMode) print('[RefreshToken] 本地存储也没有 token');
         }
       }
       
       // 检查是否有有效的token
       if (authToken == null || authToken!.isEmpty) {
+        if (kDebugMode) print('[RefreshToken] 没有有效的 token，放弃刷新');
         return false;
       }
       
       // 再次确保token已同步到核心层
       _core.updateAuthToken(authToken);
+      if (kDebugMode) {
+        print('[RefreshToken] Token 已同步到核心层');
+        print('[RefreshToken] 核心层 token: ${_core.authToken?.substring(0, min(20, _core.authToken?.length ?? 0))}...');
+      }
       
       // 优先尝试使用 AES（需要已有会话密钥），否则回退到 RSA 加密
       http.Response resp;
@@ -1512,9 +1527,23 @@ class ApiService {
           } catch (_) {}
           return true;
         }
+      } else if (resp.statusCode == 401) {
+        // Token 签名无效或已完全过期，清除本地存储
+        if (kDebugMode) print('[RefreshToken] Token 无效（401），清除本地存储');
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove('auth_token');
+          await prefs.remove('auth_token_expires');
+          const storage = FlutterSecureStorage();
+          await storage.delete(key: 'auth_token');
+        } catch (_) {}
+        authToken = null;
+        _core.updateAuthToken(null);
+        _cryptoService.clearSessionKey();
       }
       return false;
-    } catch (_) {
+    } catch (e) {
+      if (kDebugMode) print('[RefreshToken] 异常: $e');
       return false;
     }
   }
@@ -1564,7 +1593,6 @@ class ApiService {
         throw '注销失败: ${resp.body}';
       }
       
-      // 服务端注销成功后，清理所有本地数据
       await _clearAllLocalData();
       
       onStatus?.call(RequestStatus.success, '退出登录成功');
@@ -1577,53 +1605,47 @@ class ApiService {
     }
   }
   
-  /// 清理所有本地认证数据和会话密钥
   Future<void> _clearAllLocalData() async {
     try {
-      // 1. 清除内存中的令牌
       authToken = null;
       _core.updateAuthToken(null);
       
-      // 2. 清除会话密钥
       _cryptoService.clearSessionKey();
       
-      // 3. 清除 SharedPreferences 中的所有认证相关数据
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('auth_token');
       await prefs.remove('auth_token_expires');
       await prefs.remove('refresh_token');
       await prefs.remove('current_user_cache');
       
-      // 4. 清除 FlutterSecureStorage 中的敏感数据
       const storage = FlutterSecureStorage();
       await storage.delete(key: 'auth_token');
       await storage.delete(key: 'refresh_token');
       await storage.delete(key: 'session_key');
       
-      // 5. 清除所有缓存数据
-      await prefs.remove('projects_cache');
-      await prefs.remove('surveys_cache');
-      await prefs.remove('survey_stats_cache');
-      
-      // 清除所有问题缓存（使用通配符模式）
       final keys = prefs.getKeys();
       for (final key in keys) {
-        if (key.startsWith('questions_') || 
-            key.startsWith('answers_') ||
-            key.startsWith('user_')) {
+
+        if (!key.startsWith('auth_') && 
+            !key.startsWith('refresh_') && 
+            key != 'session_key') {
           await prefs.remove(key);
         }
       }
-      
+      _dataUpdateController.add({
+        'type': 'logout',
+        'data': null,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      });
+      _updateStatus(RequestStatus.idle, '已清空所有缓存');
     } catch (e) {
-      // 即使清理失败也不抛出异常，确保用户能够退出
+
       debugPrint('清理本地数据时出错: $e');
     }
   }
 
-  // 项目相关API（带实时响应）
   Future<List<Project>> getProjects({StatusCallback? onStatus}) async {
-    // Delegate to ProjectService (preserves signature)
+
     return await _projectService.getProjects(onStatus: onStatus);
   }
 
