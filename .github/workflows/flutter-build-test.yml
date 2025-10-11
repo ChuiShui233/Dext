@@ -267,32 +267,36 @@ jobs:
       - name: 安装 Inno Setup
         run: |
           echo "安装 Inno Setup..."
-          choco install innosetup -y
+          
+          # 强制重新安装，确保实际安装而不是只下载
+          choco install innosetup --force -y --install-arguments='/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-'
+          
           echo "Inno Setup 安装完成 ✅"
-          
-          # 立即验证安装并查找实际的 ISCC.exe 位置
-          echo "验证 Inno Setup 安装..."
           echo ""
           
-          # 列出 Chocolatey lib 目录内容
-          echo "=== Chocolatey lib 目录 ==="
-          Get-ChildItem "C:\ProgramData\chocolatey\lib" -Filter "*inno*" -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-            echo "📁 $($_.FullName)"
-            Get-ChildItem $_.FullName -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue | ForEach-Object {
-              echo "  📄 $($_.FullName)"
+          # 验证安装
+          echo "=== 验证安装 ==="
+          $standardPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (Test-Path $standardPath) {
+            echo "✅ 找到标准安装路径: $standardPath"
+          } else {
+            echo "⚠️ 标准路径不存在，搜索其他位置..."
+            
+            # 搜索所有可能的位置
+            $locations = @(
+              "C:\Program Files (x86)",
+              "C:\Program Files",
+              "C:\ProgramData\chocolatey"
+            )
+            
+            foreach ($loc in $locations) {
+              if (Test-Path $loc) {
+                $found = Get-ChildItem -Path $loc -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 5
+                foreach ($f in $found) {
+                  echo "  找到: $($f.FullName)"
+                }
+              }
             }
-          }
-          
-          echo ""
-          echo "=== 搜索所有 ISCC.exe ==="
-          Get-ChildItem "C:\ProgramData\chocolatey" -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue | ForEach-Object {
-            echo "✅ 找到: $($_.FullName)"
-          }
-          
-          echo ""
-          echo "=== 检查 PATH 环境变量 ==="
-          $env:Path -split ';' | Where-Object { $_ -like "*inno*" } | ForEach-Object {
-            echo "  - $_"
           }
 
 
@@ -302,53 +306,60 @@ jobs:
           echo "开始编译安装程序..."
           echo ""
           
-          # 全局搜索 ISCC.exe（排除 bin 目录中的包装脚本）
+          # 优先检查 Chocolatey lib 目录
+          echo "=== 检查 Chocolatey 安装位置 ==="
+          $chocoLibPath = "C:\ProgramData\chocolatey\lib\InnoSetup"
+          
+          if (Test-Path $chocoLibPath) {
+            echo "✅ 找到 Chocolatey InnoSetup 目录: $chocoLibPath"
+            echo "目录内容："
+            Get-ChildItem $chocoLibPath -Recurse -Filter "*.exe" | ForEach-Object {
+              echo "  📄 $($_.FullName)"
+            }
+          }
+          
+          echo ""
           echo "=== 搜索 ISCC.exe ==="
           $isccPath = $null
-          $allFound = @()
           
-          $searchRoots = @(
-            "C:\ProgramData\chocolatey",
-            "C:\Program Files (x86)",
-            "C:\Program Files",
-            "C:\tools"
+          # 定义可能的路径（按优先级排序）
+          $possiblePaths = @(
+            "$chocoLibPath\tools\ISCC.exe",
+            "$chocoLibPath\ISCC.exe",
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+            "C:\Program Files\Inno Setup 6\ISCC.exe"
           )
           
-          foreach ($root in $searchRoots) {
-            if (Test-Path $root) {
-              echo "搜索 $root ..."
-              $found = Get-ChildItem -Path $root -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue | 
-                       Where-Object { $_.DirectoryName -notlike "*\bin" -and $_.DirectoryName -notlike "*\shims" }
-              
-              foreach ($file in $found) {
-                $allFound += $file
-                echo "  ✅ 找到: $($file.FullName)"
-                if (-not $isccPath) {
-                  $isccPath = $file.FullName
-                }
-              }
+          foreach ($path in $possiblePaths) {
+            if (Test-Path $path) {
+              $isccPath = $path
+              echo "✅ 找到 ISCC.exe: $path"
+              break
+            }
+          }
+          
+          # 如果还没找到，在 Chocolatey lib 目录递归搜索
+          if (-not $isccPath -and (Test-Path $chocoLibPath)) {
+            echo "在 Chocolatey 目录递归搜索..."
+            $found = Get-ChildItem -Path $chocoLibPath -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) {
+              $isccPath = $found.FullName
+              echo "✅ 递归搜索找到: $isccPath"
             }
           }
           
           echo ""
           
-          # 如果没找到任何 ISCC.exe
+          # 如果还是没找到
           if (-not $isccPath) {
-            echo "❌ 未找到任何 ISCC.exe 文件"
+            echo "❌ 未找到 ISCC.exe"
             echo ""
-            echo "=== 诊断信息 ==="
-            
-            # 检查 Chocolatey 安装
-            if (Test-Path "C:\ProgramData\chocolatey\lib\innosetup") {
-              echo "✅ Chocolatey innosetup 包存在"
-              echo "目录内容："
-              Get-ChildItem "C:\ProgramData\chocolatey\lib\innosetup" -Recurse | Select-Object -First 20 | ForEach-Object {
-                echo "  - $($_.FullName)"
+            echo "=== 完整目录结构 ==="
+            if (Test-Path $chocoLibPath) {
+              Get-ChildItem $chocoLibPath -Recurse | Select-Object -First 30 | ForEach-Object {
+                echo "  $($_.FullName)"
               }
-            } else {
-              echo "❌ Chocolatey innosetup 包不存在"
             }
-            
             throw "找不到 Inno Setup 编译器 (ISCC.exe)"
           }
           
