@@ -3416,6 +3416,9 @@ Future<Question> addQuestion(
     StatusCallback? onStatus,
   }) async {
     try {
+      // 确保 token 已加载
+      await _ensureAuthTokenLoaded();
+      
       onStatus?.call(RequestStatus.loading, '正在上传头像...');
       _updateStatus(RequestStatus.loading, '正在上传头像...');
 
@@ -3492,6 +3495,9 @@ Future<Question> addQuestion(
     StatusCallback? onStatus,
   }) async {
     try {
+      // 确保 token 已加载
+      await _ensureAuthTokenLoaded();
+      
       onStatus?.call(RequestStatus.loading, '正在上传头像...');
       _updateStatus(RequestStatus.loading, '正在上传头像...');
 

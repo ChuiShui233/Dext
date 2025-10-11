@@ -1,20 +1,12 @@
 import 'package:dext/services/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
-import 'package:layout/layout.dart';
 import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 import '../widgets/top_safe_spacer.dart';
 import '../widgets/dashboard_stats_card.dart';
 import '../widgets/dashboard_chart.dart';
 import '../widgets/recent_survey_responses_list.dart';
 import 'public_access_page.dart';
-
-final sectionSpacing = LayoutValue(
-  xs: 20.0,
-  sm: 30.0,
-  md: 40.0,
-  lg: 50.0,
-);
 
 class HomeMainContent extends StatelessWidget {
   final int projectCount;
@@ -49,7 +41,7 @@ class HomeMainContent extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const TopSafeSpacer(desktop: 0, web: 0, mobile: 24),
+                const TopSafeSpacer(),
                 
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -150,7 +142,7 @@ class HomeMainContent extends StatelessWidget {
                             child: DashboardStatsCard(
                               title: '总问卷数',
                               value: projectCount.toString(),
-                              subtitle: '本月新增 ${(projectCount * 0.15).round()} 个',
+                              subtitle: '新建问卷数',
                               icon: FIcons.folderArchive,
                             ),
                           ),

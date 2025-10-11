@@ -114,7 +114,7 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
                 ),
               ),
               Text(
-                '共 ${submissions.length} 个回复',
+                '最近 ${submissions.length} 个回复',
                 style: TextStyle(
                   fontSize: 12,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.6),

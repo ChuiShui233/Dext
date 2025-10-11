@@ -51,9 +51,8 @@ class _CropImageDialogState extends State<CropImageDialog> {
       return data.buffer.asUint8List();
     } catch (e) {
       if (mounted) {
-        showFToast(
-          context: context,
-          title: Text('裁剪失败: $e'),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('裁剪失败: $e')),
         );
       }
       return null;
@@ -67,88 +66,132 @@ class _CropImageDialogState extends State<CropImageDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final size = MediaQuery.of(context).size;
     
-    return FDialog(
-      direction: Axis.horizontal,
-      title: const Text('裁剪头像'),
-      body: SizedBox(
-        width: 500,
-        height: 500,
-        child: Column(
-          children: [
-            const Text('拖动边角调整裁剪区域，将裁剪为 1:1 正方形'),
-            const SizedBox(height: 16),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: theme.dividerColor),
-                  borderRadius: BorderRadius.circular(8),
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: size.width.clamp(0, 700).toDouble(),
+              maxHeight: size.height.clamp(0, 800).toDouble(),
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface.withValues(alpha: 0.30),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  width: 1,
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(7),
-                  child: CropImage(
-                    controller: _cropController,
-                    image: widget.imageBytes != null
-                        ? Image.memory(widget.imageBytes!, fit: BoxFit.contain)
-                        : Image.file(widget.imageFile!, fit: BoxFit.contain),
-                    gridColor: Colors.white.withValues(alpha: 0.7),
-                    gridCornerSize: 30,
-                    gridThinWidth: 2,
-                    gridThickWidth: 4,
-                    scrimColor: Colors.black.withValues(alpha: 0.54),
-                    alwaysShowThirdLines: false,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
                   ),
-                ),
+                ],
+              ),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '裁剪头像',
+                    style: theme.textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 16),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: AspectRatio(
+                        aspectRatio: 1.0,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: CropImage(
+                            controller: _cropController,
+                            image: widget.imageBytes != null
+                                ? Image.memory(widget.imageBytes!, fit: BoxFit.cover)
+                                : Image.file(widget.imageFile!, fit: BoxFit.cover),
+                            gridColor: Colors.white.withValues(alpha: 0.7),
+                            gridCornerSize: 30,
+                            gridThinWidth: 2,
+                            gridThickWidth: 4,
+                            scrimColor: Colors.black.withValues(alpha: 0.54),
+                            alwaysShowThirdLines: false,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          FButton.icon(
+                            style: FButtonStyle.outline,
+                            onPress: _isProcessing
+                                ? null
+                                : () {
+                                    _cropController.rotateLeft();
+                                    _cropController.crop = const Rect.fromLTRB(0.1, 0.1, 0.9, 0.9);
+                                  },
+                            child: const Icon(FIcons.rotateCcw, size: 20),
+                          ),
+                          const SizedBox(width: 8),
+                          FButton.icon(
+                            style: FButtonStyle.outline,
+                            onPress: _isProcessing
+                                ? null
+                                : () {
+                                    _cropController.rotateRight();
+                                    _cropController.crop = const Rect.fromLTRB(0.1, 0.1, 0.9, 0.9);
+                                  },
+                            child: const Icon(FIcons.rotateCw, size: 20),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          TextButton(
+                            onPressed: _isProcessing ? null : () => Navigator.pop(context),
+                            child: const Text('取消'),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton(
+                            onPressed: _isProcessing
+                                ? null
+                                : () async {
+                                    final navigator = Navigator.of(context);
+                                    final croppedBytes = await _getCroppedImage();
+                                    if (!mounted) return;
+                                    if (croppedBytes != null) {
+                                      navigator.pop(croppedBytes);
+                                    }
+                                  },
+                            child: _isProcessing
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Text('确定'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                FButton.icon(
-                  style: FButtonStyle.outline,
-                  onPress: _isProcessing ? null : () => _cropController.rotateLeft(),
-                  child: const Icon(FIcons.rotateCcw, size: 20),
-                ),
-                const SizedBox(width: 16),
-                FButton.icon(
-                  style: FButtonStyle.outline,
-                  onPress: _isProcessing ? null : () => _cropController.rotateRight(),
-                  child: const Icon(FIcons.rotateCw, size: 20),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
-      actions: [
-        FButton(
-          style: FButtonStyle.outline,
-          intrinsicWidth: true,
-          onPress: _isProcessing ? null : () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        FButton(
-          intrinsicWidth: true,
-          onPress: _isProcessing
-              ? null
-              : () async {
-                  final navigator = Navigator.of(context);
-                  final croppedBytes = await _getCroppedImage();
-                  if (!mounted) return;
-                  if (croppedBytes != null) {
-                    navigator.pop(croppedBytes);
-                  }
-                },
-          child: _isProcessing
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('确定'),
-        ),
-      ],
     );
   }
 }

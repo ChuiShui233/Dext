@@ -6,25 +6,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../crypto_service.dart';
 
-/// 请求状态
 enum RequestStatus { idle, loading, success, error }
 
-/// 回调类型
 typedef ProgressCallback = void Function(int sent, int total);
 typedef StatusCallback = void Function(RequestStatus status, String? message);
 
-/// 提供统一的 HTTP/加密请求、状态流与缓存工具
 class ApiCore {
   ApiCore({this.authToken});
 
-  // 使用集中配置的 API 基地址
   static const String baseUrl = apiBaseUrl;
   static const Duration timeoutDuration = Duration(seconds: 15);
 
   String? authToken;
   final CryptoService _cryptoService = CryptoService();
 
-  // 状态与消息流
   RequestStatus _currentStatus = RequestStatus.idle;
   String? _lastErrorMessage;
   final StreamController<RequestStatus> _statusController = StreamController<RequestStatus>.broadcast();
@@ -58,7 +53,6 @@ class ApiCore {
     });
   }
 
-  /// 更新认证令牌
   void updateAuthToken(String? token) {
     authToken = token;
   }
