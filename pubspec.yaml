@@ -81,9 +81,9 @@ flutter:
     - assets/fonts/
     
   fonts:
-    - family: PingFangSC
+    - family: PingFangSuper
       fonts:
-        - asset: assets/fonts/PingFangSC-Regular.otf
+        - asset: assets/fonts/SuperPingFangV1.ttf
   
 flutter_launcher_icons:
   image_path: "assets/images/Dext.png"

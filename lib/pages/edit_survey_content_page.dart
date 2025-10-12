@@ -14,6 +14,7 @@ import '../services/api_service.dart';
 import '../main.dart' show isDesktop;
 import '../widgets/frosted_glass_background.dart';
 import '../components/glass_card.dart';
+import '../widgets/question_display_widget.dart';
 import 'edit_question/edit_question_page.dart';
 import 'survey_preview_page.dart';
 import '../services/config.dart';
@@ -43,6 +44,11 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
   String? _mobileBackground;
   bool _isDesktopPreview = true;
   List<Question>? _previousQuestionOrder; // 用于撤回功能
+
+  String? _lastMeasuredUrl;
+  double? _bgNaturalWidth;
+  double? _bgNaturalHeight;
+  bool _isBgLoading = true;
 
   @override
   void initState() {
@@ -78,14 +84,53 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
 
   Future<void> _loadBackground() async {
     try {
+      if (mounted) setState(() => _isBgLoading = true);
       final backgroundData = await _apiService.getSurveyBackground(widget.survey.id);
       setState(() {
         _desktopBackground = backgroundData['desktopBackground'] as String?;
         _mobileBackground = backgroundData['mobileBackground'] as String?;
       });
+      final current = _isDesktopPreview ? _desktopBackground : _mobileBackground;
+      final other = _isDesktopPreview ? _mobileBackground : _desktopBackground;
+      final currentAbs = toAbsoluteUrl(current ?? '');
+      final otherAbs = toAbsoluteUrl(other ?? '');
+      final ctx = context;
+      if (current != null && current.isNotEmpty) {
+        if (!ctx.mounted) return;
+        try { await precacheImage(CachedNetworkImageProvider(currentAbs), ctx); } catch (_) {}
+        _ensureBackgroundDimensions(currentAbs);
+      }
+      if (other != null && other.isNotEmpty) {
+        if (!ctx.mounted) return;
+        try { await precacheImage(CachedNetworkImageProvider(otherAbs), ctx); } catch (_) {}
+      }
     } catch (e) {
       //静默失败了喵
+    } finally {
+      if (mounted) setState(() => _isBgLoading = false);
     }
+  }
+
+  void _ensureBackgroundDimensions(String absUrl) {
+    if (_lastMeasuredUrl == absUrl) return;
+    _lastMeasuredUrl = absUrl;
+    // 使用 CachedNetworkImageProvider 与显示组件共用同一缓存体系，命中内存/磁盘缓存更快
+    final ImageProvider provider = CachedNetworkImageProvider(absUrl);
+    final ImageStream stream = provider.resolve(const ImageConfiguration());
+    ImageStreamListener? listener;
+    listener = ImageStreamListener((ImageInfo info, bool syncCall) {
+      final image = info.image;
+      if (mounted) {
+        setState(() {
+          _bgNaturalWidth = image.width.toDouble();
+          _bgNaturalHeight = image.height.toDouble();
+        });
+      }
+      stream.removeListener(listener!);
+    }, onError: (error, stackTrace) {
+      stream.removeListener(listener!);
+    });
+    stream.addListener(listener);
   }
 
   Future<void> _addQuestion() async {
@@ -363,6 +408,9 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWide = screenWidth > 1080;
     return Scaffold(
       body: Stack(
         children: [
@@ -378,60 +426,125 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                     onPress: () => Navigator.pop(context),
                   ),
                 ],
-                suffixes: [
-                  FHeaderAction(
-                    icon: const Icon(Icons.visibility, size: 20),
-                    onPress: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => SurveyPreviewPage(
-                            survey: widget.survey,
-                            token: widget.token,
-                            questions: _questions,
-                          ),
+                suffixes: isWide
+                    ? []
+                    : [
+                        FHeaderAction(
+                          icon: const Icon(Icons.visibility, size: 20),
+                          onPress: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => SurveyPreviewPage(
+                                  survey: widget.survey,
+                                  token: widget.token,
+                                  questions: _questions,
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
-                ],
+                      ],
               ),
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : CustomScrollView(
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            children: [
-                              _buildBackgroundCard(),
-                              const SizedBox(height: 16),
-                            ],
+                : isWide
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: ScrollConfiguration(
+                              behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                              child: CustomScrollView(
+                                slivers: [
+                                  SliverToBoxAdapter(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(24),
+                                      child: Column(
+                                        children: [
+                                          _buildBackgroundCard(),
+                                          const SizedBox(height: 16),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  SliverReorderableList(
+                                    itemCount: _questions.length,
+                                    onReorder: _onReorderQuestions,
+                                    itemBuilder: (context, index) {
+                                      final question = _questions[index];
+                                      return _buildQuestionListItem(question, index);
+                                    },
+                                  ),
+                                  const SliverToBoxAdapter(child: SizedBox(height: 48)),
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                      SliverReorderableList(
-                        itemCount: _questions.length,
-                        onReorder: _onReorderQuestions,
-                        itemBuilder: (context, index) {
-                          final question = _questions[index];
-                          return _buildQuestionListItem(question, index);
-                        },
-                      ),
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: FButton(
-                            onPress: _addQuestion,
-                            child: const Text('添加问题'),
+                          SizedBox(
+                            width: 360,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: theme.cardColor.withValues(alpha: 0.5),
+                                border: Border(
+                                  left: BorderSide(
+                                    color: theme.dividerColor.withValues(alpha: 0.08),
+                                    width: 1,
+                                  ),
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  Expanded(
+                                    child: ScrollConfiguration(
+                                      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                                      child: SingleChildScrollView(
+                                        padding: const EdgeInsets.all(24),
+                                        child: _buildActionPanel(theme),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
+                      )
+                    : CustomScrollView(
+                        slivers: [
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                children: [
+                                  _buildBackgroundCard(),
+                                  const SizedBox(height: 16),
+                                ],
+                              ),
+                            ),
+                          ),
+                          SliverReorderableList(
+                            itemCount: _questions.length,
+                            onReorder: _onReorderQuestions,
+                            itemBuilder: (context, index) {
+                              final question = _questions[index];
+                              return _buildQuestionListItem(question, index);
+                            },
+                          ),
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: FButton(
+                                onPress: _addQuestion,
+                                child: const Text('添加问题'),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-              ),
+          ),
             ],
           ),
         ],
@@ -439,225 +552,270 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
     );
   }
 
-  Widget _buildBackgroundCard() {
-  final isCurrentDesktop = _isDesktopPreview;
-  final currentImage = isCurrentDesktop ? _desktopBackground : _mobileBackground;
-  final absImage = toAbsoluteUrl(currentImage ?? '');
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-  const double bottomHeight = 70; // 底部模糊/半透明容器高度
-  const double minHeight = 150; // 最小高度，确保有足够空间显示按钮
-  final double maxHeight = isDesktop ? 400 : 250; // 桌面端400px，移动端250px
-
-  return Center(
-    child: ConstrainedBox(
-      constraints: BoxConstraints(
-        maxWidth: 600, // 限制最大宽度
-        maxHeight: maxHeight, // 限制最大高度
-      ),
-      child: DropTarget(
-        onDragDone: (detail) {
-          _handleDroppedFiles(detail.files);
-        },
-        onDragEntered: (detail) {
-          setState(() {
-            _isDragOver = true;
-          });
-        },
-        onDragExited: (detail) {
-          setState(() {
-            _isDragOver = false;
-          });
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _isDragOver 
-                ? Colors.blue.withAlpha(128)
-                : Colors.transparent,
-              width: _isDragOver ? 2 : 0,
-            ),
-          ),
-          child: Card(
-            elevation: 0,
-            color: Colors.transparent,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: IntrinsicHeight(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: minHeight),
-                child: Stack(
-                  children: [
-            Container(
-              width: double.infinity,
-              constraints: BoxConstraints(
-                minHeight: minHeight,
-                maxHeight: maxHeight,
+  Widget _buildActionPanel(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 预览入口
+        FilledButton.icon(
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => SurveyPreviewPage(
+                  survey: widget.survey,
+                  token: widget.token,
+                  questions: _questions,
+                ),
               ),
+            );
+          },
+          icon: const Icon(Icons.visibility_outlined),
+          label: const Text('预览问卷'),
+        ),
+        const SizedBox(height: 12),
+        // 添加问题快捷按钮
+        OutlinedButton.icon(
+          onPressed: _addQuestion,
+          icon: const Icon(Icons.add),
+          label: const Text('添加问题'),
+        ),
+        const SizedBox(height: 12),
+      ],
+    );
+  }
+
+  Widget _buildBackgroundCard() {
+    final isCurrentDesktop = _isDesktopPreview;
+    final currentImage = isCurrentDesktop ? _desktopBackground : _mobileBackground;
+    final absImage = toAbsoluteUrl(currentImage ?? '');
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const double bottomHeight = 70;
+    const double minHeight = 150;
+    final double maxHeight = isDesktop ? 500 : 300;
+
+    if (currentImage != null && currentImage.isNotEmpty) {
+      _ensureBackgroundDimensions(absImage);
+    }
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final double maxDisplayWidth = isDesktop ? (screenWidth * 0.45).clamp(420.0, 820.0) : (screenWidth - 32);
+    double? displayWidth;
+    double? displayHeight;
+    if (_bgNaturalWidth != null && _bgNaturalHeight != null) {
+      final w = _bgNaturalWidth!;
+      final h = _bgNaturalHeight!;
+      final ratio = h / w;
+      displayWidth = w;
+      displayHeight = h;
+      if (displayWidth > maxDisplayWidth) {
+        displayWidth = maxDisplayWidth;
+        displayHeight = displayWidth * ratio;
+      }
+      if (displayHeight > maxHeight) {
+        displayHeight = maxHeight;
+        displayWidth = displayHeight / ratio;
+      }
+      if (displayHeight < minHeight) {
+        displayHeight = minHeight;
+      }
+    }
+
+    // 目标尺寸（用于动画过渡）
+    final double targetWidth = (displayWidth ?? maxDisplayWidth);
+    final double targetHeight = (displayHeight ?? minHeight).clamp(minHeight, maxHeight);
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: maxDisplayWidth,
+          maxHeight: maxHeight,
+        ),
+        child: AnimatedContainer(
+          width: targetWidth,
+          height: targetHeight,
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeInOutCubic,
+          child: DropTarget(
+            onDragDone: (detail) => _handleDroppedFiles(detail.files),
+            onDragEntered: (detail) => setState(() => _isDragOver = true),
+            onDragExited: (detail) => setState(() => _isDragOver = false),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _isDragOver ? Colors.blue.withAlpha(128) : Colors.transparent,
+                  width: _isDragOver ? 2 : 0,
+                ),
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: currentImage != null && currentImage.isNotEmpty
-                    ? GestureDetector(
-                        onPanUpdate: (details) {
-                        },
-                        child: InteractiveViewer(
-                          panEnabled: true,
-                          scaleEnabled: true,
-                          minScale: 0.8,
-                          maxScale: 4.0,
-                          boundaryMargin: const EdgeInsets.all(50),
-                          child: CachedNetworkImage(
-                            imageUrl: absImage,
-                            fit: BoxFit.contain,
-                            progressIndicatorBuilder: (context, url, progress) =>
-                                Center(child: CircularProgressIndicator(value: progress.progress)),
-                            errorWidget: (context, url, error) =>
-                                Container(color: Colors.grey.shade200, child: const Icon(Icons.error)),
+              child: Card(
+                elevation: 0,
+                color: Colors.transparent,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: IntrinsicHeight(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: minHeight, maxHeight: maxHeight),
+                    child: Stack(
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          constraints: BoxConstraints(minHeight: minHeight, maxHeight: maxHeight),
+                          decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: (currentImage != null && currentImage.isNotEmpty)
+                                ? InteractiveViewer(
+                                    panEnabled: true,
+                                    scaleEnabled: true,
+                                    minScale: 0.8,
+                                    maxScale: 4.0,
+                                    boundaryMargin: const EdgeInsets.all(50),
+                                    child: CachedNetworkImage(
+                                      imageUrl: absImage,
+                                      fit: BoxFit.contain,
+                                      fadeInDuration: Duration.zero,
+                                      fadeOutDuration: Duration.zero,
+                                      progressIndicatorBuilder: (context, url, progress) =>
+                                          Center(child: CircularProgressIndicator(value: progress.progress)),
+                                      errorWidget: (context, url, error) =>
+                                          Container(color: Colors.grey.shade200, child: const Icon(Icons.error)),
+                                    ),
+                                  )
+                                : Center(
+                                    child: _isBgLoading
+                                        ? Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: const [
+                                              SizedBox(
+                                                width: 28,
+                                                height: 28,
+                                                child: CircularProgressIndicator(strokeWidth: 2.5),
+                                              ),
+                                              SizedBox(height: 10),
+                                              Text('加载壁纸中...', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                            ],
+                                          )
+                                        : Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(
+                                                _isDragOver ? Icons.cloud_upload : Icons.add_photo_alternate,
+                                                size: 48,
+                                                color: _isDragOver ? Colors.blue : Colors.grey,
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                _isDragOver ? '松开鼠标上传图片' : '还没有图片哦，快上传吧~',
+                                                style: TextStyle(
+                                                  color: _isDragOver ? Colors.blue : Colors.grey,
+                                                  fontSize: 16,
+                                                  fontWeight: _isDragOver ? FontWeight.w500 : FontWeight.normal,
+                                                ),
+                                              ),
+                                              if (!_isDragOver)
+                                                const Padding(
+                                                  padding: EdgeInsets.only(top: 4),
+                                                  child: Text('可以拖拽图片文件到这里', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                                ),
+                                            ],
+                                          ),
+                                  ),
                           ),
                         ),
-                      )
-                    : Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              _isDragOver ? Icons.cloud_upload : Icons.add_photo_alternate,
-                              size: 48,
-                              color: _isDragOver ? Colors.blue : Colors.grey,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _isDragOver 
-                                ? '松开鼠标上传图片' 
-                                : '还没有图片哦，快上传吧~',
-                              style: TextStyle(
-                                color: _isDragOver ? Colors.blue : Colors.grey, 
-                                fontSize: 16,
-                                fontWeight: _isDragOver ? FontWeight.w500 : FontWeight.normal,
+                        if (currentImage != null && currentImage.isNotEmpty)
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: ClipRRect(
+                              borderRadius: const BorderRadius.only(
+                                bottomLeft: Radius.circular(12),
+                                bottomRight: Radius.circular(12),
+                              ),
+                              child: BackdropFilter(
+                                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                                child: Container(
+                                  width: double.infinity,
+                                  height: bottomHeight,
+                                  color: Colors.black.withAlpha((0.1 * 255).round()),
+                                ),
                               ),
                             ),
-                            if (!_isDragOver) ...[
-                              const SizedBox(height: 4),
-                              const Text(
-                                '可以拖拽图片文件到这里',
-                                style: TextStyle(color: Colors.grey, fontSize: 12),
+                          ),
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            width: double.infinity,
+                            height: bottomHeight,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: (currentImage == null || currentImage.isEmpty)
+                                  ? (isDark
+                                      ? Colors.white.withAlpha((0.05 * 255).round())
+                                      : Colors.black.withAlpha((0.05 * 255).round()))
+                                  : Colors.transparent,
+                              borderRadius: const BorderRadius.only(
+                                bottomLeft: Radius.circular(12),
+                                bottomRight: Radius.circular(12),
                               ),
-                            ],
-                          ],
-                        ),
-                      ),
-              ),
-            ),
-            if (currentImage != null && currentImage.isNotEmpty)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(12),
-                    bottomRight: Radius.circular(12),
-                  ),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                    child: Container(
-                      width: double.infinity,
-                      height: bottomHeight,
-                      color: Colors.black.withAlpha((0.1 * 255).round()),
-                    ),
-                  ),
-                ),
-              ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Container(
-                width: double.infinity,
-                height: bottomHeight, // 与模糊容器高度一致
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: currentImage == null || currentImage.isEmpty
-                      ? (isDark
-                          ? Colors.white.withAlpha((0.05 * 255).round())
-                          : Colors.black.withAlpha((0.05 * 255).round()))
-                      : Colors.transparent,
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(12),
-                    bottomRight: Radius.circular(12),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    FButton(
-                      style: FButtonStyle(
-                        decoration: FWidgetStateMap.all(
-                          BoxDecoration(
-                            color: const Color.fromARGB(144, 255, 227, 134),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        contentStyle: FButtonContentStyle(
-                          textStyle: FWidgetStateMap.all(
-                            const TextStyle(
-                              color: Color.fromARGB(255, 0, 0, 0),
-                              fontWeight: FontWeight.w500,
                             ),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          iconStyle: FWidgetStateMap.all(
-                            const IconThemeData(
-                              color: Colors.transparent,
-                              size: 20,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                FButton(
+                                  style: FButtonStyle(
+                                    decoration: FWidgetStateMap.all(
+                                      BoxDecoration(
+                                        color: const Color.fromARGB(144, 255, 227, 134),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                    contentStyle: FButtonContentStyle(
+                                      textStyle: FWidgetStateMap.all(
+                                        const TextStyle(
+                                          color: Color.fromARGB(255, 0, 0, 0),
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                      iconStyle: FWidgetStateMap.all(const IconThemeData(color: Colors.transparent, size: 20)),
+                                    ),
+                                    iconContentStyle: FButtonIconContentStyle(
+                                      iconStyle: FWidgetStateMap.all(const IconThemeData(color: Colors.transparent, size: 20)),
+                                    ),
+                                    tappableStyle: FTappableStyle(),
+                                    focusedOutlineStyle: FFocusedOutlineStyle(
+                                      color: Colors.transparent,
+                                      width: 0.01,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  onPress: () => _uploadBackground(isCurrentDesktop),
+                                  child: const Text('上传背景'),
+                                ),
+                                FButton(
+                                  onPress: () => setState(() => _isDesktopPreview = !_isDesktopPreview),
+                                  child: Text(isCurrentDesktop ? '切换移动端' : '切换桌面端'),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        iconContentStyle: FButtonIconContentStyle(
-                          iconStyle: FWidgetStateMap.all(
-                            const IconThemeData(
-                              color: Colors.transparent,
-                              size: 20,
-                            ),
-                          ),
-                        ),
-                        tappableStyle: FTappableStyle(),
-                        focusedOutlineStyle: FFocusedOutlineStyle(
-                          color: Colors.transparent,
-                          width: 0.01,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      onPress: () => _uploadBackground(isCurrentDesktop),
-                      child: const Text('上传背景'),
+                      ],
                     ),
-                    FButton(
-                      onPress: () {
-                        setState(() {
-                          _isDesktopPreview = !_isDesktopPreview;
-                        });
-                      },
-                      child: Text(isCurrentDesktop ? '切换移动端' : '切换桌面端'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-                  ],
+                  ),
                 ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
 
   Widget _buildQuestionListItem(Question question, int index) {
@@ -700,7 +858,13 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
               ),
             ),
             ListTile(
-              title: Text(question.title),
+              title: QuestionDisplayWidget(
+                question: question,
+                mode: QuestionDisplayMode.preview,
+                optionStates: const {},
+                authToken: widget.token,
+                titleOnly: true,
+              ),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

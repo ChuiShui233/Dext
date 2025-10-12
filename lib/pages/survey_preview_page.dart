@@ -35,6 +35,7 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
   late final SurveyRuntimeController _runtime;
   final Map<String, bool> _optionStates = {};
   final Map<int, double?> _hoverRatings = {};
+  bool _backgroundLoaded = false;
 
   @override
   void initState() {
@@ -52,15 +53,24 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
     try {
       final backgroundData =
           await _apiService.getSurveyBackground(widget.survey.id);
+      if (!mounted) return;
       setState(() {
         _desktopBackground = backgroundData['desktopBackground'] as String?;
         _mobileBackground = backgroundData['mobileBackground'] as String?;
       });
+      // 延迟标记加载完成，触发淡入动画
+      await Future.delayed(const Duration(milliseconds: 0));
+      if (!mounted) return;
+      setState(() {
+        _backgroundLoaded = true;
+      });
     } catch (e) {
       debugPrint('获取问卷背景失败: $e');
+      if (!mounted) return;
       setState(() {
         _desktopBackground = null;
         _mobileBackground = null;
+        _backgroundLoaded = true;
       });
     }
   }
@@ -75,25 +85,30 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: (_desktopBackground != null && _desktopBackground!.isNotEmpty) ||
-                   (_mobileBackground != null && _mobileBackground!.isNotEmpty)
-                ? Container(
-                    decoration: BoxDecoration(
-                      image: DecorationImage(
-                        image: NetworkImage(isWide
-                            ? toAbsoluteUrl(_desktopBackground)
-                            : toAbsoluteUrl(_mobileBackground)),
-                        fit: BoxFit.cover,
-                        onError: (_, __) {},
+            child: AnimatedOpacity(
+              opacity: _backgroundLoaded ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 600),
+              curve: Curves.easeInOut,
+              child: (_desktopBackground != null && _desktopBackground!.isNotEmpty) ||
+                     (_mobileBackground != null && _mobileBackground!.isNotEmpty)
+                  ? Container(
+                      decoration: BoxDecoration(
+                        image: DecorationImage(
+                          image: NetworkImage(isWide
+                              ? toAbsoluteUrl(_desktopBackground)
+                              : toAbsoluteUrl(_mobileBackground)),
+                          fit: BoxFit.cover,
+                          onError: (_, __) {},
+                        ),
                       ),
-                    ),
-                    child: isDark
-                        ? Container(
-                            color: Colors.black.withValues(alpha: 0.4),
-                          )
-                        : null,
-                  )
-                : const FrostedGlassBackground(),
+                      child: isDark
+                          ? Container(
+                              color: Colors.black.withValues(alpha: 0.4),
+                            )
+                          : null,
+                    )
+                  : const FrostedGlassBackground(),
+            ),
           ),
 
           Column(

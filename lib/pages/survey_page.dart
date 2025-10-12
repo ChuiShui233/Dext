@@ -9,6 +9,7 @@ import '../models/survey_stats.dart';
 import '../services/api_service.dart';
 import 'create_survey_page.dart';
 import '../utils/date_format.dart';
+import '../utils/error_formatter.dart';
 import '../components/survey_actions.dart';
 import '../components/multi_select_actions.dart';
 import '../components/glass_card.dart';
@@ -271,7 +272,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
           context: context,
           alignment:FToastAlignment.bottomRight,
           title: const Text('加载失败'),
-          description: Text('加载问卷失败: $e'),
+          description: Text(ErrorFormatter.format(e)),
           suffixBuilder: (context, entry, _) => IntrinsicHeight(
             child: FButton(
               style: context.theme.buttonStyles.primary.copyWith(

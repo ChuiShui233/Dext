@@ -13,6 +13,7 @@ import 'home_page.dart';
 import 'project_page.dart';
 import 'survey_page.dart';
 import 'public_survey_page.dart';
+import '../utils/error_formatter.dart';
 import '../services/config.dart';
 
 final showSidebarInDrawer = LayoutValue(xs: true, md: false);
@@ -901,7 +902,7 @@ Widget _buildSidebarHeader(BuildContext context) {
                   context: context,
                   alignment: FToastAlignment.bottomRight,
                   title: const Text('加载失败'),
-                  description: Text('加载项目列表失败: $error'),
+                  description: Text(ErrorFormatter.format(error)),
                   suffixBuilder: (context, entry, _) => IntrinsicHeight(
                     child: FButton(
                       style: context.theme.buttonStyles.primary.copyWith(

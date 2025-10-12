@@ -79,33 +79,57 @@ class _RatingEditorState extends State<RatingEditor> {
           ),
         ]),
         const SizedBox(height: 16),
+        // 更现代化的可视控件：SegmentedButton + ChoiceChip
         Row(children: [
           Expanded(
-            child: FSelect<String>(
-              label: const Text('表现样式'),
-              hint: '选择评级的可视样式',
-              initialValue: widget.ratingStyle,
-              format: (v) => v == 'star' ? '星星 (建议)' : '面包屑',
-              onChange: (v) => widget.onRatingStyleChanged(v ?? 'star'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                FSelectItem('星星 (建议)', 'star'),
-                FSelectItem('面包屑', 'crumb'),
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8.0),
+                  child: Text('表现样式'),
+                ),
+                SegmentedButton<String>(
+                  segments: const <ButtonSegment<String>>[
+                    ButtonSegment<String>(value: 'star', label: Text('星星')),
+                    ButtonSegment<String>(value: 'crumb', label: Text('条形')),
+                  ],
+                  selected: {widget.ratingStyle},
+                  onSelectionChanged: (sel) {
+                    if (sel.isNotEmpty) widget.onRatingStyleChanged(sel.first);
+                    setState(() {});
+                  },
+                  showSelectedIcon: false,
+                  style: ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
               ],
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: FSelect<String>(
-              label: const Text('图标（星星样式）'),
-              hint: '仅当样式为星星时生效',
-              initialValue: widget.ratingIcon,
-              format: (v) => v,
-              onChange: (v) => widget.onRatingIconChanged(v ?? 'star'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                FSelectItem('star', 'star'),
-                FSelectItem('favorite', 'favorite'),
-                FSelectItem('circle', 'circle'),
-                FSelectItem('heart_broken', 'heart_broken'),
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8.0),
+                  child: Text('图标（星星样式）'),
+                ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: <String>['star','favorite','circle','heart_broken']
+                      .map((name) => ChoiceChip(
+                        label: Text(name),
+                        selected: widget.ratingIcon == name,
+                        onSelected: (s) {
+                          if (s) widget.onRatingIconChanged(name);
+                          setState(() {});
+                        },
+                      ))
+                      .toList(),
+                ),
               ],
             ),
           ),
@@ -113,15 +137,29 @@ class _RatingEditorState extends State<RatingEditor> {
         const SizedBox(height: 16),
         Row(children: [
           Expanded(
-            child: FTextFormField(
-              label: const Text('星星数量'),
-              hint: '1-10，默认 5',
-              controller: widget.starsCountController,
-              keyboardType: TextInputType.number,
-              onEditingComplete: () {
-                final n = int.tryParse(widget.starsCountController.text.trim()) ?? widget.starsCount;
-                widget.onStarsCountChanged(n.clamp(1, 10));
-              },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('星星数量'),
+                    Text('${widget.starsCount}')
+                  ],
+                ),
+                Slider(
+                  min: 1,
+                  max: 10,
+                  divisions: 9,
+                  value: widget.starsCount.toDouble(),
+                  onChanged: (v) {
+                    final n = v.round().clamp(1, 10);
+                    widget.starsCountController.text = n.toString();
+                    widget.onStarsCountChanged(n);
+                    setState(() {});
+                  },
+                ),
+              ],
             ),
           ),
           const SizedBox(width: 12),
@@ -172,8 +210,8 @@ class _RatingEditorState extends State<RatingEditor> {
           ),
           const SizedBox(height: 4),
           Text(widget.allowHalf 
-            ? '说明：根据半星步进(0.5, 1, 1.5...)提供对应的文本输入，留空则使用默认数值。'
-            : '说明：根据星星数量(1..N)提供对应的文本输入，留空则使用默认数值。'),
+            ? '留空则使用默认数值。'
+            : '说明：根据星星数量提供对应的文本输入，留空则使用默认数值。'),
         ],
       ],
     );

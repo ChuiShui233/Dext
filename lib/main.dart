@@ -40,6 +40,26 @@ bool get isDesktop {
   }
 }
 
+// 全局滚动行为：隐藏滚动条，同时支持多输入设备拖动
+class _NoScrollbarBehavior extends MaterialScrollBehavior {
+  const _NoScrollbarBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.stylus,
+      };
+
+  @override
+  Widget buildScrollbar(BuildContext context, Widget child, ScrollableDetails details) {
+    // 返回原始child，不包裹Scrollbar，从而隐藏滚动条
+    return child;
+  }
+}
+
+
 class _AppWindowListener with WindowListener {
   @override
   void onWindowClose() async {
@@ -471,14 +491,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
               debugShowCheckedModeBanner: false,
               initialRoute: '/',
               onGenerateRoute: _onGenerateRoute,
-              scrollBehavior: const MaterialScrollBehavior().copyWith(
-                dragDevices: {
-                  PointerDeviceKind.touch,
-                  PointerDeviceKind.mouse,
-                  PointerDeviceKind.trackpad,
-                  PointerDeviceKind.stylus,
-                },
-              ),
+              scrollBehavior: const _NoScrollbarBehavior(),
               builder: (context, child) {
                 return ColoredBox(
                   color: Theme.of(context).scaffoldBackgroundColor,
@@ -604,32 +617,10 @@ class _YuMeng233AppState extends State<YuMeng233App>
       );
     }
     
-    // 默认404页面
     return MaterialPageRoute(
-      builder: (context) => Scaffold(
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          toolbarHeight: 0,
-          systemOverlayStyle: _isDark
-              ? SystemUiOverlayStyle.light
-              : SystemUiOverlayStyle.dark,
-          title: const Text('页面未找到'),
-        ),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('页面不存在: ${settings.name}'),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
-                },
-                child: const Text('返回首页'),
-              ),
-            ],
-          ),
-        ),
+      builder: (context) => _NotFoundPage(
+        routeName: settings.name ?? 'unknown',
+        isDark: _isDark,
       ),
     );
   }
@@ -862,5 +853,109 @@ class _CreateSurveyPageWrapperState extends State<_CreateSurveyPageWrapper> {
         body: Center(child: Text('没有可用的项目')),
       );
     }
+  }
+}
+
+// 404页面 - 自动返回主页
+class _NotFoundPage extends StatefulWidget {
+  final String routeName;
+  final bool isDark;
+
+  const _NotFoundPage({
+    required this.routeName,
+    required this.isDark,
+  });
+
+  @override
+  State<_NotFoundPage> createState() => _NotFoundPageState();
+}
+
+class _NotFoundPageState extends State<_NotFoundPage> {
+  int _countdown = 3;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startCountdown();
+  }
+
+  void _startCountdown() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_countdown > 1) {
+        setState(() {
+          _countdown--;
+        });
+      } else {
+        timer.cancel();
+        if (mounted) {
+          Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        toolbarHeight: 0,
+        systemOverlayStyle: widget.isDark
+            ? SystemUiOverlayStyle.light
+            : SystemUiOverlayStyle.dark,
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              '页面不存在',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '路径: ${widget.routeName}',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 32),
+            Text(
+              '$_countdown 秒后自动返回首页...',
+              style: TextStyle(
+                fontSize: 16,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                _timer?.cancel();
+                Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+              },
+              child: const Text('立即返回'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

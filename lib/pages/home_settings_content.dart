@@ -294,6 +294,10 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
             const SizedBox(height: 24),
             _buildThemeCard(context),
             const SizedBox(height: 18),
+            if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) ...[
+              _buildDesktopSettingsCard(context, theme),
+              const SizedBox(height: 18),
+            ],
             _buildAccountCard(context, theme),
             const SizedBox(height: 16),
             _buildAppInfoCard(context, theme),
@@ -392,6 +396,132 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
       ],
     );
   }
+
+  // ==================== 桌面端设置卡片 ====================
+  Widget _buildDesktopSettingsCard(BuildContext context, ThemeData theme) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _loadDesktopSettings(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return _buildSectionCard(
+            context,
+            title: '桌面端设置',
+            icon: Icons.desktop_windows_outlined,
+            children: const [
+              Padding(
+                padding: EdgeInsets.all(20),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            ],
+          );
+        }
+        
+        final settings = snapshot.data!;
+        final currentAction = settings['window_close_default_action'] as String;
+        String currentDisplayValue;
+        
+        switch (currentAction) {
+          case 'hide':
+            currentDisplayValue = '隐藏到托盘';
+            break;
+          case 'close':
+            currentDisplayValue = '直接关闭';
+            break;
+          case 'ask':
+          default:
+            currentDisplayValue = '每次询问';
+        }
+        
+        return _buildSectionCard(
+          context,
+          title: '桌面端设置',
+          icon: Icons.desktop_windows_outlined,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        '窗口关闭行为',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '当前: $currentDisplayValue',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.primary.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  FSelect<String>(
+                    hint: '选择关闭行为',
+                    format: (s) => s,
+                    children: [
+                      FSelectItem('每次询问', '每次询问'),
+                      FSelectItem('隐藏到托盘', '隐藏到托盘'),
+                      FSelectItem('直接关闭', '直接关闭'),
+                    ],
+                    onChange: (displayValue) async {
+                      if (displayValue != null) {
+                        String actionValue;
+                        switch (displayValue) {
+                          case '每次询问':
+                            actionValue = 'ask';
+                            break;
+                          case '隐藏到托盘':
+                            actionValue = 'hide';
+                            break;
+                          case '直接关闭':
+                            actionValue = 'close';
+                            break;
+                          default:
+                            actionValue = 'ask';
+                        }
+                        
+                        final prefs = await SharedPreferences.getInstance();
+                        if (actionValue == 'ask') {
+                          await prefs.setBool('window_close_dont_ask', false);
+                          await prefs.setString('window_close_default_action', 'ask');
+                        } else {
+                          await prefs.setBool('window_close_dont_ask', true);
+                          await prefs.setString('window_close_default_action', actionValue);
+                        }
+                        
+                        if (mounted && context.mounted) {
+                          setState(() {}); // 刷新UI
+                          showFToast(
+                            context: context,
+                            alignment: FToastAlignment.bottomRight,
+                            title: const Text('设置已保存'),
+                            description: Text('窗口关闭行为已设置为：$displayValue'),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> _loadDesktopSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    return {
+      'window_close_dont_ask': prefs.getBool('window_close_dont_ask') ?? false,
+      'window_close_default_action': prefs.getString('window_close_default_action') ?? 'ask',
+    };
+  }
+
 
   // ==================== 主题设置卡片 ====================
   Widget _buildThemeCard(BuildContext context) {
@@ -682,11 +812,13 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
   Widget _buildNoHighlightListTile(
       {Widget? leading,
       required Widget title,
+      Widget? subtitle,
       Widget? trailing,
       VoidCallback? onTap}) {
     return ListTile(
       leading: leading,
       title: title,
+      subtitle: subtitle,
       trailing: trailing,
       dense: true,
       visualDensity: VisualDensity.compact,

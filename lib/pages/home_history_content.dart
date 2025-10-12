@@ -8,6 +8,7 @@ import '../services/api_service.dart';
 import 'submission_detail_page.dart';
 import '../main.dart' show isDesktop;
 import '../widgets/top_safe_spacer.dart';
+import '../utils/error_formatter.dart';
 
 class HomeHistoryContent extends StatefulWidget {
   final ApiService apiService;
@@ -126,7 +127,21 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
         context: context,
         alignment: FToastAlignment.bottomRight,
         title: const Text('加载失败'),
-        description: Text('获取提交记录失败: $e'),
+        description: Text(ErrorFormatter.format(e)),
+        suffixBuilder: (context, entry, _) => IntrinsicHeight(
+          child: FButton(
+            style: context.theme.buttonStyles.primary.copyWith(
+              contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                textStyle: FWidgetStateMap.all(
+                  context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
+                ),
+              ),
+            ),
+            onPress: entry.dismiss,
+            child: const Text('关闭'),
+          ),
+        ),
       );
     }
   }

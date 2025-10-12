@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dext/utils/error_formatter.dart';
 import 'package:flutter/material.dart';
 import '../widgets/top_safe_spacer.dart';
 import 'package:forui/forui.dart';
@@ -105,7 +106,7 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
           context: context,
           alignment:FToastAlignment.bottomRight,
           title: const Text('加载失败'),
-          description: Text('加载问卷失败: $e'),
+          description: Text(ErrorFormatter.format(e)),
           suffixBuilder: (context, entry, _) => IntrinsicHeight(
             child: FButton(
               style: context.theme.buttonStyles.primary.copyWith(

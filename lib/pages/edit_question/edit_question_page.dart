@@ -7,6 +7,7 @@ import '../../models/question.dart';
 import '../../services/api_service.dart';
 import '../../widgets/frosted_glass_background.dart';
 import '../../widgets/markdown_text_widget.dart';
+import '../../widgets/question_display_widget.dart';
 import 'components/rating_editor.dart';
 import 'components/options_editor.dart';
 import 'components/media_editor.dart';
@@ -30,7 +31,7 @@ class EditQuestionPage extends StatefulWidget {
   State<EditQuestionPage> createState() => _EditQuestionPageState();
 }
 
-class _EditQuestionPageState extends State<EditQuestionPage> {
+class _EditQuestionPageState extends State<EditQuestionPage> with TickerProviderStateMixin {
   bool _enableRatingLabels = false;
   final TextEditingController _ratingLabelsController = TextEditingController();
   final List<TextEditingController> _perStarLabelCtrls = [];
@@ -49,7 +50,7 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
   final List<QuestionOption> _options = [];
   final List<String> _mediaUrls = [];
   final Map<int, int> _jumpLogic = {};
-  bool _required = true;
+  bool _required = false;
   bool _isLoading = false;
   
   final Map<String, double> _uploadProgress = {};
@@ -73,6 +74,9 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
   double _imageScale = 1.0;
 
   List<Question> _allQuestions = [];
+
+  // 预览用：选项选中状态
+  final Map<String, bool> _previewOptionStates = {};
 
   void _ensurePerStarLabelCtrls(int stars) {
     if (_perStarLabelCtrls.length < stars) {
@@ -506,6 +510,10 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth > 1080;
+
     return Scaffold(
       body: Stack(
         children: [
@@ -523,224 +531,425 @@ class _EditQuestionPageState extends State<EditQuestionPage> {
                 ],
               ),
               Expanded(
-                child: Form(
-                  key: _formKey,
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      FTextFormField(
-                        controller: _titleController,
-                        label: const Text('问题标题'),
-                        hint: '请输入问题标题',
-                        validator: (value) => (value == null || value.isEmpty) ? '请输入问题标题' : null,
-                        maxLines: null,
-                        keyboardType: TextInputType.multiline,
-                      ),
-                      const SizedBox(height: 8),
-                      MarkdownToolbar(
-                        controller: _titleController,
-                        onChanged: () => setState(() {}),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '预览效果:',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            MarkdownTextWidget(
-                              text: _titleController.text.isEmpty ? '问题标题预览' : _titleController.text,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      FSelect<QuestionType>(
-                        label: const Text('问题类型'),
-                        format: (value) => _getQuestionTypeText(value),
-                        initialValue: _selectedType,
-                        onChange: (value) {
-                          if (value != null) setState(() => _selectedType = value);
-                        },
-                        children: QuestionType.values
-                            .map((type) => FSelectItem(_getQuestionTypeText(type), type))
-                            .toList(),
-                      ),
-                      const SizedBox(height: 16),
-                      if (_selectedType == QuestionType.slider)
-                        RatingEditor(
-                          minLabelController: _minLabelController,
-                          maxLabelController: _maxLabelController,
-                          midLabelController: _midLabelController,
-                          starsCountController: _starsCountController,
-                          enableRatingLabels: _enableRatingLabels,
-                          perStarLabelCtrls: _perStarLabelCtrls,
-                          ratingStyle: _ratingStyle,
-                          ratingIcon: _ratingIcon,
-                          allowHalf: _allowHalf,
-                          starsCount: _starsCount,
-                          onEnsurePerStarLabelCtrls: _ensurePerStarLabelCtrls,
-                          onEnableRatingLabelsChanged: (value) {
-                            setState(() {
-                              _enableRatingLabels = value;
-                              if (value) {
-                                final totalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
-                                _ensurePerStarLabelCtrls(totalSteps);
-                              }
-                            });
-                          },
-                          onRatingStyleChanged: (value) {
-                            setState(() {
-                              _ratingStyle = value;
-                            });
-                          },
-                          onRatingIconChanged: (value) {
-                            setState(() {
-                              _ratingIcon = value;
-                            });
-                          },
-                          onAllowHalfChanged: (value) {
-                            setState(() {
-                              _allowHalf = value;
-                              if (_enableRatingLabels) {
-                                final totalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
-                                _ensurePerStarLabelCtrls(totalSteps);
-                              }
-                            });
-                          },
-                          onStarsCountChanged: (value) {
-                            setState(() {
-                              _starsCount = value;
-                              _starsCountController.text = value.toString();
-                              if (_enableRatingLabels) {
-                                final totalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
-                                _ensurePerStarLabelCtrls(totalSteps);
-                              }
-                            });
-                          },
-                        )
-                      else if (_selectedType == QuestionType.textInput)
-                        TextInputEditor(
-                          placeholder: _textInputPlaceholder,
-                          maxLength: _textInputMaxLength,
-                          multiline: _textInputMultiline,
-                          onPlaceholderChanged: (value) {
-                            setState(() {
-                              _textInputPlaceholder = value;
-                            });
-                          },
-                          onMaxLengthChanged: (value) {
-                            setState(() {
-                              _textInputMaxLength = value;
-                            });
-                          },
-                          onMultilineChanged: (value) {
-                            setState(() {
-                              _textInputMultiline = value;
-                            });
-                          },
-                        )
-                      else
-                        OptionsEditor(
-                          options: _options,
-                          selectedType: _selectedType,
-                          allQuestions: _allQuestions,
-                          currentQuestionId: widget.question?.id ?? 0,
-                          jumpLogic: _jumpLogic,
-                          onAddOption: _addOption,
-                          onEditOption: _editOption,
-                          onDeleteOption: _deleteOption,
-                          onBatchSetJump: _batchSetJump,
-                          onSetJumpLogic: (option) async {
-                            final result = await showDialog<int>(
-                              context: context,
-                              builder: (context) => JumpLogicDialog(
-                                currentQuestionId: widget.question?.id ?? 0,
-                                questions: _allQuestions,
-                                currentOptionId: option.id,
-                                currentJumpTo: _jumpLogic[option.id],
-                              ),
-                            );
-
-                            if (result != null) {
-                              setState(() {
-                                final newDest = (result == -1) ? null : result;
-                                final idx = _options.indexWhere((o) => o.id == option.id);
-                                if (idx != -1) {
-                                  _options[idx] = _options[idx].copyWith(destination: newDest);
-                                }
-
-                                if (newDest == null) {
-                                  _jumpLogic.remove(option.id);
-                                } else {
-                                  _jumpLogic[option.id] = newDest;
-                                }
-                              });
-                            }
-                          },
-                        ),
-                      const SizedBox(height: 16),
-                      MediaEditor(
-                        mediaUrls: _mediaUrls,
-                        uploadProgress: _uploadProgress,
-                        uploadingFiles: _uploadingFiles,
-                        onUploadMedia: _addMedia,
-                        onDeleteMedia: _deleteMedia,
-                        onCancelUpload: (fileName) {
-                          setState(() {
-                            _cancelledUploads[fileName] = true;
-                            _uploadingFiles.remove(fileName);
-                            _uploadProgress.remove(fileName);
-                          });
-                        },
-                        onDropFiles: _uploadFiles,
-                        imageScale: _imageScale,
-                        onImageScaleChanged: (value) {
-                          setState(() {
-                            _imageScale = value;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      FSwitch(
-                        label: const Text('必答题'),
-                        value: _required,
-                        onChange: (value) => setState(() => _required = value),
-                      ),
-                      const SizedBox(height: 24),
-                      FButton(
-                        onPress: _isLoading ? null : _saveQuestion,
-                        child: _isLoading ? const CircularProgressIndicator() : const Text('保存问题'),
-                      ),
-                    ],
-                  ),
-                ),
+                child: isDesktop
+                    ? _buildDesktopLayout(theme)
+                    : _buildMobileLayout(theme),
               ),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildMobileLayout(ThemeData theme) {
+    return Form(
+      key: _formKey,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _buildTitleField(),
+          const SizedBox(height: 8),
+          MarkdownToolbar(
+            controller: _titleController,
+            onChanged: () => setState(() {}),
+          ),
+          const SizedBox(height: 8),
+          _buildTitlePreview(theme),
+          const SizedBox(height: 16),
+          _buildTypeSelector(),
+          const SizedBox(height: 16),
+          _buildTypeSpecificEditor(),
+          const SizedBox(height: 16),
+          _buildMediaEditor(),
+          const SizedBox(height: 16),
+          FSwitch(
+            label: const Text('必答题'),
+            value: _required,
+            onChange: (value) => setState(() => _required = value),
+          ),
+          const SizedBox(height: 24),
+          FButton(
+            onPress: _isLoading ? null : _saveQuestion,
+            child: _isLoading ? const CircularProgressIndicator() : const Text('保存问题'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopLayout(ThemeData theme) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 2,
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildTitleField(),
+                    const SizedBox(height: 8),
+                    MarkdownToolbar(
+                      controller: _titleController,
+                      onChanged: () => setState(() {}),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTypeSelector(),
+                    const SizedBox(height: 16),
+                    _buildTypeSpecificEditor(),
+                    const SizedBox(height: 16),
+                    _buildMediaEditor(),
+                    const SizedBox(height: 16),
+                    FSwitch(
+                      label: const Text('必答题'),
+                      value: _required,
+                      onChange: (value) => setState(() => _required = value),
+                    ),
+                    const SizedBox(height: 48),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 360,
+          child: Container(
+            decoration: BoxDecoration(
+              color: theme.cardColor.withValues(alpha: 0.5),
+              border: Border(
+                left: BorderSide(
+                  color: theme.dividerColor.withValues(alpha: 0.08),
+                  width: 1,
+                ),
+              ),
+            ),
+            child: Column(
+              children: [
+                Expanded(
+                  child: ScrollConfiguration(
+                    behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: _buildActionPanel(theme),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTitleField() {
+    return FTextFormField(
+      controller: _titleController,
+      label: const Text('问题标题'),
+      hint: '请输入问题标题',
+      validator: (value) => (value == null || value.isEmpty) ? '请输入问题标题' : null,
+      maxLines: null,
+      keyboardType: TextInputType.multiline,
+    );
+  }
+
+  Widget _buildTypeSelector() {
+    return FSelect<QuestionType>(
+      label: const Text('问题类型'),
+      format: (value) => _getQuestionTypeText(value),
+      initialValue: _selectedType,
+      onChange: (value) {
+        if (value != null) setState(() => _selectedType = value);
+      },
+      children: QuestionType.values
+          .map((type) => FSelectItem(_getQuestionTypeText(type), type))
+          .toList(),
+    );
+  }
+
+  Widget _buildTypeSpecificEditor() {
+    if (_selectedType == QuestionType.slider) {
+      return RatingEditor(
+        minLabelController: _minLabelController,
+        maxLabelController: _maxLabelController,
+        midLabelController: _midLabelController,
+        starsCountController: _starsCountController,
+        enableRatingLabels: _enableRatingLabels,
+        perStarLabelCtrls: _perStarLabelCtrls,
+        ratingStyle: _ratingStyle,
+        ratingIcon: _ratingIcon,
+        allowHalf: _allowHalf,
+        starsCount: _starsCount,
+        onEnsurePerStarLabelCtrls: _ensurePerStarLabelCtrls,
+        onEnableRatingLabelsChanged: (value) {
+          setState(() {
+            _enableRatingLabels = value;
+            if (value) {
+              final totalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
+              _ensurePerStarLabelCtrls(totalSteps);
+            }
+          });
+        },
+        onRatingStyleChanged: (value) {
+          setState(() {
+            _ratingStyle = value;
+          });
+        },
+        onRatingIconChanged: (value) {
+          setState(() {
+            _ratingIcon = value;
+          });
+        },
+        onAllowHalfChanged: (value) {
+          setState(() {
+            _allowHalf = value;
+            if (_enableRatingLabels) {
+              final totalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
+              _ensurePerStarLabelCtrls(totalSteps);
+            }
+          });
+        },
+        onStarsCountChanged: (value) {
+          setState(() {
+            _starsCount = value;
+            _starsCountController.text = value.toString();
+            if (_enableRatingLabels) {
+              final totalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
+              _ensurePerStarLabelCtrls(totalSteps);
+            }
+          });
+        },
+      );
+    } else if (_selectedType == QuestionType.textInput) {
+      return TextInputEditor(
+        placeholder: _textInputPlaceholder,
+        maxLength: _textInputMaxLength,
+        multiline: _textInputMultiline,
+        onPlaceholderChanged: (value) {
+          setState(() {
+            _textInputPlaceholder = value;
+          });
+        },
+        onMaxLengthChanged: (value) {
+          setState(() {
+            _textInputMaxLength = value;
+          });
+        },
+        onMultilineChanged: (value) {
+          setState(() {
+            _textInputMultiline = value;
+          });
+        },
+      );
+    } else {
+      return OptionsEditor(
+        options: _options,
+        selectedType: _selectedType,
+        allQuestions: _allQuestions,
+        currentQuestionId: widget.question?.id ?? 0,
+        jumpLogic: _jumpLogic,
+        onAddOption: _addOption,
+        onEditOption: _editOption,
+        onDeleteOption: _deleteOption,
+        onBatchSetJump: _batchSetJump,
+        onSetJumpLogic: (option) async {
+          final result = await showDialog<int>(
+            context: context,
+            builder: (context) => JumpLogicDialog(
+              currentQuestionId: widget.question?.id ?? 0,
+              questions: _allQuestions,
+              currentOptionId: option.id,
+              currentJumpTo: _jumpLogic[option.id],
+            ),
+          );
+          if (result != null) {
+            setState(() {
+              final newDest = (result == -1) ? null : result;
+              final idx = _options.indexWhere((o) => o.id == option.id);
+              if (idx != -1) {
+                _options[idx] = _options[idx].copyWith(destination: newDest);
+              }
+              if (newDest == null) {
+                _jumpLogic.remove(option.id);
+              } else {
+                _jumpLogic[option.id] = newDest;
+              }
+            });
+          }
+        },
+      );
+    }
+  }
+
+  Widget _buildMediaEditor() {
+    return MediaEditor(
+      mediaUrls: _mediaUrls,
+      uploadProgress: _uploadProgress,
+      uploadingFiles: _uploadingFiles,
+      onUploadMedia: _addMedia,
+      onDeleteMedia: _deleteMedia,
+      onCancelUpload: (fileName) {
+        setState(() {
+          _cancelledUploads[fileName] = true;
+          _uploadingFiles.remove(fileName);
+          _uploadProgress.remove(fileName);
+        });
+      },
+      onDropFiles: _uploadFiles,
+      imageScale: _imageScale,
+      onImageScaleChanged: (value) {
+        setState(() {
+          _imageScale = value;
+        });
+      },
+    );
+  }
+
+  Question _buildLivePreviewQuestion() {
+    // 根据当前编辑器状态构造完整的 Question，用于预览整道题目
+    List<QuestionOption> previewOptions;
+    if (_selectedType == QuestionType.slider) {
+      final minLabel = _minLabelController.text;
+      final midLabel = _midLabelController.text.isNotEmpty ? _midLabelController.text : '一般';
+      final maxLabel = _maxLabelController.text;
+      final parsedStars = int.tryParse(_starsCountController.text.trim());
+      final starsCount = (parsedStars ?? _starsCount).clamp(1, 10);
+
+      previewOptions = [
+        QuestionOption(id: 1, text: '0'),
+        QuestionOption(id: 2, text: '10'),
+        QuestionOption(id: 3, text: '5'),
+        QuestionOption(id: 4, text: (minLabel).isNotEmpty ? minLabel : '最小值'),
+        QuestionOption(id: 5, text: (maxLabel).isNotEmpty ? maxLabel : '最大值'),
+        QuestionOption(id: 6, text: midLabel),
+        QuestionOption(id: 7, text: _ratingStyle),
+        QuestionOption(id: 8, text: _ratingIcon),
+        QuestionOption(id: 9, text: _allowHalf.toString()),
+        QuestionOption(id: 10, text: starsCount.toString()),
+      ];
+
+      if (_enableRatingLabels) {
+        final totalSteps = _allowHalf ? starsCount * 2 : starsCount;
+        _ensurePerStarLabelCtrls(totalSteps);
+        final Map<String, String> map = {};
+        for (int i = 0; i < totalSteps; i++) {
+          final value = _allowHalf ? (i + 1) * 0.5 : (i + 1).toDouble();
+          final key = value % 1 == 0 ? value.toInt().toString() : value.toString();
+          final val = _perStarLabelCtrls[i].text.trim();
+          if (val.isNotEmpty) {
+            map[key] = val;
+          }
+        }
+        if (map.isNotEmpty) {
+          final jsonStr = jsonEncode(map);
+          previewOptions.add(QuestionOption(id: 11, text: jsonStr));
+        }
+      }
+    } else if (_selectedType == QuestionType.textInput) {
+      final configText = 'placeholder:$_textInputPlaceholder|maxLength:$_textInputMaxLength|multiline:$_textInputMultiline';
+      previewOptions = [
+        QuestionOption(id: 1, text: configText),
+      ];
+    } else {
+      previewOptions = _options;
+    }
+
+    return Question(
+      id: widget.question?.id ?? 0,
+      title: _titleController.text.isEmpty ? '问题标题预览' : _titleController.text,
+      type: _selectedType,
+      options: previewOptions,
+      mediaUrls: _mediaUrls,
+      jumpLogic: _jumpLogic,
+      required: _required,
+      order: widget.question?.order ?? 0,
+      imageScale: _imageScale,
+    );
+  }
+
+  Widget _buildTitlePreview(ThemeData theme) {
+    // 使用完整渲染组件预览整道题目
+    final previewQuestion = _buildLivePreviewQuestion();
+
+    return Card(
+      elevation: 0,
+      color: theme.cardColor.withValues(alpha: 0.7),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.08)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '预览效果',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            QuestionDisplayWidget(
+              question: previewQuestion,
+              mode: QuestionDisplayMode.preview,
+              optionStates: _previewOptionStates,
+              authToken: widget.token,
+              titleOnly: false,
+              onSingleChoiceChanged: (questionId, selectedOption, optionIndex) {
+                // 单选：清空同题选中，再选中当前
+                setState(() {
+                  // 清除该题所有选项状态
+                  for (int i = 0; i < previewQuestion.options.length; i++) {
+                    _previewOptionStates[_optKey(questionId, i)] = false;
+                  }
+                  _previewOptionStates[_optKey(questionId, optionIndex)] = true;
+                });
+              },
+              onMultipleChoiceChanged: (questionId, option, optionIndex, isSelected) {
+                setState(() {
+                  _previewOptionStates[_optKey(questionId, optionIndex)] = !isSelected;
+                });
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _optKey(int questionId, int optionIndex) => 'q${questionId}_opt$optionIndex';
+
+  Widget _buildActionPanel(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildTitlePreview(theme),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: _isLoading ? null : _saveQuestion,
+          icon: _isLoading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : const Icon(Icons.save_outlined),
+          label: Text(_isLoading ? '保存中...' : '保存问题'),
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -70,7 +70,7 @@ FThemeData get zincDark {
 
 FTypography _typography({
   required FColors colors,
-  String defaultFontFamily = 'PingFangSC',
+  String defaultFontFamily = 'PingFangSuper',
 }) => FTypography(
   xs: TextStyle(
     color: colors.foreground,

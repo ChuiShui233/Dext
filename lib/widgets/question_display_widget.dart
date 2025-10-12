@@ -28,6 +28,8 @@ class QuestionDisplayWidget extends StatefulWidget {
   final Function(String mediaUrl, List<String> allMediaUrls, int currentIndex)? onMediaOpen;
   // 可选：受保护媒体需要鉴权
   final String? authToken;
+  // 仅渲染标题（用于编辑页的紧凑列表项展示）
+  final bool titleOnly;
 
   const QuestionDisplayWidget({
     super.key,
@@ -42,6 +44,7 @@ class QuestionDisplayWidget extends StatefulWidget {
     this.onTextInputChanged,
     this.onMediaOpen,
     this.authToken,
+    this.titleOnly = false,
   });
 
   @override
@@ -61,6 +64,27 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
+    // 仅标题模式：用于编辑页问题列表，保持与问卷页面一致的标题渲染
+    if (widget.titleOnly) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: MarkdownTextWidget(
+              text: widget.question.title,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+          ),
+          if (widget.question.required)
+            const Text(' *', style: TextStyle(color: Colors.red)),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

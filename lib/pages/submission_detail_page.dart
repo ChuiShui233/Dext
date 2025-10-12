@@ -11,6 +11,7 @@ import '../services/api_service.dart';
 import '../main.dart' show isDesktop;
 import 'fullscreen_media_viewer.dart';
 import '../widgets/frosted_glass_background.dart';
+import '../utils/error_formatter.dart';
 
 class SubmissionDetailPage extends StatefulWidget {
   final ApiService apiService;
@@ -268,7 +269,7 @@ class _SubmissionDetailPageState extends State<SubmissionDetailPage> {
     } catch (e) {
       loadingTimer.cancel();
       if (mounted) {
-        setState(() { _loading = false; _error = '加载失败: $e'; });
+        setState(() { _loading = false; _error = ErrorFormatter.format(e); });
       }
     }
   }

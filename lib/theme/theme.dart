@@ -36,7 +36,7 @@ final pageTransitionsTheme = const PageTransitionsTheme(
 // Light Theme
 final ThemeData lightTheme = ThemeData(
   useMaterial3: true,
-  fontFamily: 'PingFangSC',
+  fontFamily: 'PingFangSuper',
   brightness: Brightness.light,
   scaffoldBackgroundColor: const Color.fromARGB(248, 255, 255, 255),
   pageTransitionsTheme: pageTransitionsTheme,
@@ -99,7 +99,7 @@ final ThemeData lightTheme = ThemeData(
 // Dark Theme
 final ThemeData darkTheme = ThemeData(
   useMaterial3: true,
-  fontFamily: 'PingFangSC',
+  fontFamily: 'PingFangSuper',
   brightness: Brightness.dark,
   scaffoldBackgroundColor: const Color(0xFF121212),
   pageTransitionsTheme: pageTransitionsTheme,

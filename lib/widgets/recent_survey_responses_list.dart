@@ -5,6 +5,7 @@ import 'package:forui/forui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../services/config.dart';
+import '../utils/error_formatter.dart';
 
 class RecentSurveyResponsesList extends StatefulWidget {
   final double? fixedHeight;
@@ -77,7 +78,7 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
       loadingTimer.cancel();
       if (mounted) {
         setState(() {
-          errorMessage = '加载失败: $e';
+          errorMessage = ErrorFormatter.format(e);
           isLoading = false;
           _hasLoaded = true;
         });

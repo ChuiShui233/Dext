@@ -35,26 +35,12 @@ class MarkdownTextWidget extends StatelessWidget {
   TextSpan _parseMarkdown(String text, TextStyle baseStyle, ThemeData theme) {
     final List<TextSpan> spans = [];
     
-    // 按行处理，支持引用块
+    // 按行处理（不再特殊处理引用块）
     final lines = text.split('\n');
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i];
-      
-      // 处理引用块
-      if (line.startsWith('> ')) {
-        final quotedText = line.substring(2);
-        spans.add(TextSpan(
-          text: quotedText,
-          style: baseStyle.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-            fontStyle: FontStyle.italic,
-            backgroundColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-          ),
-        ));
-      } else {
-        // 处理普通行的 Markdown 语法
-        _parseLineMarkdown(line, spans, baseStyle, theme);
-      }
+      // 处理普通行的 Markdown 语法
+      _parseLineMarkdown(line, spans, baseStyle, theme);
       
       // 添加换行符（除了最后一行）
       if (i < lines.length - 1) {
@@ -89,10 +75,10 @@ class MarkdownTextWidget extends StatelessWidget {
 
       // 处理不同的 Markdown 语法
       if (match.group(1) != null) {
-        // 粗体 **text**
+        // 粗体 **text** -> 提升到更明显的字重
         spans.add(TextSpan(
           text: match.group(2),
-          style: baseStyle.copyWith(fontWeight: FontWeight.bold),
+          style: baseStyle.copyWith(fontWeight: FontWeight.w900),
         ));
       } else if (match.group(3) != null) {
         // 斜体 *text*
@@ -178,10 +164,16 @@ class MarkdownToolbar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: isDark ? Colors.grey[800] : Colors.grey[100],
+        // 半透明背景，贴合整体玻璃风格
+        color: (isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.white.withValues(alpha: 0.6)),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: isDark ? Colors.grey[600]! : Colors.grey[300]!,
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.12)
+              : Colors.black.withValues(alpha: 0.08),
+          width: 1,
         ),
       ),
       child: Wrap(
@@ -190,32 +182,18 @@ class MarkdownToolbar extends StatelessWidget {
           _buildToolButton(
             context,
             icon: Icons.format_bold,
-            tooltip: '粗体',
             onTap: () => _insertMarkdown('**', '**', '粗体文本'),
           ),
           _buildToolButton(
             context,
             icon: Icons.format_italic,
-            tooltip: '斜体',
             onTap: () => _insertMarkdown('*', '*', '斜体文本'),
           ),
           _buildToolButton(
             context,
             icon: Icons.link,
-            tooltip: '链接',
             onTap: () => _insertMarkdown('[', '](https://example.com)', '链接文本'),
           ),
-          _buildToolButton(
-            context,
-            icon: Icons.format_quote,
-            tooltip: '引用',
-            onTap: () => _insertLinePrefix('> '),
-          ),
-          const SizedBox(width: 8),
-          _buildPresetButton(context, '重要', '**重要**'),
-          _buildPresetButton(context, '注意', '*注意*'),
-          _buildPresetButton(context, '引用', '> 这是一段引用文本'),
-          _buildPresetButton(context, '链接', '[链接](https://example.com)'),
         ],
       ),
     );
@@ -224,117 +202,112 @@ class MarkdownToolbar extends StatelessWidget {
   Widget _buildToolButton(
     BuildContext context, {
     required IconData icon,
-    required String tooltip,
     required VoidCallback onTap,
   }) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        child: Container(
-          padding: const EdgeInsets.all(6),
-          child: Icon(icon, size: 18),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPresetButton(BuildContext context, String label, String markdown) {
     return InkWell(
-      onTap: () => _insertText(markdown),
+      onTap: onTap,
       borderRadius: BorderRadius.circular(4),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(fontSize: 12),
-        ),
+        padding: const EdgeInsets.all(6),
+        child: Icon(icon, size: 18),
       ),
     );
   }
 
   void _insertMarkdown(String prefix, String suffix, String placeholder) {
     final text = controller.text;
-    final selection = controller.selection;
-    
-    String selectedText = '';
-    if (selection.isValid && !selection.isCollapsed) {
-      selectedText = text.substring(selection.start, selection.end);
+    TextSelection selection = controller.selection;
+
+    // 规范化选择区，处理未聚焦或无效选择（-1）的情况
+    if (!selection.isValid || selection.start < 0 || selection.end < 0) {
+      selection = TextSelection.collapsed(offset: text.length);
     }
-    
+    final start = selection.start.clamp(0, text.length);
+    final end = selection.end.clamp(0, text.length);
+
+    String selectedText = '';
+    if (end > start) {
+      selectedText = text.substring(start, end);
+    }
+
     final insertText = selectedText.isEmpty ? placeholder : selectedText;
     final newText = prefix + insertText + suffix;
-    
-    final newSelection = TextSelection.collapsed(
-      offset: selection.start + prefix.length + insertText.length,
-    );
-    
-    _replaceSelection(newText, newSelection);
+
+    _insertText(newText);
   }
 
   void _insertText(String text) {
-    final selection = controller.selection;
+    TextSelection selection = controller.selection;
+    final current = controller.text;
+    if (!selection.isValid || selection.start < 0 || selection.end < 0) {
+      selection = TextSelection.collapsed(offset: current.length);
+    }
+    final start = selection.start.clamp(0, current.length);
+    final end = selection.end.clamp(0, current.length);
+
     final newSelection = TextSelection.collapsed(
-      offset: selection.start + text.length,
+      offset: start + text.length,
     );
-    
-    _replaceSelection(text, newSelection);
+
+    _replaceSelection(text, newSelection, overrideStart: start, overrideEnd: end);
   }
 
   void _insertLinePrefix(String prefix) {
-    final text = controller.text;
-    final selection = controller.selection;
-    
+    final full = controller.text;
+    TextSelection selection = controller.selection;
+    if (!selection.isValid || selection.start < 0) {
+      selection = TextSelection.collapsed(offset: full.length);
+    }
+    int caret = selection.start.clamp(0, full.length);
+
     // 找到当前行的开始位置
-    int lineStart = selection.start;
-    while (lineStart > 0 && text[lineStart - 1] != '\n') {
+    int lineStart = caret;
+    while (lineStart > 0 && full[lineStart - 1] != '\n') {
       lineStart--;
     }
-    
-    // 检查当前行是否已经有这个前缀
-    final currentLine = text.substring(lineStart, 
-        text.indexOf('\n', lineStart) != -1 ? text.indexOf('\n', lineStart) : text.length);
-    
+
+    // 当前行结束位置
+    final int nextNl = full.indexOf('\n', lineStart);
+    final int lineEnd = nextNl == -1 ? full.length : nextNl;
+    final currentLine = full.substring(lineStart, lineEnd);
+
     if (currentLine.startsWith(prefix)) {
-      // 如果已经有前缀，移除它
-      final newText = text.substring(0, lineStart) + 
-          currentLine.substring(prefix.length) + 
-          text.substring(lineStart + currentLine.length);
-      final newSelection = TextSelection.collapsed(
-        offset: selection.start - prefix.length,
-      );
+      // 移除前缀
+      final newText = full.substring(0, lineStart) +
+          currentLine.substring(prefix.length) +
+          full.substring(lineEnd);
+      final newCaret = (caret - prefix.length).clamp(0, newText.length);
       controller.text = newText;
-      controller.selection = newSelection;
+      controller.selection = TextSelection.collapsed(offset: newCaret);
     } else {
-      // 如果没有前缀，添加它
-      final newText = text.substring(0, lineStart) + 
-          prefix + 
-          text.substring(lineStart);
-      final newSelection = TextSelection.collapsed(
-        offset: selection.start + prefix.length,
-      );
+      // 添加前缀
+      final newText = full.substring(0, lineStart) + prefix + full.substring(lineStart);
+      final newCaret = (caret + prefix.length).clamp(0, newText.length);
       controller.text = newText;
-      controller.selection = newSelection;
+      controller.selection = TextSelection.collapsed(offset: newCaret);
     }
-    
+
     onChanged?.call();
   }
 
-  void _replaceSelection(String newText, TextSelection newSelection) {
-    final text = controller.text;
-    final selection = controller.selection;
-    
-    final beforeSelection = text.substring(0, selection.start);
-    final afterSelection = text.substring(selection.end);
-    
-    controller.text = beforeSelection + newText + afterSelection;
+  void _replaceSelection(String newText, TextSelection newSelection, {int? overrideStart, int? overrideEnd}) {
+    final content = controller.text;
+    TextSelection selection = controller.selection;
+    if (overrideStart != null && overrideEnd != null) {
+      selection = TextSelection(baseOffset: overrideStart, extentOffset: overrideEnd);
+    } else if (!selection.isValid || selection.start < 0 || selection.end < 0) {
+      selection = TextSelection.collapsed(offset: content.length);
+    }
+
+    final start = selection.start.clamp(0, content.length);
+    final end = selection.end.clamp(0, content.length);
+
+    final before = content.substring(0, start);
+    final after = content.substring(end);
+
+    controller.text = before + newText + after;
     controller.selection = newSelection;
-    
+
     onChanged?.call();
   }
 }

@@ -260,7 +260,6 @@ class _CreateSurveyPageState extends State<CreateSurveyPage> with TickerProvider
             )).toIso8601String()
           : null;
 
-      // 解析可选的提交上限（留空或0表示不限制）
       final String totalTimesRaw = _totalTimesController.text.trim();
       final int totalTimes = totalTimesRaw.isEmpty ? 0 : (int.tryParse(totalTimesRaw) ?? 0);
       final String perUserRaw = _perUserLimitController.text.trim();
@@ -461,7 +460,7 @@ class _CreateSurveyPageState extends State<CreateSurveyPage> with TickerProvider
                         FTextFormField(
                           controller: _totalTimesController,
                           label: const Text('总提交上限(可选)'),
-                          hint: '留空表示不限制，例如 100',
+                          hint: '留空表示不限制',
                           keyboardType: TextInputType.number,
                           autovalidateMode: AutovalidateMode.onUserInteraction,
                           validator: (value) {
@@ -476,7 +475,7 @@ class _CreateSurveyPageState extends State<CreateSurveyPage> with TickerProvider
                         FTextFormField(
                           controller: _perUserLimitController,
                           label: const Text('单用户提交上限(可选)'),
-                          hint: '留空表示不限制，例如 1',
+                          hint: '留空表示不限制',
                           keyboardType: TextInputType.number,
                           autovalidateMode: AutovalidateMode.onUserInteraction,
                           validator: (value) {

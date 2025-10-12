@@ -12,6 +12,7 @@ import '../components/glass_card.dart';
 import '../components/pull_to_refresh_wrapper.dart';
 import 'frame_page.dart';
 import '../widgets/frosted_glass_background.dart';
+import '../utils/error_formatter.dart';
 
 class ProjectPage extends StatefulWidget {
   final String token;
@@ -196,7 +197,7 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
           context: context,
           alignment:FToastAlignment.bottomRight,
           title: const Text('加载失败'),
-          description: Text('加载项目失败: $e'),
+          description: Text(ErrorFormatter.format(e)),
           suffixBuilder: (context, entry, _) => IntrinsicHeight(
             child: FButton(
               style: context.theme.buttonStyles.primary.copyWith(

@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import '../utils/error_formatter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/api_service.dart';
 import '../models/question.dart';
@@ -46,6 +47,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
   String? errorMessage;
   bool isSubmitted = false;
   final Map<int, double?> _hoverRatings = {};
+  bool _backgroundLoaded = false;
 
   @override
   void initState() {
@@ -71,7 +73,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
         context: context,
         alignment: FToastAlignment.bottomRight,
         title: const Text('初始化失败'),
-        description: Text('初始化失败: $e'),
+        description: Text(ErrorFormatter.format(e)),
       );
       Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
     }
@@ -148,19 +150,27 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
         
         isLoading = false;
       });
+      
+      // 延迟标记背景加载完成，触发淡入动画
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (!mounted) return;
+      setState(() {
+        _backgroundLoaded = true;
+      });
     } on TokenExpired catch (_) {
       if (!mounted) return;
       showFToast(
         context: context,
         alignment: FToastAlignment.bottomRight,
         title: const Text('登录过期'),
-        description: const Text('登录已过期，请重新登录后再试'),
+        description: const Text('登录已过期，请重新登录'),
       );
       Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
     } catch (e) {
       setState(() {
-        errorMessage = '加载问卷失败: $e';
         isLoading = false;
+        errorMessage = ErrorFormatter.format(e);
+        _backgroundLoaded = true;
       });
     }
   }
@@ -267,6 +277,20 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
           alignment: FToastAlignment.bottomRight,
           title: const Text('提示'),
           description: Text('请回答必答题: ${question.title}'),
+          suffixBuilder: (context, entry, _) => IntrinsicHeight(
+            child: FButton(
+              style: context.theme.buttonStyles.primary.copyWith(
+                contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                  textStyle: FWidgetStateMap.all(
+                    context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
+                  ),
+                ),
+              ),
+              onPress: entry.dismiss,
+              child: const Text('关闭'),
+            ),
+          ),
         );
         return;
       }
@@ -371,7 +395,21 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
             context: context,
             alignment: FToastAlignment.bottomRight,
             title: const Text('提交失败'),
-            description: Text('提交失败: $e'),
+            description: Text(ErrorFormatter.format(e)),
+            suffixBuilder: (context, entry, _) => IntrinsicHeight(
+              child: FButton(
+                style: context.theme.buttonStyles.primary.copyWith(
+                  contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                    textStyle: FWidgetStateMap.all(
+                      context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
+                    ),
+                  ),
+                ),
+                onPress: entry.dismiss,
+                child: const Text('关闭'),
+              ),
+            ),
           );
         }
       }
@@ -388,23 +426,28 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: (_desktopBackground != null && _desktopBackground!.isNotEmpty) ||
-                   (_mobileBackground != null && _mobileBackground!.isNotEmpty)
-                ? Container(
-                    decoration: BoxDecoration(
-                      image: DecorationImage(
-                        image: NetworkImage(isWide
-                            ? toAbsoluteUrl(_desktopBackground)
-                            : toAbsoluteUrl(_mobileBackground)),
-                        fit: BoxFit.cover,
-                        onError: (_, __) {},
+            child: AnimatedOpacity(
+              opacity: _backgroundLoaded ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 600),
+              curve: Curves.easeInOut,
+              child: (_desktopBackground != null && _desktopBackground!.isNotEmpty) ||
+                     (_mobileBackground != null && _mobileBackground!.isNotEmpty)
+                  ? Container(
+                      decoration: BoxDecoration(
+                        image: DecorationImage(
+                          image: NetworkImage(isWide
+                              ? toAbsoluteUrl(_desktopBackground)
+                              : toAbsoluteUrl(_mobileBackground)),
+                          fit: BoxFit.cover,
+                          onError: (_, __) {},
+                        ),
                       ),
-                    ),
-                    child: isDark
-                        ? Container(color: Colors.black.withValues(alpha: 0.4))
-                        : null,
-                  )
-                : const FrostedGlassBackground(),
+                      child: isDark
+                          ? Container(color: Colors.black.withValues(alpha: 0.4))
+                          : null,
+                    )
+                  : const FrostedGlassBackground(),
+            ),
           ),
 
           Column(
