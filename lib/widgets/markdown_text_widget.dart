@@ -252,44 +252,6 @@ class MarkdownToolbar extends StatelessWidget {
     _replaceSelection(text, newSelection, overrideStart: start, overrideEnd: end);
   }
 
-  void _insertLinePrefix(String prefix) {
-    final full = controller.text;
-    TextSelection selection = controller.selection;
-    if (!selection.isValid || selection.start < 0) {
-      selection = TextSelection.collapsed(offset: full.length);
-    }
-    int caret = selection.start.clamp(0, full.length);
-
-    // 找到当前行的开始位置
-    int lineStart = caret;
-    while (lineStart > 0 && full[lineStart - 1] != '\n') {
-      lineStart--;
-    }
-
-    // 当前行结束位置
-    final int nextNl = full.indexOf('\n', lineStart);
-    final int lineEnd = nextNl == -1 ? full.length : nextNl;
-    final currentLine = full.substring(lineStart, lineEnd);
-
-    if (currentLine.startsWith(prefix)) {
-      // 移除前缀
-      final newText = full.substring(0, lineStart) +
-          currentLine.substring(prefix.length) +
-          full.substring(lineEnd);
-      final newCaret = (caret - prefix.length).clamp(0, newText.length);
-      controller.text = newText;
-      controller.selection = TextSelection.collapsed(offset: newCaret);
-    } else {
-      // 添加前缀
-      final newText = full.substring(0, lineStart) + prefix + full.substring(lineStart);
-      final newCaret = (caret + prefix.length).clamp(0, newText.length);
-      controller.text = newText;
-      controller.selection = TextSelection.collapsed(offset: newCaret);
-    }
-
-    onChanged?.call();
-  }
-
   void _replaceSelection(String newText, TextSelection newSelection, {int? overrideStart, int? overrideEnd}) {
     final content = controller.text;
     TextSelection selection = controller.selection;
