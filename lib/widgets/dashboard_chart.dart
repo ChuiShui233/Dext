@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../components/loading_indicator.dart';
 
 typedef FetchTrend = Future<Map<String, dynamic>> Function(String range);
 
@@ -200,7 +201,7 @@ class _DashboardChartState extends State<DashboardChart> {
               SizedBox(
                 height: chartHeight,
                 child: _loading
-                    ? Center(child: CircularProgressIndicator(color: theme.colorScheme.primary))
+                    ? const Center(child: LoadingIndicator())
                     : hasData
                         ? _buildBars(context, displayLabels, _counts, maxCount, barMaxHeight)
                         : _buildPlaceholder(context, barMaxHeight),

@@ -2,7 +2,7 @@ import 'package:forui/forui.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:dext/widgets/app_navigator.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../services/settings_service.dart';
 
 class WindowCaption extends StatefulWidget {
   const WindowCaption({super.key});
@@ -48,9 +48,9 @@ class _WindowCaptionState extends State<WindowCaption> with WindowListener {
 
     Future<void> showCloseConfirmDialog() async {
       // 检查用户是否选择了不再提示
-      final prefs = await SharedPreferences.getInstance();
-      final dontAskAgain = prefs.getBool('window_close_dont_ask') ?? false;
-      final defaultAction = prefs.getString('window_close_default_action') ?? 'ask';
+      final settings = SettingsService();
+      final dontAskAgain = settings.windowCloseDontAsk;
+      final defaultAction = settings.windowCloseDefaultAction;
       
       if (dontAskAgain && defaultAction != 'ask') {
         // 直接执行默认操作
@@ -124,8 +124,9 @@ class _WindowCaptionState extends State<WindowCaption> with WindowListener {
                         style: FButtonStyle.outline,
                         onPress: () async {
                           if (dontAskAgainChecked) {
-                            await prefs.setBool('window_close_dont_ask', true);
-                            await prefs.setString('window_close_default_action', 'hide');
+                            final settings = SettingsService();
+                            await settings.setWindowCloseDontAsk(true);
+                            await settings.setWindowCloseDefaultAction('hide');
                           }
                           if (dialogContext.mounted) {
                             Navigator.of(dialogContext).pop();
@@ -138,8 +139,9 @@ class _WindowCaptionState extends State<WindowCaption> with WindowListener {
                         style: FButtonStyle.outline,
                         onPress: () async {
                           if (dontAskAgainChecked) {
-                            await prefs.setBool('window_close_dont_ask', true);
-                            await prefs.setString('window_close_default_action', 'close');
+                            final settings = SettingsService();
+                            await settings.setWindowCloseDontAsk(true);
+                            await settings.setWindowCloseDefaultAction('close');
                           }
                           if (dialogContext.mounted) {
                             Navigator.of(dialogContext).pop();

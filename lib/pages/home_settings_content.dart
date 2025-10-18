@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:forui/forui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/settings_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../models/user.dart';
@@ -11,6 +12,8 @@ import '../services/config.dart';
 import '../widgets/crop_image_dialog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'account_security_page.dart';
+import 'debug_tools_page.dart';
+import '../components/loading_indicator.dart';
 
 class HomeSettingsContent extends StatefulWidget {
   final VoidCallback onLogout;
@@ -35,12 +38,74 @@ class HomeSettingsContent extends StatefulWidget {
 class _HomeSettingsContentState extends State<HomeSettingsContent> {
   User? _currentUser;
   String _appVersion = '加载中...';
+  String _themeModePref = 'system'; // system | light | dark
 
   @override
   void initState() {
     super.initState();
     _fetchUserData();
     _loadAppVersion();
+    _loadThemeModePref();
+  }
+
+  // ==================== 调试设置卡片 ====================
+  Widget _buildDebugCard(BuildContext context, ThemeData theme) {
+    return _buildSectionCard(
+      context,
+      title: '调试设置',
+      icon: Icons.bug_report_outlined,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '进入调试工具，可一键创建500个项目与500份随机归属的问卷（请仅用于测试环境）',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FButton(
+                onPress: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => DebugToolsPage(apiService: widget.apiService),
+                    ),
+                  );
+                },
+                child: const Text('打开调试工具'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 读取并应用保存的主题模式偏好
+  Future<void> _loadThemeModePref() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('theme_mode') ?? 'system';
+    if (!mounted) return;
+    setState(() {
+      _themeModePref = saved;
+    });
+    // 应用为当前主题
+    switch (saved) {
+      case 'light':
+        widget.onThemeModeChange(ThemeMode.light);
+        break;
+      case 'dark':
+        widget.onThemeModeChange(ThemeMode.dark);
+        break;
+      case 'system':
+      default:
+        widget.onThemeModeChange(ThemeMode.system);
+    }
   }
 
   Future<void> _loadAppVersion() async {
@@ -69,6 +134,8 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
         setState(() {
           _currentUser = user;
         });
+        // 更新全局用户通知器，刷新侧边栏
+        widget.userNotifier?.value = user;
       }
     } catch (e) {
       if (mounted) {
@@ -209,13 +276,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
                   const SizedBox(height: 16),
                   const Row(
                     children: [
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      SizedBox(width: 8),
-                      Text('正在更新用户名...'),
+                      LoadingIndicator.inline(message: '正在更新用户名...'),
                     ],
                   ),
                 ],
@@ -301,6 +362,8 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
             _buildAccountCard(context, theme),
             const SizedBox(height: 16),
             _buildAppInfoCard(context, theme),
+            const SizedBox(height: 16),
+            _buildDebugCard(context, theme),
           ],
         ),
       ),
@@ -410,7 +473,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
             children: const [
               Padding(
                 padding: EdgeInsets.all(20),
-                child: Center(child: CircularProgressIndicator()),
+                child: LoadingIndicator.page(),
               ),
             ],
           );
@@ -484,23 +547,17 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
                             actionValue = 'ask';
                         }
                         
-                        final prefs = await SharedPreferences.getInstance();
+                        final settings = SettingsService();
                         if (actionValue == 'ask') {
-                          await prefs.setBool('window_close_dont_ask', false);
-                          await prefs.setString('window_close_default_action', 'ask');
+                          await settings.setWindowCloseDontAsk(false);
+                          await settings.setWindowCloseDefaultAction('ask');
                         } else {
-                          await prefs.setBool('window_close_dont_ask', true);
-                          await prefs.setString('window_close_default_action', actionValue);
+                          await settings.setWindowCloseDontAsk(true);
+                          await settings.setWindowCloseDefaultAction(actionValue);
                         }
                         
                         if (mounted && context.mounted) {
                           setState(() {}); // 刷新UI
-                          showFToast(
-                            context: context,
-                            alignment: FToastAlignment.bottomRight,
-                            title: const Text('设置已保存'),
-                            description: Text('窗口关闭行为已设置为：$displayValue'),
-                          );
                         }
                       }
                     },
@@ -515,10 +572,10 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
   }
 
   Future<Map<String, dynamic>> _loadDesktopSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+    final settings = SettingsService();
     return {
-      'window_close_dont_ask': prefs.getBool('window_close_dont_ask') ?? false,
-      'window_close_default_action': prefs.getString('window_close_default_action') ?? 'ask',
+      'window_close_dont_ask': settings.windowCloseDontAsk,
+      'window_close_default_action': settings.windowCloseDefaultAction,
     };
   }
 
@@ -532,29 +589,55 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-          child: FSelect<String>(
-            hint: '选择主题模式',
-            format: (s) => s,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              FSelectItem('跟随系统', '跟随系统'),
-              FSelectItem('浅色模式', '浅色模式'),
-              FSelectItem('深色模式', '深色模式'),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  '当前: ${_themeModePref == 'light' ? '浅色模式' : _themeModePref == 'dark' ? '深色模式' : '跟随系统'}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                  ),
+                ),
+              ),
+              FSelect<String>(
+                hint: '选择主题模式',
+                format: (s) => s,
+                children: [
+                  FSelectItem('跟随系统', '跟随系统'),
+                  FSelectItem('浅色模式', '浅色模式'),
+                  FSelectItem('深色模式', '深色模式'),
+                ],
+                onChange: (mode) async {
+                  if (mode != null) {
+                    String pref;
+                    switch (mode) {
+                      case '浅色模式':
+                        widget.onThemeModeChange(ThemeMode.light);
+                        pref = 'light';
+                        break;
+                      case '深色模式':
+                        widget.onThemeModeChange(ThemeMode.dark);
+                        pref = 'dark';
+                        break;
+                      case '跟随系统':
+                      default:
+                        widget.onThemeModeChange(ThemeMode.system);
+                        pref = 'system';
+                    }
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setString('theme_mode', pref);
+                    if (mounted && context.mounted) {
+                      setState(() {
+                        _themeModePref = pref;
+                      });
+                    }
+                  }
+                },
+              ),
             ],
-            onChange: (mode) {
-              if (mode != null) {
-                switch (mode) {
-                  case '跟随系统':
-                    widget.onThemeModeChange(ThemeMode.system);
-                    break;
-                  case '浅色模式':
-                    widget.onThemeModeChange(ThemeMode.light);
-                    break;
-                  case '深色模式':
-                    widget.onThemeModeChange(ThemeMode.dark);
-                    break;
-                }
-              }
-            },
           ),
         ),
       ],
@@ -843,13 +926,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
               direction: Axis.horizontal,
               title: const Text('确认退出'),
               body: isLoading
-                  ? const Row(
-                    children: [
-                      SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                      SizedBox(width: 8),
-                      Text('正在退出登录...')
-                    ],
-                  )
+                  ? const LoadingIndicator.inline(message: '正在退出登录...')
                   : const Text('确定要退出当前账号吗？'),
               actions: [
                 FButton(

@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../components/loading_indicator.dart';
 
 class FrostedOAuthDialog extends StatelessWidget {
   final String providerName;
@@ -57,7 +58,9 @@ class FrostedOAuthDialog extends StatelessWidget {
                     const SizedBox(
                       height: 22,
                       width: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2.4),
+                      child: LoadingIndicator(
+                        size: LoadingSize.small,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(

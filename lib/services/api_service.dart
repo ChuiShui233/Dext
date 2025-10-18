@@ -188,6 +188,8 @@ class ApiService {
         final overview = {
           'totalViews': (data['totalViews'] as num?)?.toInt() ?? 0,
           'totalSubmits': (data['totalSubmits'] as num?)?.toInt() ?? 0,
+          'totalSurveys': (data['totalSurveys'] as num?)?.toInt() ?? 0,
+          'activeSurveys': (data['activeSurveys'] as num?)?.toInt() ?? 0,
         };
         
         onStatus?.call(RequestStatus.success, '缓存数据加载成功');
@@ -217,10 +219,14 @@ class ApiService {
         final newOverview = {
           'totalViews': (data['totalViews'] as num?)?.toInt() ?? 0,
           'totalSubmits': (data['totalSubmits'] as num?)?.toInt() ?? 0,
+          'totalSurveys': (data['totalSurveys'] as num?)?.toInt() ?? 0,
+          'activeSurveys': (data['activeSurveys'] as num?)?.toInt() ?? 0,
         };
         
         if (cached['totalViews'] != newOverview['totalViews'] ||
-            cached['totalSubmits'] != newOverview['totalSubmits']) {
+            cached['totalSubmits'] != newOverview['totalSubmits'] ||
+            cached['totalSurveys'] != newOverview['totalSurveys'] ||
+            cached['activeSurveys'] != newOverview['activeSurveys']) {
           prefs.setString(cacheKey, json.encode(data));
           _notifyDataUpdate('analytics_overview', newOverview);
           _updateStatus(RequestStatus.success, '统计数据已更新');
@@ -242,6 +248,8 @@ class ApiService {
         return {
           'totalViews': (data['totalViews'] as num?)?.toInt() ?? 0,
           'totalSubmits': (data['totalSubmits'] as num?)?.toInt() ?? 0,
+          'totalSurveys': (data['totalSurveys'] as num?)?.toInt() ?? 0,
+          'activeSurveys': (data['activeSurveys'] as num?)?.toInt() ?? 0,
         };
       } else if (response.statusCode == 401) {
         throw response;
@@ -370,7 +378,6 @@ class ApiService {
     }
   }
 
-  // 提交记录查询（带筛选和分页）
   Future<Map<String, dynamic>> getSubmissionHistory({
     String? query,
     int? type,
@@ -1451,6 +1458,11 @@ class ApiService {
     }
   }
 
+  // 公开的手动刷新令牌方法（供debug使用）
+  Future<bool> manualRefreshToken() async {
+    return await _refreshToken();
+  }
+
   // 自动刷新token并重试的通用方法
   Future<bool> _refreshToken() async {
     try {
@@ -1489,38 +1501,37 @@ class ApiService {
         print('[RefreshToken] 核心层 token: ${_core.authToken?.substring(0, min(20, _core.authToken?.length ?? 0))}...');
       }
       
-      // 优先尝试使用 AES（需要已有会话密钥），否则回退到 RSA 加密
+      // 使用普通HTTP请求（不加密），因为后端已将refresh端点加入白名单
       http.Response resp;
       final refreshUrl = '$baseUrl/api/auth/refresh';
       final refreshData = {'refresh': true};
       try {
-        if (_cryptoService.currentSessionKey != null) {
-          // 优先 AES
-          resp = await _httpRequest(
-            'POST',
-            refreshUrl,
-            data: refreshData,
-            allowRetry: false,
-          );
-          // 若会话丢失导致 401，自动回退到 RSA 重试
-          if (resp.statusCode == 401) {
-            resp = await _encryptedRequest(
-              'POST',
-              refreshUrl,
-              refreshData,
-              allowRetry: false,
-            );
-          }
-        } else {
-          // 无会话密钥时使用 RSA 加密
-          resp = await _encryptedRequest(
-            'POST',
-            refreshUrl,
-            refreshData,
-            allowRetry: false,
-          );
+        // 使用普通HTTP请求，携带Authorization header
+        final uri = Uri.parse(refreshUrl);
+        final headers = {
+          'Content-Type': 'application/json',
+          if (authToken != null) 'Authorization': 'Bearer $authToken',
+        };
+        
+        if (kDebugMode) {
+          print('[RefreshToken] 发送刷新请求到: $refreshUrl');
+          print('[RefreshToken] authToken 状态: ${authToken != null ? "存在 (${authToken!.substring(0, min(20, authToken!.length))}...)" : "为空"}');
+          print('[RefreshToken] Headers: ${headers.keys.join(", ")}');
         }
-      } catch (_) {
+        
+        resp = await http
+            .post(
+              uri,
+              headers: headers,
+              body: json.encode(refreshData),
+            )
+            .timeout(timeoutDuration);
+            
+        if (kDebugMode) {
+          print('[RefreshToken] 响应状态码: ${resp.statusCode}');
+        }
+      } catch (e) {
+        if (kDebugMode) print('[RefreshToken] 请求失败: $e');
         return false;
       }
 
@@ -1669,12 +1680,14 @@ class ApiService {
     int page = 1,
     int pageSize = 10,
     String? search,
+    bool skipCache = false,
     StatusCallback? onStatus,
   }) async {
     return await _projectService.getProjectsPaginated(
       page: page,
       pageSize: pageSize,
       search: search,
+      skipCache: skipCache,
       onStatus: onStatus,
     );
   }
@@ -1809,12 +1822,14 @@ class ApiService {
     int pageSize = 5,
     String? search,
     String? type,
+    bool skipCache = false,
     StatusCallback? onStatus,
   }) async {
     return await _surveyService.getSurveysPaginated(
       page: page,
       pageSize: pageSize,
       search: search,
+      skipCache: skipCache,
       type: type,
       onStatus: onStatus,
     );

@@ -29,7 +29,7 @@ android {
 
     defaultConfig {
         applicationId "com.chuishui.Dext"
-        minSdkVersion 23
+        minSdkVersion flutter.minSdkVersion
         targetSdk 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
@@ -48,7 +48,6 @@ android {
 
     buildTypes {
         release {
-            // 只在密钥文件存在时使用发布签名，否则使用调试签名（用于 CI）
             if (keystorePropertiesFile.exists()) {
                 signingConfig signingConfigs.release
             }
@@ -58,7 +57,6 @@ android {
         }
     }
 
-    // 修改输出配置
     android.applicationVariants.all { variant ->
         variant.outputs.all {
             outputFileName = "app-${variant.name}-${variant.versionName}.apk"

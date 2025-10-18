@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:forui/forui.dart';
 import 'package:crop_image_plus/crop_image_plus.dart';
+import '../components/loading_indicator.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
@@ -51,8 +52,25 @@ class _CropImageDialogState extends State<CropImageDialog> {
       return data.buffer.asUint8List();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('裁剪失败: $e')),
+        showFToast(
+          context: context,
+          alignment: FToastAlignment.bottomRight,
+          title: const Text('裁剪失败'),
+          description: Text('$e'),
+          suffixBuilder: (context, entry, _) => IntrinsicHeight(
+            child: FButton(
+              style: context.theme.buttonStyles.primary.copyWith(
+                contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                  textStyle: FWidgetStateMap.all(
+                    context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
+                  ),
+                ),
+              ),
+              onPress: entry.dismiss,
+              child: const Text('关闭'),
+            ),
+          ),
         );
       }
       return null;
@@ -175,11 +193,7 @@ class _CropImageDialogState extends State<CropImageDialog> {
                                     }
                                   },
                             child: _isProcessing
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
+                                ? const LoadingIndicator.button()
                                 : const Text('确定'),
                           ),
                         ],

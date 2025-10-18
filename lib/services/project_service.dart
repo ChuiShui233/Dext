@@ -39,13 +39,14 @@ class ProjectService {
     int page = 1,
     int pageSize = 10,
     String? search,
+    bool skipCache = false,
     StatusCallback? onStatus,
   }) async {
     final prefs = await core.prefs();
     final cacheKey = 'projects_paginated_${page}_${pageSize}_${search ?? ""}';
     final cached = prefs.getString(cacheKey);
     
-    if (cached != null) {
+    if (cached != null && !skipCache) {
       try {
         onStatus?.call(RequestStatus.loading, '正在加载缓存数据...');
         core.updateStatus(RequestStatus.loading, '正在加载缓存数据...');
@@ -82,7 +83,7 @@ class ProjectService {
         'pageSize': pageSize.toString(),
       };
       if (search != null && search.isNotEmpty) {
-        queryParams['search'] = search;
+        queryParams['query'] = search;
       }
       final uri = Uri.parse('${ApiCore.baseUrl}/api/project/list').replace(queryParameters: queryParams);
       final resp = await core.httpRequest('GET', uri.toString());
@@ -121,7 +122,7 @@ class ProjectService {
       'pageSize': pageSize.toString(),
     };
     if (search != null && search.isNotEmpty) {
-      queryParams['search'] = search;
+      queryParams['query'] = search;
     }
 
     final uri = Uri.parse('${ApiCore.baseUrl}/api/project/list').replace(queryParameters: queryParams);

@@ -1,7 +1,8 @@
 import 'package:dext/services/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
-import 'package:flutter_speed_dial/flutter_speed_dial.dart';
+// Removed flutter_speed_dial; we now use a custom glass-style menu
+import '../components/glass_fab_menu.dart';
 import '../widgets/top_safe_spacer.dart';
 import '../widgets/dashboard_stats_card.dart';
 import '../widgets/dashboard_chart.dart';
@@ -41,7 +42,7 @@ class HomeMainContent extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const TopSafeSpacer(),
+                const TopSafeSpacer(mobile:20),
                 
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -219,66 +220,19 @@ class HomeMainContent extends StatelessWidget {
           ),
         ),
         if (isMobile)
-          Positioned(
-            right: 4,
-            bottom: 62,
-            child: Builder(
-              builder: (context) {
-                final screenWidth = MediaQuery.of(context).size.width;
-                final isLargeScreen = screenWidth > 600; // 大屏幕阈值
-                
-                final mainButtonSize = isLargeScreen ? 72.0 : 64.0;
-                final childButtonSize = isLargeScreen ? 64.0 : 56.0;
-                final iconSize = isLargeScreen ? 30.0 : 26.0;
-                
-                return SpeedDial(
-                  icon: Icons.add,
-                  activeIcon: Icons.close,
-                  foregroundColor: Colors.white,
-                  backgroundColor: const Color(0xFF121212), // 高级黑，深浅色模式不变
-                  buttonSize: Size(mainButtonSize, mainButtonSize),
-                  childrenButtonSize: Size(childButtonSize, childButtonSize),
-                  overlayOpacity: 0.1,
-                  spacing: 6,
-                  spaceBetweenChildren: 6,
-                  children: [
-                    SpeedDialChild(
-                      child: Icon(Icons.edit_note_outlined, size: iconSize),
-                      label: '填写问卷',
-                      backgroundColor: const Color(0xFF121212),
-                      foregroundColor: Colors.white,
-                      labelBackgroundColor: const Color(0xFF121212),
-                      labelStyle: const TextStyle(color: Colors.white),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const PublicAccessPage(),
-                          ),
-                        );
-                      },
-                    ),
-                    SpeedDialChild(
-                      child: Icon(Icons.folder_outlined, size: iconSize),
-                      label: '管理项目',
-                      backgroundColor: const Color(0xFF121212),
-                      foregroundColor: Colors.white,
-                      labelBackgroundColor: const Color(0xFF121212),
-                      labelStyle: const TextStyle(color: Colors.white),
-                      onTap: onProjectTap,
-                    ),
-                    SpeedDialChild(
-                      child: Icon(Icons.notes_outlined, size: iconSize),
-                      label: '管理问卷',
-                      backgroundColor: const Color(0xFF121212),
-                      foregroundColor: Colors.white,
-                      labelBackgroundColor: const Color(0xFF121212),
-                      labelStyle: const TextStyle(color: Colors.white),
-                      onTap: onSurveyTap,
-                    ),
-                  ],
+          Positioned.fill(
+            child: GlassFabMenu(
+              padding: const EdgeInsets.only(right: 12, bottom: 72),
+              onFillSurvey: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const PublicAccessPage(),
+                  ),
                 );
               },
+              onProjectTap: onProjectTap,
+              onSurveyTap: onSurveyTap,
             ),
           ),
       ],

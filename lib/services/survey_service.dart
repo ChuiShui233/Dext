@@ -75,13 +75,14 @@ class SurveyService {
     int pageSize = 10,
     String? search,
     String? type,
+    bool skipCache = false,
     StatusCallback? onStatus,
   }) async {
     final prefs = await core.prefs();
     final cacheKey = 'surveys_paginated_${page}_${pageSize}_${search ?? ""}_${type ?? ""}';
     final cached = prefs.getString(cacheKey);
     
-    if (cached != null) {
+    if (cached != null && !skipCache) {
       try {
         onStatus?.call(RequestStatus.loading, '正在加载缓存数据...');
         core.updateStatus(RequestStatus.loading, '正在加载缓存数据...');
@@ -132,7 +133,7 @@ class SurveyService {
         'pageSize': pageSize.toString(),
       };
       if (search != null && search.isNotEmpty) {
-        queryParams['search'] = search;
+        queryParams['query'] = search;
       }
       if (type != null && type.isNotEmpty) {
         queryParams['type'] = type;
@@ -188,7 +189,7 @@ class SurveyService {
       'pageSize': pageSize.toString(),
     };
     if (search != null && search.isNotEmpty) {
-      queryParams['search'] = search;
+      queryParams['query'] = search;
     }
     if (type != null && type.isNotEmpty) {
       queryParams['type'] = type;
@@ -338,7 +339,7 @@ class SurveyService {
     throw '获取问卷背景失败: ${resp.statusCode}';
   }
 
-  // ===== Questions (skeleton for future phases) =====
+  // ===== Questions =====
   Future<List<Question>> getSurveyQuestions(int surveyId, {StatusCallback? onStatus}) async {
     final prefs = await core.prefs();
     final cacheKey = 'questions_$surveyId';

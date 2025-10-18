@@ -11,6 +11,7 @@ import '../components/survey_actions.dart';
 import '../widgets/frosted_glass_background.dart';
 import '../components/glass_card.dart';
 import '../components/pull_to_refresh_wrapper.dart';
+import '../components/loading_indicator.dart';
 
 class ProjectSurveysPage extends StatefulWidget {
   final String token;
@@ -217,7 +218,7 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
               ),
               Expanded(
                 child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
+                    ? const LoadingIndicator.page()
                     : _surveys.isEmpty
                         ? Center(
                             child: Column(

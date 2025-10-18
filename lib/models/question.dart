@@ -225,14 +225,16 @@ class Question {
 class QuestionOption {
   final int id;
   final String text;
-  final String? mediaUrl; // 选项的媒体文件URL
-  final int? destination; // 跳题目标问题ID（可为空）
+  final String? mediaUrl;
+  final int? destination;
+  final String? customInputPlaceholder;
 
   QuestionOption({
     required this.id,
     required this.text,
     this.mediaUrl,
     this.destination,
+    this.customInputPlaceholder,
   });
 
   factory QuestionOption.fromJson(Map<String, dynamic> json) {
@@ -251,6 +253,7 @@ class QuestionOption {
       mediaUrl: json['mediaURL'] ?? json['mediaUrl'] ?? json['mediaURL'],
       // 支持多种字段名：destination, destinationQuestionId, destination_question_id
       destination: (json['destination'] ?? json['destinationQuestionId'] ?? json['destination_question_id']) as int?,
+      customInputPlaceholder: json['customInputPlaceholder'] as String?,
     );
   }
 
@@ -262,6 +265,7 @@ class QuestionOption {
       'optionText': text,       // 后端需要的字段
       'mediaURL': mediaUrl,
       if (destination != null) 'destination': destination,
+      if (customInputPlaceholder != null) 'customInputPlaceholder': customInputPlaceholder,
     };
   }
 
@@ -270,12 +274,14 @@ class QuestionOption {
     String? text,
     String? mediaUrl,
     int? destination,
+    String? customInputPlaceholder,
   }) {
     return QuestionOption(
       id: id ?? this.id,
       text: text ?? this.text,
       mediaUrl: mediaUrl ?? this.mediaUrl,
       destination: destination ?? this.destination,
+      customInputPlaceholder: customInputPlaceholder ?? this.customInputPlaceholder,
     );
   }
 }

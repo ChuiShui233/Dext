@@ -16,6 +16,7 @@ import 'package:windows_single_instance/windows_single_instance.dart';
 import 'services/url_handler.dart';
 import 'services/clipboard_service.dart';
 import 'services/uri_handler_service.dart';
+import 'services/settings_service.dart';
 import 'utils/network_reachability.dart';
 
 import 'models/project.dart';
@@ -239,6 +240,9 @@ void main(List<String> args) async {
   SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(statusBarColor: Colors.transparent));
 
+  // 初始化设置服务
+  await SettingsService().initialize();
+
   runApp(const YuMeng233App());
 }
 
@@ -276,6 +280,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
   void initState() {
     super.initState();
     _checkAuthStatus();
+    _applySettingsFromStore();
     WidgetsBinding.instance.addObserver(this);
     _updateThemeMode();
     _handleInitialUrl();
@@ -320,6 +325,28 @@ class _YuMeng233AppState extends State<YuMeng233App>
       setState(() {
         _isDark = brightness == Brightness.dark;
       });
+    }
+  }
+  
+  // 从 SettingsService 读取持久化设置并应用（不依赖设置页面）
+  void _applySettingsFromStore() {
+    try {
+      final settings = SettingsService();
+      final mode = settings.themeMode; // 'system' | 'light' | 'dark'
+      ThemeMode resolved;
+      switch (mode) {
+        case 'light':
+          resolved = ThemeMode.light;
+          break;
+        case 'dark':
+          resolved = ThemeMode.dark;
+          break;
+        default:
+          resolved = ThemeMode.system;
+      }
+      _setThemeMode(resolved);
+    } catch (_) {
+      // 忽略设置加载异常，保持默认 ThemeMode.system
     }
   }
 

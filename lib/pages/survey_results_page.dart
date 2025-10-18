@@ -1,7 +1,13 @@
 import 'dart:async';
 import 'dart:ui';
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../widgets/top_safe_spacer.dart';
+import '../utils/csv_download_stub.dart'
+  if (dart.library.html) '../utils/csv_download_web.dart'
+  if (dart.library.io) '../utils/csv_download_io.dart';
 import 'package:flutter/material.dart' as vmath;
 import 'package:forui/forui.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -12,11 +18,13 @@ import '../models/survey_result.dart';
 import '../models/question.dart';
 import '../services/api_service.dart';
 import '../main.dart' show isDesktop;
+import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xls;
 import '../utils/date_format.dart';
 import 'dart:ui' as ui;
 import '../widgets/frosted_glass_background.dart';
 import '../widgets/markdown_text_widget.dart';
 import '../services/config.dart';
+import '../components/loading_indicator.dart';
 
 class SurveyResultsPage extends StatefulWidget {
   final String token;
@@ -42,7 +50,7 @@ class _SlideGradientTransform extends GradientTransform {
   }
 }
 
-class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTickerProviderStateMixin {
+class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProviderStateMixin {
   List<SurveyResult> _results = [];
   List<Question> _questions = [];
   bool _isLoading = true;
@@ -50,6 +58,9 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
   Set<int> _selectedResults = {};
   bool _isSelectionMode = false;
   bool _usePieChart = false;
+  late final AnimationController _exportFmtCtl;
+  late final Animation<double> _exportFmtAnim;
+  bool _exportFmtExpanded = false;
   late final ApiService _apiService;
   String? _desktopBackground;
   String? _mobileBackground;
@@ -229,9 +240,15 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                                     final optionIndex = e.key;
                                     final count = e.value;
                                     final percentage = (count / total * 100).toStringAsFixed(1);
-                                    final optionText = optionIndex < options.length
+                                    var optionText = optionIndex < options.length
                                         ? options[optionIndex].text
                                         : '选项 ${optionIndex + 1}';
+                                    
+                                    // 如果是自定义填写选项，显示为"自定义答案"
+                                    if (optionText == '__custom_input__') {
+                                      optionText = '自定义答案';
+                                    }
+                                    
                                     return Text(
                                       '$optionText  $count次  ($percentage%)',
                                       style: const TextStyle(color: Colors.white, fontSize: 12),
@@ -252,7 +269,13 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                   children: stats.entries.map((entry) {
                     final optionIndex = entry.key;
                     final count = entry.value;
-                    final optionText = optionIndex < options.length ? options[optionIndex].text : '选项 ${optionIndex + 1}';
+                    var optionText = optionIndex < options.length ? options[optionIndex].text : '选项 ${optionIndex + 1}';
+                    
+                    // 如果是自定义填写选项，显示为"自定义答案"
+                    if (optionText == '__custom_input__') {
+                      optionText = '自定义答案';
+                    }
+                    
                     final percentage = (count / total * 100).toStringAsFixed(1);
                     final color = pieColors[optionIndex % pieColors.length];
                     return Padding(
@@ -294,7 +317,13 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                   children: stats.entries.map((entry) {
                     final optionIndex = entry.key;
                     final count = entry.value;
-                    final optionText = optionIndex < options.length ? options[optionIndex].text : '选项 ${optionIndex + 1}';
+                    var optionText = optionIndex < options.length ? options[optionIndex].text : '选项 ${optionIndex + 1}';
+                    
+                    // 如果是自定义填写选项，显示为"自定义答案"
+                    if (optionText == '__custom_input__') {
+                      optionText = '自定义答案';
+                    }
+                    
                     final percentage = (count / total * 100).toStringAsFixed(1);
                     final color = pieColors[optionIndex % pieColors.length];
                     return SizedBox(
@@ -746,6 +775,52 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
     );
   }
 
+  // 渐变操作按钮（参考 login_page.dart 的 OAuth 按钮风格）
+  Widget _buildActionButton({
+    required VoidCallback onTap,
+    required IconData icon,
+    required String label,
+    required List<Color> colors,
+  }) {
+    return Container(
+      height: 44,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: colors),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: colors.first.withValues(alpha: 0.25),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 18, color: Colors.white),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'PingFangSuper',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -753,6 +828,8 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
     _loadBackground();
     _loadData();
     _rainbowCtl = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
+    _exportFmtCtl = AnimationController(duration: const Duration(milliseconds: 250), vsync: this);
+    _exportFmtAnim = CurvedAnimation(parent: _exportFmtCtl, curve: Curves.easeInOut);
   }
 
   Widget _getStatisticsCard() {
@@ -771,6 +848,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
   void dispose() {
     _scrollController.dispose();
     _rainbowCtl.dispose();
+    _exportFmtCtl.dispose();
     super.dispose();
   }
 
@@ -952,6 +1030,304 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
         _selectedResults = _results.map((r) => r.id).toSet();
       }
     });
+  }
+
+  // 生成 CSV 字符串（包含表头）
+  String _generateCsv() {
+    final headers = <String>['作答ID', '用户账号', '提交时间'];
+    final sortedQuestions = [..._questions]..sort((a, b) => a.order.compareTo(b.order));
+    headers.addAll(sortedQuestions.map((q) => _stripMarkdown(q.title)));
+
+    final rows = <List<String>>[];
+    for (final r in _results) {
+      final base = <String>[r.id.toString(), r.userAccount, DateFormatUtils.formatIsoString(r.createTime)];
+      final Map<int, AnswerDetail> answerMap = { for (final a in r.questions) a.questionId: a };
+      final List<String> answers = [];
+      for (final q in sortedQuestions) {
+        final a = answerMap[q.id];
+        if (a == null) { answers.add(''); continue; }
+        String cell = '';
+        switch (q.type) {
+          case QuestionType.textInput:
+            cell = _stripMarkdown(a.selectChoices);
+            break;
+          case QuestionType.slider:
+            final v = a.selectChoices;
+            final parsed = double.tryParse(v);
+            if (parsed != null) {
+              final key = (parsed * 2).round() / 2.0;
+              final label = q.ratingLabels[key];
+              cell = (label != null && label.isNotEmpty) ? '$v (${_stripMarkdown(label)})' : v;
+            } else {
+              cell = v;
+            }
+            break;
+          case QuestionType.singleChoice:
+          case QuestionType.multipleChoice:
+            if (a.selectedOptions.isNotEmpty) {
+              final texts = <String>[];
+              for (final idx in a.selectedOptions) {
+                var optionText = _getOptionText(q.id, idx);
+                
+                // 如果是自定义填写选项，提取实际填写内容
+                if (optionText == '__custom_input__') {
+                  if (a.selectChoices.contains('__custom_input__:')) {
+                    final parts = a.selectChoices.split('__custom_input__:');
+                    for (final part in parts) {
+                      if (part.isEmpty) continue;
+                      final colonIndex = part.indexOf(':');
+                      if (colonIndex != -1) {
+                        final optionIndexStr = part.substring(0, colonIndex);
+                        final parsedIndex = int.tryParse(optionIndexStr);
+                        if (parsedIndex == idx) {
+                          final customInput = part.substring(colonIndex + 1);
+                          optionText = '自定义填写: $customInput';
+                          break;
+                        }
+                      }
+                    }
+                  }
+                  if (optionText == '__custom_input__') {
+                    optionText = '自定义填写';
+                  }
+                }
+                
+                texts.add(_stripMarkdown(optionText));
+              }
+              cell = texts.join('; ');
+            } else {
+              cell = _stripMarkdown(a.selectChoices);
+            }
+            break;
+        }
+        answers.add(_escapeCsv(cell));
+      }
+      rows.add([...base.map(_escapeCsv), ...answers]);
+    }
+
+    final csvLines = <String>[];
+    csvLines.add(headers.map(_escapeCsv).join(','));
+    for (final row in rows) {
+      csvLines.add(row.join(','));
+    }
+    final content = csvLines.join('\r\n');
+    const bom = '\uFEFF';
+    return bom + content;
+  }
+
+  String _escapeCsv(String value) {
+    var v = value.replaceAll('\r', ' ').replaceAll('\n', ' ');
+    v = v.replaceAll('"', '""');
+    return '"$v"';
+  }
+
+  // 简单的 Markdown 符号屏蔽/去除
+  String _stripMarkdown(String input) {
+    if (input.isEmpty) return input;
+    var s = input;
+    // 图片与链接: ![alt](url) / [text](url) -> alt 或 text
+    s = s.replaceAllMapped(RegExp(r'!\[([^\]]*)\]\([^\)]*\)'), (m) => m.group(1) ?? '');
+    s = s.replaceAllMapped(RegExp(r'\[([^\]]+)\]\([^\)]*\)'), (m) => m.group(1) ?? '');
+    // 行首标题、引用、列表标记（多行匹配）
+    s = s.replaceAll(RegExp(r'^\s{0,3}#{1,6}\s*', multiLine: true), '');
+    s = s.replaceAll(RegExp(r'^\s{0,3}>\s?', multiLine: true), '');
+    s = s.replaceAll(RegExp(r'^\s{0,3}[-+*]\s+', multiLine: true), '');
+    s = s.replaceAll(RegExp(r'^\s{0,3}\d+\.\s+', multiLine: true), '');
+    // 强调、行内代码、删除线（全部改为映射，避免出现 "$1" 文本）
+    s = s.replaceAllMapped(RegExp(r'\*\*([^*]+)\*\*'), (m) => m.group(1) ?? '');
+    s = s.replaceAllMapped(RegExp(r'__([^_]+)__'), (m) => m.group(1) ?? '');
+    s = s.replaceAllMapped(RegExp(r'\*([^*]+)\*'), (m) => m.group(1) ?? '');
+    s = s.replaceAllMapped(RegExp(r'_([^_]+)_'), (m) => m.group(1) ?? '');
+    s = s.replaceAllMapped(RegExp(r'`([^`]+)`'), (m) => m.group(1) ?? '');
+    s = s.replaceAllMapped(RegExp(r'~~([^~]+)~~'), (m) => m.group(1) ?? '');
+    // 表格分隔符与多余的竖线
+    s = s.replaceAll(RegExp(r'\|'), ' ');
+    // 多个空白压缩
+    s = s.replaceAll(RegExp(r'[\t ]+'), ' ');
+    return s.trim();
+  }
+
+  Future<void> _exportCsv() async {
+    try {
+      final csv = _generateCsv();
+      final bytes = utf8.encode(csv);
+      final safeName = widget.survey.surveyName.replaceAll(RegExp(r'[\\/:*?\"<>|]'), '_');
+      final ts = DateTime.now().toIso8601String().replaceAll(':', '-');
+      final fileName = '${safeName}_$ts.csv';
+      final savedPath = await downloadCsv(fileName, bytes);
+      if (!mounted) return;
+      if (savedPath != null && savedPath.isNotEmpty) {
+        showFToast(context: context, title: Text('已导出到: $savedPath'));
+      } else if (kIsWeb) {
+        // Web 平台为浏览器下载，提示开始下载
+        showFToast(context: context, title: Text('开始下载: $fileName'));
+      } else {
+        // 非 Web 且返回 null，一般为用户取消保存，不提示
+      }
+    } catch (e) {
+      if (mounted) {
+        showFToast(context: context, title: Text('导出失败: $e'));
+      }
+    }
+  }
+
+  Future<void> _exportXlsx() async {
+    try {
+      // 1) 创建工作簿与工作表
+      final workbook = xls.Workbook();
+      final sheet = workbook.worksheets[0];
+      sheet.name = '作答结果';
+
+      // 2) 构建表头：作答ID, 用户账号, 提交时间, 每个问题标题（按 order）
+      final headers = <String>['作答ID', '用户账号', '提交时间'];
+      final sortedQuestions = [..._questions]..sort((a, b) => a.order.compareTo(b.order));
+      headers.addAll(sortedQuestions.map((q) => _stripMarkdown(q.title)));
+
+      // 写入表头
+      for (int c = 0; c < headers.length; c++) {
+        sheet.getRangeByIndex(1, c + 1).setText(headers[c]);
+      }
+
+      // 样式：表头加粗、居中、边框
+      final headerStyle = workbook.styles.add('header');
+      headerStyle.bold = true;
+      headerStyle.hAlign = xls.HAlignType.center;
+      headerStyle.vAlign = xls.VAlignType.center;
+      headerStyle.borders.all.lineStyle = xls.LineStyle.thin;
+      sheet.getRangeByIndex(1, 1, 1, headers.length).cellStyle = headerStyle;
+
+      // 3) 数据行
+      for (int r = 0; r < _results.length; r++) {
+        final rowIndex = r + 2; // 第2行开始
+        final result = _results[r];
+        // 基本列
+        sheet.getRangeByIndex(rowIndex, 1).setNumber(result.id.toDouble());
+        sheet.getRangeByIndex(rowIndex, 2).setText(result.userAccount);
+        // 日期列：写 ISO 文本并设置格式
+        final dateCell = sheet.getRangeByIndex(rowIndex, 3);
+        dateCell.setText(DateFormatUtils.formatIsoString(result.createTime));
+        dateCell.numberFormat = 'yyyy-mm-dd hh:mm:ss';
+
+        // questionId -> AnswerDetail
+        final map = { for (final a in result.questions) a.questionId: a };
+        for (int qi = 0; qi < sortedQuestions.length; qi++) {
+          final colIndex = 4 + qi; // 从第4列开始写题目
+          final q = sortedQuestions[qi];
+          final a = map[q.id];
+          String cell = '';
+          if (a != null) {
+            switch (q.type) {
+              case QuestionType.textInput:
+                cell = _stripMarkdown(a.selectChoices);
+                break;
+              case QuestionType.slider:
+                final v = a.selectChoices;
+                final parsed = double.tryParse(v);
+                if (parsed != null) {
+                  final key = (parsed * 2).round() / 2.0;
+                  final label = q.ratingLabels[key];
+                  cell = (label != null && label.isNotEmpty) ? '$v (${_stripMarkdown(label)})' : v;
+                } else {
+                  cell = v;
+                }
+                break;
+              case QuestionType.singleChoice:
+              case QuestionType.multipleChoice:
+                if (a.selectedOptions.isNotEmpty) {
+                  final texts = <String>[];
+                  for (final idx in a.selectedOptions) {
+                    var optionText = _getOptionText(q.id, idx);
+                    
+                    // 如果是自定义填写选项，提取实际填写内容
+                    if (optionText == '__custom_input__') {
+                      if (a.selectChoices.contains('__custom_input__:')) {
+                        final parts = a.selectChoices.split('__custom_input__:');
+                        for (final part in parts) {
+                          if (part.isEmpty) continue;
+                          final colonIndex = part.indexOf(':');
+                          if (colonIndex != -1) {
+                            final optionIndexStr = part.substring(0, colonIndex);
+                            final parsedIndex = int.tryParse(optionIndexStr);
+                            if (parsedIndex == idx) {
+                              final customInput = part.substring(colonIndex + 1);
+                              optionText = '自定义填写: $customInput';
+                              break;
+                            }
+                          }
+                        }
+                      }
+                      if (optionText == '__custom_input__') {
+                        optionText = '自定义填写';
+                      }
+                    }
+                    
+                    texts.add(_stripMarkdown(optionText));
+                  }
+                  cell = texts.join('; ');
+                } else {
+                  cell = _stripMarkdown(a.selectChoices);
+                }
+                break;
+            }
+          }
+          sheet.getRangeByIndex(rowIndex, colIndex).setText(cell);
+        }
+      }
+
+      // 4) 通用数据区域样式：边框、垂直居中（不换行，减小行高）
+      if (_results.isNotEmpty) {
+        final dataStyle = workbook.styles.add('data');
+        dataStyle.borders.all.lineStyle = xls.LineStyle.thin;
+        dataStyle.vAlign = xls.VAlignType.center;
+        dataStyle.wrapText = false;
+        sheet.getRangeByIndex(2, 1, 1 + _results.length, headers.length).cellStyle = dataStyle;
+      }
+
+      // 5) 自动列宽（根据内容）
+      for (int c = 1; c <= headers.length; c++) {
+        sheet.autoFitColumn(c);
+      }
+
+      // 5.1) 调整行高，让表格更加紧凑
+      // 表头行高（约 22 像素）
+      sheet.getRangeByIndex(1, 1, 1, headers.length).rowHeight = 22;
+      // 数据行固定较小行高（约 18 像素）
+      if (_results.isNotEmpty) {
+        sheet.getRangeByIndex(2, 1, 1 + _results.length, headers.length).rowHeight = 18;
+      }
+
+      // 6) 冻结首行（使用 Range.freezePanes API）
+      sheet.getRangeByIndex(2, 1).freezePanes();
+
+      // 7) 导出为字节并下载
+      final list = workbook.saveAsStream();
+      workbook.dispose();
+      
+      // 确保字节数据完整性
+      final bytes = Uint8List.fromList(list);
+      
+      final safeName = widget.survey.surveyName.replaceAll(RegExp(r'[\\/:*?\"<>|]'), '_');
+      final ts = DateTime.now().toIso8601String().replaceAll(':', '-').substring(0, 19);
+      final fileName = '${safeName}_$ts.xlsx';
+      
+      final savedPath = await downloadBytes(
+        fileName,
+        bytes,
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      if (!mounted) return;
+      if (savedPath != null && savedPath.isNotEmpty) {
+        showFToast(context: context, title: Text('已导出到: $savedPath'));
+      } else if (kIsWeb) {
+        showFToast(context: context, title: Text('开始下载: $fileName'));
+      } else {
+        // 取消保存，不提示
+      }
+    } catch (e) {
+      if (mounted) {
+        showFToast(context: context, title: Text('导出 Excel 失败: $e'));
+      }
+    }
   }
 
   Future<void> _showDeleteConfirmDialog(int answerId) async {
@@ -1156,23 +1532,71 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                           )
                         else if (answer.selectedOptions.isNotEmpty)
                           ...answer.selectedOptions.map((optionIndex) {
-                            final optionText = _getOptionText(answer.questionId, optionIndex);
+                            var optionText = _getOptionText(answer.questionId, optionIndex);
+                            String? customInput;
+                            
+                            // 检查是否是自定义填写选项
+                            if (optionText == '__custom_input__') {
+                              optionText = '自定义填写';
+                              // 从 selectChoices 中提取自定义输入内容
+                              if (answer.selectChoices.contains('__custom_input__:')) {
+                                final parts = answer.selectChoices.split('__custom_input__:');
+                                for (final part in parts) {
+                                  if (part.isEmpty) continue;
+                                  final colonIndex = part.indexOf(':');
+                                  if (colonIndex != -1) {
+                                    final optionIndexStr = part.substring(0, colonIndex);
+                                    final parsedIndex = int.tryParse(optionIndexStr);
+                                    if (parsedIndex == optionIndex) {
+                                      customInput = part.substring(colonIndex + 1);
+                                      break;
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                            
                             return Padding(
                               padding: const EdgeInsets.only(left: 16, top: 2),
-                              child: Row(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Icon(
-                                    Icons.check_circle,
-                                    size: 16,
-                                    color: Colors.green[600],
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.check_circle,
+                                        size: 16,
+                                        color: Colors.green[600],
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          optionText,
+                                          style: const TextStyle(fontSize: 14),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      optionText,
-                                      style: const TextStyle(fontSize: 14),
+                                  // 显示自定义填写的内容
+                                  if (customInput != null && customInput.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      width: double.infinity,
+                                      margin: const EdgeInsets.only(left: 24),
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        customInput,
+                                        style: const TextStyle(fontSize: 13),
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ],
                               ),
                             );
@@ -1207,6 +1631,8 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
 
     final totalResponses = _results.length;
     final responsesByQuestion = <int, Map<int, int>>{};
+    // 存储自定义填写的数据：key = questionId_optionIndex, value = List<Map<userAccount, content>>
+    final customInputAnswers = <String, List<Map<String, String>>>{};
 
     for (final result in _results) {
       for (final answer in result.questions) {
@@ -1214,6 +1640,27 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
         for (final option in answer.selectedOptions) {
           responsesByQuestion[answer.questionId]![option] =
               (responsesByQuestion[answer.questionId]![option] ?? 0) + 1;
+        }
+        
+        if (answer.selectChoices.isNotEmpty && answer.selectChoices.contains('__custom_input__:')) {
+          final parts = answer.selectChoices.split('__custom_input__:');
+          for (final part in parts) {
+            if (part.isEmpty) continue;
+            final colonIndex = part.indexOf(':');
+            if (colonIndex > 0) {
+              final optionIndex = int.tryParse(part.substring(0, colonIndex));
+              final userInput = part.substring(colonIndex + 1);
+              if (optionIndex != null && userInput.isNotEmpty) {
+                final key = '${answer.questionId}_$optionIndex';
+                customInputAnswers[key] ??= [];
+                // 存储用户账号和填写内容
+                customInputAnswers[key]!.add({
+                  'userAccount': result.userAccount,
+                  'content': userInput,
+                });
+              }
+            }
+          }
         }
       }
     }
@@ -1236,18 +1683,93 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                 ),
                 Padding(
                   padding: const EdgeInsets.only(right: 12),
-                  child: FSwitch(
-                    label: const Text('饼图'),
-                    value: _usePieChart,
-                    onChange: (value) {
-                      setState(() {
-                        _usePieChart = value;
-                        _statisticsCache = null; // 清除缓存
-                      });
-                    },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FButton(
+                        style: FButtonStyle.ghost,
+                        onPress: () {
+                          setState(() => _exportFmtExpanded = !_exportFmtExpanded);
+                          _exportFmtCtl.toggle();
+                        },
+                        child: Row(
+                          children: [
+                            const Icon(FIcons.arrowBigUpDash, size: 24),
+                            const SizedBox(width: 6),
+                            const Text('导出为...'),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FSwitch(
+                        label: const Text('饼图'),
+                        value: _usePieChart,
+                        onChange: (value) {
+                          setState(() {
+                            _usePieChart = value;
+                            _statisticsCache = null;
+                          });
+                        },
+                      ),
+                    ],
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            AnimatedBuilder(
+              animation: _exportFmtAnim,
+              builder: (context, child) => FCollapsible(
+                value: _exportFmtAnim.value,
+                child: _buildGlassCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '导出文件格式',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 8,),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isNarrow = constraints.maxWidth < 420;
+                            final buttons = [
+                              Expanded(
+                                child: _buildActionButton(
+                                  onTap: _exportCsv,
+                                  icon: Icons.table_rows,
+                                  label: '导出 CSV',
+                                  colors: const [Color(0xFF4CAF50), Color(0xFF2E7D32)],
+                                ),
+                              ),
+                              const SizedBox(width: 12, height: 12),
+                              Expanded(
+                                child: _buildActionButton(
+                                  onTap: _exportXlsx,
+                                  icon: Icons.table_chart,
+                                  label: '导出 Excel',
+                                  colors: const [Color(0xFF1976D2), Color(0xFF0D47A1)],
+                                ),
+                              ),
+                            ];
+                            return isNarrow
+                                ? Column(
+                                    children: [
+                                      buttons[0],
+                                      const SizedBox(height: 12),
+                                      buttons[2],
+                                    ],
+                                  )
+                                : Row(children: buttons);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
             const SizedBox(height: 16),
             Text(
@@ -1288,11 +1810,27 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                     ));
                   } else if (question.type != QuestionType.slider) {
                     final questionStats = responsesByQuestion[question.id] ?? {};
+                    
+                    // 检查是否有自定义填写选项，并统计自定义答案数量
+                    final hasCustomInput = question.options.any((opt) => opt.text == '__custom_input__');
+                    Map<int, int> adjustedStats = Map.from(questionStats);
+                    
+                    if (hasCustomInput) {
+                      final customInputIndex = question.options.indexWhere((opt) => opt.text == '__custom_input__');
+                      if (customInputIndex != -1) {
+                        final customKey = '${question.id}_$customInputIndex';
+                        final customAnswersCount = customInputAnswers[customKey]?.length ?? 0;
+                        if (customAnswersCount > 0) {
+                          adjustedStats[customInputIndex] = customAnswersCount;
+                        }
+                      }
+                    }
+                    
                     pieCards.add(SizedBox(
                       width: cols > 1 ? (w - gap) / 2 : w,
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 16),
-                        child: _buildPieChart(questionStats, question.options, totalResponses, title: question.title),
+                        child: _buildPieChart(adjustedStats, question.options, totalResponses, title: question.title),
                       ),
                     ));
                   } else {
@@ -1401,12 +1939,18 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                         final itemW = cols > 1 ? (w - gap * (cols - 1)) / cols : w;
                         final tiles = question.options.asMap().entries.map((entry) {
                         final optionIndex = entry.key;
-                        final optionText = entry.value.text;
+                        final option = entry.value;
+                        final optionText = option.text == '__custom_input__' ? '自定义填写' : option.text;
                         final count = questionStats[optionIndex] ?? 0;
                         final percentage = totalResponses > 0
                             ? (count / totalResponses * 100).toStringAsFixed(1)
                             : '0.0';
                           final ratio = totalResponses > 0 ? (count / totalResponses) : 0.0;
+                          
+                          // 检查是否有自定义填写的答案
+                          final customKey = '${question.id}_$optionIndex';
+                          final customAnswers = customInputAnswers[customKey];
+                          
                           return SizedBox(
                             width: itemW,
                             child: Padding(
@@ -1436,6 +1980,69 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                                       color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.80),
                                     ),
                                   ),
+                                  // 显示自定义填写的答案
+                                  if (customAnswers != null && customAnswers.isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    InkWell(
+                                      onTap: () => _showCustomInputDetails(question, optionIndex, customAnswers),
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(
+                                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Text(
+                                                  '填写内容：',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.70),
+                                                  ),
+                                                ),
+                                                const Spacer(),
+                                                Icon(
+                                                  Icons.open_in_new,
+                                                  size: 14,
+                                                  color: Theme.of(context).colorScheme.primary,
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            ...customAnswers.take(3).map((answerData) => Padding(
+                                              padding: const EdgeInsets.only(bottom: 2),
+                                              child: Text(
+                                                '• ${answerData['content'] ?? ''}',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.65),
+                                                ),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            )),
+                                            if (customAnswers.length > 3)
+                                              Text(
+                                                '…及其他 ${customAnswers.length - 3} 条（点击查看全部）',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontStyle: FontStyle.italic,
+                                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.70),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -1646,6 +2253,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                       icon: const Icon(Icons.select_all, size: 20),
                       onPress: _toggleSelectionMode,
                     ),
+                  // 导出按钮已移入“导出格式”折叠面板中
                   if (_isSelectionMode) ...[
                     FHeaderAction(
                       icon: Icon(
@@ -1681,7 +2289,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: _isLoading
-                      ? const Center(child: CircularProgressIndicator())
+                      ? const LoadingIndicator.page()
                       : _errorMessage != null
                           ? Center(
                               child: _buildGlassCard(
@@ -1989,6 +2597,116 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with SingleTicker
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showCustomInputDetails(Question question, int optionIndex, List<Map<String, String>> customAnswers) {
+    
+    final optionText = question.options[optionIndex].text == '__custom_input__' 
+        ? '自定义填写' 
+        : question.options[optionIndex].text;
+    
+    showAdaptiveDialog(
+      context: context,
+      builder: (context) => FDialog(
+        direction: Axis.vertical,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            MarkdownTextWidget(
+              text: question.title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '选项: $optionText',
+              style: TextStyle(
+                fontSize: 14,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        body: SizedBox(
+          width: MediaQuery.of(context).size.width * 0.8,
+          height: MediaQuery.of(context).size.height * 0.6,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '共 ${customAnswers.length} 条自定义填写',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: customAnswers.length,
+                  itemBuilder: (context, index) {
+                    final answerData = customAnswers[index];
+                    final userAccount = answerData['userAccount'] ?? '匿名用户';
+                    final content = answerData['content'] ?? '';
+                    
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.person,
+                                  size: 16,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '$userAccount 的填写',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                content,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          FButton(
+            style: FButtonStyle.outline,
+            onPress: () => Navigator.of(context).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
       ),
     );
   }

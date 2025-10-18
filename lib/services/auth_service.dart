@@ -70,10 +70,11 @@ class AuthService {
   }
 
   Future<String> refreshToken({StatusCallback? onStatus}) async {
-    final resp = await core.encryptedRequest(
+    // 使用普通HTTP请求，因为后端已将refresh端点加入白名单
+    final resp = await core.httpRequest(
       'POST',
       '${ApiCore.baseUrl}/api/auth/refresh',
-      {'refresh': true},
+      data: {'refresh': true},
       onStatus: onStatus,
     );
     if (resp.statusCode == 200) {

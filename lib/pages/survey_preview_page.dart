@@ -129,9 +129,14 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
                 ],
               ),
               Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
+                child: CustomScrollView(
+                  cacheExtent: 800.0,
+                  physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.all(16),
+                      sliver: SliverList(
+                        delegate: SliverChildListDelegate([
                     _buildGlassCard(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
@@ -222,6 +227,9 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
                           ),
                         ),
                       ),
+                        ]),
+                      ),
+                    ),
                   ],
                 ),
               ),

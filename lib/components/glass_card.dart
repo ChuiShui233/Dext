@@ -2,8 +2,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-/// 通用“玻璃”卡片容器
-/// 可在桌面与移动端复用，支持自定义形状与样式
 class GlassCard extends StatelessWidget {
   final Widget child;
   final ShapeBorder? shape;

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
-import 'package:layout/layout.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
@@ -9,6 +8,8 @@ import 'submission_detail_page.dart';
 import '../main.dart' show isDesktop;
 import '../widgets/top_safe_spacer.dart';
 import '../utils/error_formatter.dart';
+import '../components/loading_indicator.dart';
+import '../components/flexible_pagination.dart';
 
 class HomeHistoryContent extends StatefulWidget {
   final ApiService apiService;
@@ -56,10 +57,15 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
           _total = total;
           _loading = false;
         });
-        final totalPages = (_total / _pageSize).ceil();
-        _paginationController.dispose();
-        _paginationController = FPaginationController(pages: totalPages > 0 ? totalPages : 1);
-        _paginationController.page = (_page - 1).clamp(0, (totalPages - 1).clamp(0, double.infinity).toInt());
+        if (!mounted) return;
+        
+        final totalPages = (_total / _pageSize).ceil().clamp(1, 999999);
+        // 只在页数变化时才重新创建控制器
+        if (_paginationController.pages != totalPages) {
+          _paginationController.dispose();
+          _paginationController = FPaginationController(pages: totalPages);
+        }
+        _paginationController.page = (_page - 1).clamp(0, totalPages - 1);
       }
     } catch (_) {
     }
@@ -91,7 +97,9 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     
     if (resetPage) {
       _page = 1;
-      _paginationController.page = 0; // 同步重置分页控制器
+      if (mounted) {
+        _paginationController.page = 0; // 同步重置分页控制器
+      }
     }
     try {
       final resp = await widget.apiService.getSubmissionHistory(
@@ -114,11 +122,16 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
         await prefs.setString(key, json.encode({'items': items, 'total': _total}));
       } catch (_) {}
       
-      final totalPages = (_total / _pageSize).ceil();
-      _paginationController.dispose();
-      _paginationController = FPaginationController(pages: totalPages > 0 ? totalPages : 1);
+      if (!mounted) return;
+      
+      final totalPages = (_total / _pageSize).ceil().clamp(1, 999999);
+      // 只在页数变化时才重新创建控制器
+      if (_paginationController.pages != totalPages) {
+        _paginationController.dispose();
+        _paginationController = FPaginationController(pages: totalPages);
+      }
       // 同步当前页码到分页控制器（转换为0-based）
-      _paginationController.page = (_page - 1).clamp(0, (totalPages - 1).clamp(0, double.infinity).toInt());
+      _paginationController.page = (_page - 1).clamp(0, totalPages - 1);
     } catch (e) {
       loadingTimer.cancel();
       if (!mounted) return;
@@ -165,7 +178,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     setState(() {
       _page = page + 1; // FPagination 是 0-based，但 API 是 1-based
     });
-    _fetch();
+    _fetch(); // _fetch() 会在加载完成后自动同步 controller.page
   }
 
   String _typeText(int t) {
@@ -384,8 +397,8 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
         child: Center(
           child: Column(
             children: [
-              CircularProgressIndicator(
-                color: theme.colorScheme.primary,
+              LoadingIndicator(
+                size: LoadingSize.medium,
               ),
               const SizedBox(height: 16),
               Text(
@@ -564,79 +577,19 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
 
   Widget _buildPagination(BuildContext context) {
     final totalPages = (_total / _pageSize).ceil();
-    if (totalPages <= 1) return const SizedBox.shrink();
-    
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final bool isMobile = LayoutValue(xs: true, md: false).resolve(context);
-
+    // 同步 controller 的页码（0-based）
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_paginationController.page != _page - 1) {
         _paginationController.page = (_page - 1).clamp(0, (totalPages - 1).clamp(0, double.infinity).toInt());
       }
     });
 
-    return Container(
-      margin: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        bottom: isMobile ? 46 : 20,
-        top: 16,
-      ),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: isDark 
-          ? Colors.white.withValues(alpha: 0.05)
-          : Colors.white.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark 
-            ? Colors.white.withValues(alpha: 0.1)
-            : Colors.black.withValues(alpha: 0.1),
-        ),
-      ),
-      child: isMobile 
-        ? Center(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: FPagination(
-                controller: _paginationController,
-                onChange: _handlePageChange,
-              ),
-            ),
-          )
-        : LayoutBuilder(
-            builder: (context, constraints) {
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      '共 $_total 条记录，第 $_page / $totalPages 页',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: isDark ? Colors.white70 : Colors.black54,
-                      ),
-                    ),
-                  ),
-                  Flexible(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerRight,
-                        child: FPagination(
-                          controller: _paginationController,
-                          onChange: _handlePageChange,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
+    return FlexiblePagination(
+      controller: _paginationController,
+      currentPage: _page,
+      totalPages: totalPages,
+      totalItems: _total,
+      onPageChange: _handlePageChange,
     );
   }
 

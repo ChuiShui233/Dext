@@ -10,6 +10,7 @@ import '../widgets/window_caption.dart';
 import '../main.dart' show isDesktop;
 import '../services/api_service.dart';
 import '../services/oauth_service.dart';
+import '../components/loading_indicator.dart';
 import '../widgets/frosted_oauth_dialog.dart';
 import '../services/uri_handler_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1126,17 +1127,10 @@ Positioned.fill(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white.withValues(alpha: 0.7),
-                  ),
-                ),
+                const LoadingIndicator.inline(message: '加载中'),
                 const SizedBox(width: 8),
                 Text(
-                  '加载中',
+                  '',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.7),
                     fontSize: 12,
@@ -1335,14 +1329,7 @@ Positioned.fill(
               borderRadius: BorderRadius.circular(12),
               child: Center(
                 child: _isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
+                    ? const LoadingIndicator.button()
                     : const Text(
                         '登录',
                         style: TextStyle(
@@ -2032,14 +2019,7 @@ Widget _buildRegisterForm() {
               borderRadius: BorderRadius.circular(12),
               child: Center(
                 child: _isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
+                    ? const LoadingIndicator.button()
                     : const Text(
                         '重置密码',
                         style: TextStyle(

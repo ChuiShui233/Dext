@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../models/question.dart';
+import '../components/loading_indicator.dart';
 import '../components/glass_card.dart';
 import '../components/media_gallery.dart';
+import '../models/question.dart';
 import '../pages/fullscreen_media_viewer.dart';
 import '../services/config.dart';
 import 'markdown_text_widget.dart';
@@ -26,6 +27,9 @@ class QuestionDisplayWidget extends StatefulWidget {
   final Function(int questionId, String value)? onRatingChanged;
   final Function(int questionId, String value)? onTextInputChanged;
   final Function(String mediaUrl, List<String> allMediaUrls, int currentIndex)? onMediaOpen;
+  // 自定义填写选项的输入内容（key: questionId_optionIndex, value: 输入文本）
+  final Map<String, String> customInputValues;
+  final Function(int questionId, int optionIndex, String value)? onCustomInputChanged;
   // 可选：受保护媒体需要鉴权
   final String? authToken;
   // 仅渲染标题（用于编辑页的紧凑列表项展示）
@@ -43,6 +47,8 @@ class QuestionDisplayWidget extends StatefulWidget {
     this.onRatingChanged,
     this.onTextInputChanged,
     this.onMediaOpen,
+    this.customInputValues = const {},
+    this.onCustomInputChanged,
     this.authToken,
     this.titleOnly = false,
   });
@@ -180,14 +186,21 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
         final optionKey = _getOptionKey(widget.question.id, index);
         final isSelected = widget.optionStates[optionKey] ?? false;
         
-        return _buildOptionCard(
-          option: opt,
-          index: index,
-          isSelected: isSelected,
-          isMultiple: false,
-          onTap: widget.mode == QuestionDisplayMode.readonly 
-              ? null 
-              : () => widget.onSingleChoiceChanged?.call(widget.question.id, opt.text, index),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildOptionCard(
+              option: opt,
+              index: index,
+              isSelected: isSelected,
+              isMultiple: false,
+              onTap: widget.mode == QuestionDisplayMode.readonly 
+                  ? null 
+                  : () => widget.onSingleChoiceChanged?.call(widget.question.id, opt.text, index),
+            ),
+            if (opt.text == '__custom_input__' && isSelected)
+              _buildCustomInputField(index, opt.customInputPlaceholder),
+          ],
         );
       }).toList(),
     );
@@ -202,14 +215,21 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
         final optionKey = _getOptionKey(widget.question.id, index);
         final isSelected = widget.optionStates[optionKey] ?? false;
         
-        return _buildOptionCard(
-          option: opt,
-          index: index,
-          isSelected: isSelected,
-          isMultiple: true,
-          onTap: widget.mode == QuestionDisplayMode.readonly 
-              ? null 
-              : () => widget.onMultipleChoiceChanged?.call(widget.question.id, opt.text, index, isSelected),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildOptionCard(
+              option: opt,
+              index: index,
+              isSelected: isSelected,
+              isMultiple: true,
+              onTap: widget.mode == QuestionDisplayMode.readonly 
+                  ? null 
+                  : () => widget.onMultipleChoiceChanged?.call(widget.question.id, opt.text, index, isSelected),
+            ),
+            if (opt.text == '__custom_input__' && isSelected)
+              _buildCustomInputField(index, opt.customInputPlaceholder),
+          ],
         );
       }).toList(),
     );
@@ -288,7 +308,7 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  option.text,
+                  option.text == '__custom_input__' ? '自定义填写' : option.text,
                   style: TextStyle(
                     color: isDark ? Colors.white : Colors.black87,
                     fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
@@ -335,7 +355,7 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
                     : null,
                 fit: BoxFit.cover,
                 placeholder: (context, url) => const Center(
-                  child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                  child: LoadingIndicator.button(),
                 ),
                 errorWidget: (context, url, error) => const Icon(Icons.error, size: 16),
               ),
@@ -736,6 +756,60 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
 
   String _getOptionKey(int questionId, int optionIndex) {
     return 'q${questionId}_opt$optionIndex';
+  }
+
+  Widget _buildCustomInputField(int optionIndex, String? placeholder) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final inputKey = 'q${widget.question.id}_custom$optionIndex';
+    final currentValue = widget.customInputValues[inputKey] ?? '';
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 28, top: 8, bottom: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.grey[800]?.withValues(alpha: 0.3) : Colors.grey[100]?.withValues(alpha: 0.7),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isDark ? Colors.grey[600]! : Colors.grey[300]!,
+            width: 1,
+          ),
+        ),
+        child: widget.mode == QuestionDisplayMode.readonly
+            ? Text(
+                currentValue.isEmpty ? '未填写' : currentValue,
+                style: TextStyle(
+                  color: isDark ? Colors.white : Colors.black87,
+                  fontSize: 14,
+                ),
+              )
+            : TextFormField(
+                initialValue: currentValue,
+                maxLines: 1,
+                maxLength: 200,
+                decoration: InputDecoration(
+                  hintText: placeholder?.isNotEmpty == true ? placeholder : '请输入其他选项',
+                  hintStyle: TextStyle(
+                    color: isDark ? Colors.grey[400] : Colors.grey[600],
+                    fontSize: 14,
+                  ),
+                  border: InputBorder.none,
+                  counterStyle: TextStyle(
+                    color: isDark ? Colors.grey[400] : Colors.grey[600],
+                    fontSize: 11,
+                  ),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                style: TextStyle(
+                  color: isDark ? Colors.white : Colors.black87,
+                  fontSize: 14,
+                ),
+                onChanged: (value) {
+                  widget.onCustomInputChanged?.call(widget.question.id, optionIndex, value);
+                },
+              ),
+      ),
+    );
   }
 
   void _defaultMediaOpen(int index, String url, List<String> allUrls) {

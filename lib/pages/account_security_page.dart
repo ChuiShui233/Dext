@@ -347,10 +347,24 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
           await _refreshUserInfo();
           
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('${_getProviderDisplayName(provider)}账号绑定成功！'),
-                backgroundColor: Colors.green,
+            showFToast(
+              context: context,
+              alignment: FToastAlignment.bottomRight,
+              title: const Text('绑定成功'),
+              description: Text('${_getProviderDisplayName(provider)}账号已成功绑定'),
+              suffixBuilder: (context, entry, _) => IntrinsicHeight(
+                child: FButton(
+                  style: context.theme.buttonStyles.primary.copyWith(
+                    contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                      textStyle: FWidgetStateMap.all(
+                        context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
+                      ),
+                    ),
+                  ),
+                  onPress: entry.dismiss,
+                  child: const Text('关闭'),
+                ),
               ),
             );
           }
@@ -358,10 +372,24 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
           closeDialog();
           
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('绑定失败：${bindError.toString()}'),
-                backgroundColor: Colors.red,
+            showFToast(
+              context: context,
+              alignment: FToastAlignment.bottomRight,
+              title: const Text('绑定失败'),
+              description: Text(bindError.toString()),
+              suffixBuilder: (context, entry, _) => IntrinsicHeight(
+                child: FButton(
+                  style: context.theme.buttonStyles.primary.copyWith(
+                    contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                      textStyle: FWidgetStateMap.all(
+                        context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
+                      ),
+                    ),
+                  ),
+                  onPress: entry.dismiss,
+                  child: const Text('关闭'),
+                ),
               ),
             );
           }
@@ -370,10 +398,24 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
         closeDialog();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('OAuth授权失败，请重试'),
-              backgroundColor: Colors.red,
+          showFToast(
+            context: context,
+            alignment: FToastAlignment.bottomRight,
+            title: const Text('授权失败'),
+            description: const Text('OAuth授权失败，请重试'),
+            suffixBuilder: (context, entry, _) => IntrinsicHeight(
+              child: FButton(
+                style: context.theme.buttonStyles.primary.copyWith(
+                  contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                    textStyle: FWidgetStateMap.all(
+                      context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
+                    ),
+                  ),
+                ),
+                onPress: entry.dismiss,
+                child: const Text('关闭'),
+              ),
             ),
           );
         }
@@ -382,10 +424,24 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
       closeDialog();
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('绑定失败：${e.toString()}'),
-            backgroundColor: Colors.red,
+        showFToast(
+          context: context,
+          alignment: FToastAlignment.bottomRight,
+          title: const Text('绑定失败'),
+          description: Text(e.toString()),
+          suffixBuilder: (context, entry, _) => IntrinsicHeight(
+            child: FButton(
+              style: context.theme.buttonStyles.primary.copyWith(
+                contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                  textStyle: FWidgetStateMap.all(
+                    context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
+                  ),
+                ),
+              ),
+              onPress: entry.dismiss,
+              child: const Text('关闭'),
+            ),
           ),
         );
       }
@@ -458,10 +514,24 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
       await _refreshUserInfo();
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${_getProviderDisplayName(provider)}账号解绑成功！'),
-            backgroundColor: Colors.green,
+        showFToast(
+          context: context,
+          alignment: FToastAlignment.bottomRight,
+          title: const Text('解绑成功'),
+          description: Text('${_getProviderDisplayName(provider)}账号已成功解绑'),
+          suffixBuilder: (context, entry, _) => IntrinsicHeight(
+            child: FButton(
+              style: context.theme.buttonStyles.primary.copyWith(
+                contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                  textStyle: FWidgetStateMap.all(
+                    context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
+                  ),
+                ),
+              ),
+              onPress: entry.dismiss,
+              child: const Text('关闭'),
+            ),
           ),
         );
       }
@@ -469,10 +539,24 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
       closeDialog();
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('解绑失败：${e.toString()}'),
-            backgroundColor: Colors.red,
+        showFToast(
+          context: context,
+          alignment: FToastAlignment.bottomRight,
+          title: const Text('解绑失败'),
+          description: Text(e.toString()),
+          suffixBuilder: (context, entry, _) => IntrinsicHeight(
+            child: FButton(
+              style: context.theme.buttonStyles.primary.copyWith(
+                contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                  textStyle: FWidgetStateMap.all(
+                    context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
+                  ),
+                ),
+              ),
+              onPress: entry.dismiss,
+              child: const Text('关闭'),
+            ),
           ),
         );
       }
@@ -665,6 +749,9 @@ class _BindEmailDialogState extends State<_BindEmailDialog> {
         password: password,
         code: code,
       );
+      
+      // 清除用户缓存，强制刷新
+      await widget.apiService.clearUserCache();
       
       if (mounted) {
         Navigator.of(context).pop();
@@ -975,6 +1062,9 @@ class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
         password: password,
         code: code,
       );
+      
+      // 清除用户缓存，强制刷新
+      await widget.apiService.clearUserCache();
 
       if (mounted) {
         Navigator.of(context).pop();

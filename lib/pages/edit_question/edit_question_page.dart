@@ -91,6 +91,41 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
     }
   }
 
+  // 添加“自定义填写”选项（单选/多选题适用）
+  Future<void> _addCustomOption() async {
+    // 若已存在则不给重复添加
+    final exists = _options.any((o) => o.text == '__custom_input__');
+    if (exists) {
+      if (!mounted) return;
+      showFToast(
+        context: context,
+        alignment: FToastAlignment.bottomRight,
+        title: const Text('无法添加'),
+        description: const Text('已存在自定义填写选项'),
+        suffixBuilder: (context, entry, _) => IntrinsicHeight(
+          child: FButton(
+            style: context.theme.buttonStyles.primary.copyWith(
+              contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                textStyle: FWidgetStateMap.all(
+                  context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
+                ),
+              ),
+            ),
+            onPress: entry.dismiss,
+            child: const Text('关闭'),
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      final newId = (_options.isNotEmpty ? _options.map((o) => o.id).reduce((a, b) => a > b ? a : b) : 0) + 1;
+      _options.add(QuestionOption(id: newId, text: '__custom_input__'));
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -756,6 +791,7 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
         currentQuestionId: widget.question?.id ?? 0,
         jumpLogic: _jumpLogic,
         onAddOption: _addOption,
+        onAddCustomOption: _addCustomOption,
         onEditOption: _editOption,
         onDeleteOption: _deleteOption,
         onBatchSetJump: _batchSetJump,

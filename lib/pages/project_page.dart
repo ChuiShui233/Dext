@@ -10,6 +10,8 @@ import 'project_surveys_page.dart';
 import '../components/multi_select_actions.dart';
 import '../components/glass_card.dart';
 import '../components/pull_to_refresh_wrapper.dart';
+import '../components/flexible_pagination.dart';
+import '../components/loading_indicator.dart';
 import 'frame_page.dart';
 import '../widgets/frosted_glass_background.dart';
 import '../utils/error_formatter.dart';
@@ -30,6 +32,7 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
   late final ApiService _apiService;
   List<Project> _projects = [];
   bool _isLoading = true;
+  String _searchQuery = '';
   
   List<int> _selectedProjectIds = [];
   bool _isMultiSelectMode = false;
@@ -38,7 +41,7 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
   
   Timer? _autoRefreshTimer;
   
-  final int _itemsPerPage = 10;
+  int _itemsPerPage = 20;
   int _currentPage = 1;
   int _totalPages = 1;
   int _totalItems = 0;
@@ -49,7 +52,8 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _apiService = ApiService(authToken: widget.token);
-    _loadProjects();
+    // 首次加载跳过缓存，确保显示最新数据
+    _loadProjects(skipCache: true);
     
     _startAutoRefresh();
   }
@@ -66,7 +70,8 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _loadProjects();
+      // 应用恢复时跳过缓存，加载最新数据
+      _loadProjects(skipCache: true);
       _startAutoRefresh();
     } else if (state == AppLifecycleState.paused) {
       _stopAutoRefresh();
@@ -110,18 +115,12 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
     await Future.delayed(const Duration(seconds: 1));
     
     try {
-      final projects = await _apiService.forceRefreshProjects();
-      
+      // 使用分页加载，避免一次性加载全部列表
+      await _loadProjects(silent: true);
       if (!mounted) {
         _refreshController.refreshCompleted();
         return;
       }
-      
-      setState(() {
-        _projects = projects;
-        _isLoading = false;
-      });
-      
       _refreshController.refreshCompleted();
     } catch (e) {
       if (!mounted) {
@@ -155,7 +154,7 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _loadProjects({bool silent = false}) async {
+  Future<void> _loadProjects({bool silent = false, bool skipCache = false}) async {
     if (!mounted) return;
     
     Timer? loadingTimer;
@@ -171,6 +170,8 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
       final paginatedResponse = await _apiService.getProjectsPaginated(
         page: _currentPage,
         pageSize: _itemsPerPage,
+        search: _searchQuery.isNotEmpty ? _searchQuery : null,
+        skipCache: skipCache,
       );
       loadingTimer?.cancel();
       if (!mounted) return;
@@ -180,22 +181,51 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
         _totalPages = paginatedResponse.totalPages;
         _totalItems = paginatedResponse.total;
         _isLoading = false;
+        // 数据刷新时清空选中列表，避免选中已不存在的项目导致删除失败
+        if (_selectedProjectIds.isNotEmpty) {
+          _selectedProjectIds.clear();
+          _isMultiSelectMode = false;
+        }
       });
       
       _paginationController.dispose();
       _paginationController = FPaginationController(pages: _totalPages > 0 ? _totalPages : 1);
-      // 同步当前页码到分页控制器（转换为0-based）
       _paginationController.page = (_currentPage - 1).clamp(0, (_totalPages - 1).clamp(0, double.infinity).toInt());
     } catch (e) {
       loadingTimer?.cancel();
       if (!mounted) return;
       
-      setState(() => _isLoading = false);
+      final capturedContext = context;
+      if (skipCache) {
+        try {
+          final cachedResponse = await _apiService.getProjectsPaginated(
+            page: _currentPage,
+            pageSize: _itemsPerPage,
+            search: _searchQuery.isNotEmpty ? _searchQuery : null,
+            skipCache: false,
+          );
+          if (mounted) {
+            setState(() {
+              _projects = cachedResponse.items;
+              _totalPages = cachedResponse.totalPages;
+              _totalItems = cachedResponse.total;
+              _isLoading = false;
+            });
+            _paginationController.dispose();
+            _paginationController = FPaginationController(pages: _totalPages > 0 ? _totalPages : 1);
+            _paginationController.page = (_currentPage - 1).clamp(0, (_totalPages - 1).clamp(0, double.infinity).toInt());
+          }
+        } catch (_) {
+          if (mounted) setState(() => _isLoading = false);
+        }
+      } else {
+        setState(() => _isLoading = false);
+      }
       
-      if (!silent && context.mounted) {
+      if (!silent && mounted && capturedContext.mounted) {
         showFToast(
-          context: context,
-          alignment:FToastAlignment.bottomRight,
+          context: capturedContext,
+          alignment: FToastAlignment.bottomRight,
           title: const Text('加载失败'),
           description: Text(ErrorFormatter.format(e)),
           suffixBuilder: (context, entry, _) => IntrinsicHeight(
@@ -474,6 +504,13 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
     });
   }
 
+  void _onSearchChanged() {
+    setState(() {
+      _currentPage = 1;
+    });
+    _loadProjects();
+  }
+
   void _onProjectSelectionChanged(int projectId, bool isSelected) {
     setState(() {
       if (isSelected) {
@@ -564,12 +601,9 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
           _isMultiSelectMode = false;
         });
         
+        // 使用分页加载，避免一次性加载全部数据，跳过缓存强制刷新
         if (mounted) {
-          final projects = await _apiService.forceRefreshProjects();
-          
-          setState(() {
-            _projects = projects;
-          });
+          await _loadProjects(silent: true, skipCache: true);
         }
         
         if (!mounted) return;
@@ -652,7 +686,7 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          '共 ${_projects.length} 个',
+                          '共 $_totalItems 个',
                           style: TextStyle(
                             fontSize: 14,
                             color: Theme.of(context).colorScheme.primary,
@@ -720,9 +754,49 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                         )
                       : const SizedBox.shrink(),
                 ),
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: FTextField(
+                          hint: '搜索项目...',
+                          onChange: (value) {
+                            setState(() {
+                              _searchQuery = value;
+                            });
+                            _onSearchChanged();
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: 140,
+                        child: FSelect<int>(
+                          hint: '每页 $_itemsPerPage 条',
+                          format: (value) => '每页 $value 条',
+                          onChange: (value) {
+                            if (value != null && value != _itemsPerPage) {
+                              setState(() {
+                                _itemsPerPage = value;
+                                _currentPage = 1;
+                              });
+                              _loadProjects();
+                            }
+                          },
+                          children: [
+                            FSelectItem('每页 20 条', 20),
+                            FSelectItem('每页 50 条', 50),
+                            FSelectItem('每页 100 条', 100),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 Expanded(
                   child: _isLoading
-                      ? const Center(child: CircularProgressIndicator())
+                      ? const LoadingIndicator.page()
                       : _projects.isEmpty
                           ? Center(
                               child: Column(
@@ -735,24 +809,38 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                                   ),
                                   const SizedBox(height: 16),
                                   Text(
-                                    '暂无项目',
+                                    _searchQuery.isNotEmpty ? '没有找到符合条件的项目' : '暂无项目',
                                     style: Theme.of(context).textTheme.titleLarge,
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    '点击右上角的"+"按钮创建新项目',
+                                    _searchQuery.isNotEmpty ? '请尝试其他搜索关键词' : '点击右上角的"+"按钮创建新项目',
                                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                       color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                                     ),
                                   ),
                                   const SizedBox(height: 24),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 32),
-                                    child: FButton(
-                                      onPress: _showAddProjectDialog,
-                                      child: const Text('创建新项目'),
+                                  if (_searchQuery.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                                      child: FButton(
+                                        onPress: () {
+                                          setState(() {
+                                            _searchQuery = '';
+                                          });
+                                          _loadProjects();
+                                        },
+                                        child: const Text('清除搜索'),
+                                      ),
+                                    )
+                                  else
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                                      child: FButton(
+                                        onPress: _showAddProjectDialog,
+                                        child: const Text('创建新项目'),
+                                      ),
                                     ),
-                                  ),
                                 ],
                               ),
                             )
@@ -896,11 +984,8 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                                                           try {
                                                             await _apiService.deleteProject(project.id);
                                                             if (!mounted) return;
-                                                            final projects = await _apiService.forceRefreshProjects();
+                                                            await _loadProjects(silent: true, skipCache: true);
                                                             if (!mounted) return;
-                                                            setState(() {
-                                                              _projects = projects;
-                                                            });
                                                             if (mounted) {
                                                               showFToast(
                                                                 // ignore: use_build_context_synchronously
@@ -952,36 +1037,21 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
   }
 
   Widget _buildFPagination(BuildContext context, int totalPages) {
-    return Container(
+    // 同步 controller 的页码（0-based）
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_paginationController.page != _currentPage - 1) {
+        _paginationController.page = (_currentPage - 1).clamp(0, (totalPages - 1).clamp(0, double.infinity).toInt());
+      }
+    });
+
+    return FlexiblePagination(
+      controller: _paginationController,
+      currentPage: _currentPage,
+      totalPages: totalPages,
+      totalItems: _totalItems,
+      onPageChange: _handlePageChange,
       margin: const EdgeInsets.all(16.0),
       padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.white.withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.06),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            '共 $_totalItems 个项目，第 $_currentPage / $_totalPages 页',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
-            ),
-          ),
-          FPagination(
-            controller: _paginationController,
-            onChange: _handlePageChange,
-          ),
-        ],
-      ),
     );
   }
-} 
+}

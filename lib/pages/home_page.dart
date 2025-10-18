@@ -79,11 +79,19 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
       final cached = prefs.getString('analytics_overview');
       if (cached != null) {
         final data = json.decode(cached) as Map<String, dynamic>;
+        // 检查缓存是否包含新字段，如果没有则清除旧缓存并强制刷新
+        if (!data.containsKey('totalSurveys') || !data.containsKey('activeSurveys')) {
+          await prefs.remove('analytics_overview');
+          // 不设置 _cachedAnalytics，让 _loadAnalytics 重新获取
+          return;
+        }
         if (mounted) {
           setState(() {
             _cachedAnalytics = {
               'totalViews': (data['totalViews'] as num?)?.toInt() ?? 0,
               'totalSubmits': (data['totalSubmits'] as num?)?.toInt() ?? 0,
+              'totalSurveys': (data['totalSurveys'] as num?)?.toInt() ?? 0,
+              'activeSurveys': (data['activeSurveys'] as num?)?.toInt() ?? 0,
             };
           });
         }
@@ -94,7 +102,8 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
   }
   
   Future<void> _loadAnalytics() async {
-    if (_cachedAnalytics != null || _isLoadingAnalytics) return;
+    if (_isLoadingAnalytics) return;
+    if (_cachedAnalytics != null) return;
     
     Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
       if (mounted && _isLoadingAnalytics) {
@@ -115,7 +124,7 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
       loadingTimer.cancel();
       if (mounted) {
         setState(() {
-          _cachedAnalytics = const {'totalViews': 0, 'totalSubmits': 0};
+          _cachedAnalytics = const {'totalViews': 0, 'totalSubmits': 0, 'totalSurveys': 0, 'activeSurveys': 0};
           _isLoadingAnalytics = false;
         });
       }
@@ -130,10 +139,10 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
     final bool showDesktopLayout = showSidebarInline.resolve(context);
     final EdgeInsets padding = contentPadding.resolve(context);
 
-    final totals = _cachedAnalytics ?? const {'totalViews': 0, 'totalSubmits': 0};
+    final totals = _cachedAnalytics ?? const {'totalViews': 0, 'totalSubmits': 0, 'totalSurveys': 0, 'activeSurveys': 0};
     Widget dashboardContent = HomeMainContent(
-      projectCount: widget.projectCount,
-      surveyCount: widget.surveyCount,
+      projectCount: totals['totalSurveys'] ?? 0,
+      surveyCount: totals['activeSurveys'] ?? 0,
       totalViews: totals['totalViews'] ?? 0,
       totalSubmits: totals['totalSubmits'] ?? 0,
       onProjectTap: widget.onProjectTap,

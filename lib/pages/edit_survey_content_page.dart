@@ -666,22 +666,15 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(12),
                             child: (currentImage != null && currentImage.isNotEmpty)
-                                ? InteractiveViewer(
-                                    panEnabled: true,
-                                    scaleEnabled: true,
-                                    minScale: 0.8,
-                                    maxScale: 4.0,
-                                    boundaryMargin: const EdgeInsets.all(50),
-                                    child: CachedNetworkImage(
-                                      imageUrl: absImage,
-                                      fit: BoxFit.contain,
-                                      fadeInDuration: Duration.zero,
-                                      fadeOutDuration: Duration.zero,
-                                      progressIndicatorBuilder: (context, url, progress) =>
-                                          Center(child: CircularProgressIndicator(value: progress.progress)),
-                                      errorWidget: (context, url, error) =>
-                                          Container(color: Colors.grey.shade200, child: const Icon(Icons.error)),
-                                    ),
+                                ? CachedNetworkImage(
+                                    imageUrl: absImage,
+                                    fit: BoxFit.contain,
+                                    fadeInDuration: Duration.zero,
+                                    fadeOutDuration: Duration.zero,
+                                    progressIndicatorBuilder: (context, url, progress) =>
+                                        Center(child: CircularProgressIndicator(value: progress.progress)),
+                                    errorWidget: (context, url, error) =>
+                                        Container(color: Colors.grey.shade200, child: const Icon(Icons.error)),
                                   )
                                 : Center(
                                     child: _isBgLoading
@@ -766,40 +759,78 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                FButton(
-                                  style: FButtonStyle(
-                                    decoration: FWidgetStateMap.all(
-                                      BoxDecoration(
-                                        color: const Color.fromARGB(144, 255, 227, 134),
+                                Expanded(
+                                  child: FButton(
+                                    style: FButtonStyle(
+                                      decoration: FWidgetStateMap.all(
+                                        BoxDecoration(
+                                          color: const Color.fromARGB(144, 255, 227, 134),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                      ),
+                                      contentStyle: FButtonContentStyle(
+                                        textStyle: FWidgetStateMap.all(
+                                          const TextStyle(
+                                            color: Color.fromARGB(255, 0, 0, 0),
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                        iconStyle: FWidgetStateMap.all(const IconThemeData(color: Colors.transparent, size: 20)),
+                                      ),
+                                      iconContentStyle: FButtonIconContentStyle(
+                                        iconStyle: FWidgetStateMap.all(const IconThemeData(color: Colors.transparent, size: 20)),
+                                      ),
+                                      tappableStyle: FTappableStyle(),
+                                      focusedOutlineStyle: FFocusedOutlineStyle(
+                                        color: Colors.transparent,
+                                        width: 0.01,
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                     ),
-                                    contentStyle: FButtonContentStyle(
-                                      textStyle: FWidgetStateMap.all(
-                                        const TextStyle(
-                                          color: Color.fromARGB(255, 0, 0, 0),
-                                          fontWeight: FontWeight.w500,
+                                    onPress: () => _uploadBackground(isCurrentDesktop),
+                                    child: const Text('上传背景', overflow: TextOverflow.ellipsis, maxLines: 1),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: FButton(
+                                    style: FButtonStyle(
+                                      decoration: FWidgetStateMap.all(
+                                        BoxDecoration(
+                                          borderRadius: BorderRadius.circular(8),
                                         ),
                                       ),
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                      iconStyle: FWidgetStateMap.all(const IconThemeData(color: Colors.transparent, size: 20)),
+                                      contentStyle: FButtonContentStyle(
+                                        textStyle: FWidgetStateMap.all(
+                                          TextStyle(
+                                            fontSize: 14,
+                                            color: (currentImage != null && currentImage.isNotEmpty)
+                                                ? Colors.white
+                                                : (isDark ? Colors.white : Colors.black),
+                                          ),
+                                        ),
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                        iconStyle: FWidgetStateMap.all(const IconThemeData(color: Colors.transparent, size: 20)),
+                                      ),
+                                      iconContentStyle: FButtonIconContentStyle(
+                                        iconStyle: FWidgetStateMap.all(const IconThemeData(color: Colors.transparent, size: 20)),
+                                      ),
+                                      tappableStyle: FTappableStyle(),
+                                      focusedOutlineStyle: FFocusedOutlineStyle(
+                                        color: Colors.transparent,
+                                        width: 0.01,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
                                     ),
-                                    iconContentStyle: FButtonIconContentStyle(
-                                      iconStyle: FWidgetStateMap.all(const IconThemeData(color: Colors.transparent, size: 20)),
-                                    ),
-                                    tappableStyle: FTappableStyle(),
-                                    focusedOutlineStyle: FFocusedOutlineStyle(
-                                      color: Colors.transparent,
-                                      width: 0.01,
-                                      borderRadius: BorderRadius.circular(8),
+                                    onPress: () => setState(() => _isDesktopPreview = !_isDesktopPreview),
+                                    child: Text(
+                                      isCurrentDesktop ? '切换移动端' : '切换桌面端',
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
                                     ),
                                   ),
-                                  onPress: () => _uploadBackground(isCurrentDesktop),
-                                  child: const Text('上传背景'),
-                                ),
-                                FButton(
-                                  onPress: () => setState(() => _isDesktopPreview = !_isDesktopPreview),
-                                  child: Text(isCurrentDesktop ? '切换移动端' : '切换桌面端'),
                                 ),
                               ],
                             ),
@@ -828,7 +859,7 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
         margin: EdgeInsets.zero,
         child: Column(
           children: [
-            // 拖动条 - 只有这个区域可以拖动
+            // 拖动条
             ReorderableDragStartListener(
               index: index,
               child: Container(

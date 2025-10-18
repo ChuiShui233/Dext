@@ -3,40 +3,21 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
-/// Frosted glass style gradient background with multiple random polygon blobs
-/// overlaid by a heavy BackdropFilter blur to achieve a frosted/"毛玻璃" effect.
-///
-/// Cross-platform (Mobile/Desktop/Web) without relying on CSS; mimics
-/// `background + backdrop-filter: blur()` from the web reference.
 class FrostedGlassBackground extends StatelessWidget {
-  /// Number of gradient blobs to paint.
   final int count;
-
-  /// Blur intensity for the frosted overlay.
   final double blurSigma;
-
-  /// Opacity of each blob.
   final double blobOpacity;
-
-  /// Whether to enable subtle animation on blobs.
   final bool animated;
-
-  /// Color palette to sample for blob gradients.
   final List<Color> palette;
-
-  /// Optional seed to make the layout deterministic.
   final int? seed;
-
-  /// Optional: places a very subtle dark/bright vignette gradient on top to
-  /// improve contrast for foreground content.
   final bool vignette;
 
   const FrostedGlassBackground({
     super.key,
-    this.count = 8,
-    this.blurSigma = 80,
-    this.blobOpacity = 0.55,
-    this.animated = true,
+    this.count = 7,
+    this.blurSigma = 150,
+    this.blobOpacity = 0.5,
+    this.animated = false,
     this.seed,
     this.vignette = true,
     this.palette = const [
@@ -62,13 +43,11 @@ class FrostedGlassBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Generate a unique seed based on app startup time to ensure different patterns each launch
     final dynamicSeed = seed ?? DateTime.now().millisecondsSinceEpoch;
 
     return IgnorePointer(
       child: Stack(
         children: [
-          // Colorful polygon blobs (behind)
           Positioned.fill(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -77,35 +56,24 @@ class FrostedGlassBackground extends StatelessWidget {
                 final blobs = List.generate(count, (i) {
                   final localRand = math.Random(dynamicSeed + i);
 
-                  // Random size within a range relative to viewport
-                  final w = _randDouble(localRand, 0.35, 0.65) * math.min(width, height);
-                  final h = _randDouble(localRand, 0.35, 0.65) * math.min(width, height);
-
-                  // Random position with overflow allowance for nicer edges
-                  final left = _randDouble(localRand, -0.2, 0.8) * width;
-                  final top = _randDouble(localRand, -0.2, 0.8) * height;
-
-                  // Pick multiple colors for more complex gradients
+                  final w = _randDouble(localRand, 0.5, 0.8) * math.min(width, height);
+                  final h = _randDouble(localRand, 0.5, 0.8) * math.min(width, height);
+                  final centerX = width * 0.5;
+                  final centerY = height * 0.5;
+                  final offsetX = _randDouble(localRand, -0.3, 0.3) * width;
+                  final offsetY = _randDouble(localRand, -0.3, 0.3) * height;
+                  final left = centerX + offsetX - w * 0.5;
+                  final top = centerY + offsetY - h * 0.5;
                   final c1 = palette[localRand.nextInt(palette.length)];
                   final c2 = palette[localRand.nextInt(palette.length)];
                   final c3 = palette[localRand.nextInt(palette.length)];
-
-                  // Random rotation with more variety
-                  final rot = _randDouble(localRand, -math.pi * 2, math.pi * 2);
-
-                  // Random polygon points with more complexity
+                  final rot = _randDouble(localRand, -math.pi * 0.25, math.pi * 0.25);
                   final pts = _randomPolygon(localRand);
-
-                  // Varied animation duration for more organic feel
-                  final durationMs = 4000 + localRand.nextInt(12000);
-
-                  // Simplified gradient to avoid assertion errors
+                  final durationMs = 8000 + localRand.nextInt(4000);
                   final gradientType = localRand.nextInt(2);
                   Gradient gradient;
-                  
                   switch (gradientType) {
                     case 0:
-                      // Linear gradient with safe directions
                       gradient = LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
@@ -118,7 +86,6 @@ class FrostedGlassBackground extends StatelessWidget {
                       );
                       break;
                     default:
-                      // Radial gradient with safe parameters
                       gradient = RadialGradient(
                         center: Alignment.center,
                         radius: 0.8,
@@ -138,10 +105,7 @@ class FrostedGlassBackground extends StatelessWidget {
                     gradient: gradient,
                     animated: animated,
                     durationMs: durationMs,
-                    initialOffset: Offset(
-                      _randDouble(localRand, -0.4, 0.4) * w,
-                      _randDouble(localRand, -0.4, 0.4) * h,
-                    ),
+                    initialOffset: Offset.zero,
                   );
 
                   return Positioned(
@@ -155,16 +119,12 @@ class FrostedGlassBackground extends StatelessWidget {
               },
             ),
           ),
-
-          // Frosted overlay using BackdropFilter (the key step)
           Positioned.fill(
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
               child: const SizedBox.expand(),
             ),
           ),
-
-          // Optional vignette overlay to improve contrast under content
           if (vignette)
             Positioned.fill(
               child: DecoratedBox(
@@ -190,11 +150,9 @@ class FrostedGlassBackground extends StatelessWidget {
 
 
   static List<Offset> _randomPolygon(math.Random r) {
-    // Simple 5-6 vertices polygon to avoid rendering issues
     final count = 5 + r.nextInt(2);
     final points = <Offset>[];
     
-    // Generate simple, safe polygon points
     for (int i = 0; i < count; i++) {
       final angle = (i / count) * 2 * math.pi;
       final radius = _randDouble(r, 0.4, 0.7);
@@ -211,7 +169,7 @@ class _PolygonBlob extends StatefulWidget {
   final double width;
   final double height;
   final double rotation;
-  final List<Offset> points; // normalized 0..1
+  final List<Offset> points;
   final Gradient gradient;
   final bool animated;
   final int durationMs;
@@ -298,7 +256,7 @@ class _PolygonBlobState extends State<_PolygonBlob> with SingleTickerProviderSta
 }
 
 class _PolygonClipper extends CustomClipper<Path> {
-  final List<Offset> points; // normalized points 0..1
+  final List<Offset> points;
   const _PolygonClipper(this.points);
 
   @override

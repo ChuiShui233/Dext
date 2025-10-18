@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import '../components/loading_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../services/config.dart';
@@ -203,7 +204,7 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(32.0),
-          child: CircularProgressIndicator(),
+          child: LoadingIndicator(),
         ),
       );
     } else if (errorMessage.isNotEmpty) {
@@ -264,9 +265,7 @@ class _RecentSurveyResponsesListState extends State<RecentSurveyResponsesList> {
 
   Widget _buildBodyScrollable(ThemeData theme) {
     if (isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const LoadingIndicator.page();
     } else if (errorMessage.isNotEmpty) {
       return Center(
         child: Padding(

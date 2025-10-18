@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import 'public_survey_page.dart';
 import '../widgets/frosted_glass_background.dart';
+import '../components/loading_indicator.dart';
 
 class PublicAccessPage extends StatefulWidget {
   const PublicAccessPage({super.key});
@@ -213,11 +214,10 @@ class _PublicAccessPageState extends State<PublicAccessPage> {
                                   ),
                                   suffixIcon: IconButton(
                                     icon: Icon(
-                                      Icons.paste,
+                                      FIcons.clipboard,
                                       color: isDark ? Colors.white70 : Colors.grey[600],
                                     ),
                                     onPressed: _pasteFromClipboard,
-                                    tooltip: '从剪贴板粘贴',
                                   ),
                                 ),
                                 style: TextStyle(
@@ -252,14 +252,7 @@ class _PublicAccessPageState extends State<PublicAccessPage> {
                                 ? const Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          color: Colors.white,
-                                          strokeWidth: 2,
-                                        ),
-                                      ),
+                                      LoadingIndicator.button(),
                                       SizedBox(width: 12),
                                       Text('正在访问...', style: TextStyle(fontSize: 16)),
                                     ],

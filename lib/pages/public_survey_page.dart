@@ -13,6 +13,7 @@ import '../widgets/question_display_widget.dart';
 import 'fullscreen_media_viewer.dart';
 import '../widgets/frosted_glass_background.dart';
 import '../widgets/top_safe_spacer.dart';
+import '../components/loading_indicator.dart';
 import '../services/config.dart';
 
 class PublicSurveyPage extends StatefulWidget {
@@ -48,6 +49,11 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
   bool isSubmitted = false;
   final Map<int, double?> _hoverRatings = {};
   bool _backgroundLoaded = false;
+  
+  // 存储自定义填写选项的输入内容：key: questionId_optionIndex, value: 输入文本
+  final Map<String, String> _customInputValues = {};
+  // 记录哪些问题有自定义填写选项被选中
+  final Set<int> _questionsWithCustomInput = {};
 
   @override
   void initState() {
@@ -203,10 +209,20 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
       
       _runtime?.setAnswerSingle(questionId, option);
       _runtime?.recomputeVisible();
+      
+      // 检查是否选中了自定义填写选项
+      if (option == '__custom_input__') {
+        _questionsWithCustomInput.add(questionId);
+      } else {
+        _questionsWithCustomInput.remove(questionId);
+      }
     });
     
     _scrollToBottom();
-    _checkAutoSubmit();
+    // 如果选中的是自定义填写选项，不触发自动提交
+    if (option != '__custom_input__') {
+      _checkAutoSubmit();
+    }
   }
 
   void _updateMultipleChoiceAnswer(int questionId, String option, int optionIndex, bool isSelected) {
@@ -215,10 +231,22 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
       
       _runtime?.toggleMultiple(questionId, option, !isSelected);
       _runtime?.recomputeVisible();
+      
+      // 检查是否选中了自定义填写选项
+      if (option == '__custom_input__') {
+        if (!isSelected) {
+          _questionsWithCustomInput.add(questionId);
+        } else {
+          _questionsWithCustomInput.remove(questionId);
+        }
+      }
     });
     
     _scrollToBottom();
-    _checkAutoSubmit();
+    // 如果选中的是自定义填写选项，不触发自动提交
+    if (option != '__custom_input__') {
+      _checkAutoSubmit();
+    }
   }
 
   void _updateTextInputAnswer(int questionId, String value) {
@@ -258,6 +286,9 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
 
   void _checkAutoSubmit() {
     if (!autoSubmit || isSubmitting || isSubmitted) return;
+    
+    // 如果有问题选中了自定义填写选项，不触发自动提交
+    if (_questionsWithCustomInput.isNotEmpty) return;
     
     // 延迟检查，避免在状态更新过程中触发
     Future.delayed(const Duration(milliseconds: 100), () {
@@ -305,21 +336,45 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
       final answers = <Map<String, dynamic>>[];
       for (final q in questions) {
         final qid = q.id;
-        final texts = _runtime!.answers[qid] ?? <String>[];
+        final texts = List<String>.from(_runtime!.answers[qid] ?? <String>[]);
         List<int>? indices;
+        
         // 仅对单选/多选题计算索引
         if (q.type == QuestionType.singleChoice || q.type == QuestionType.multipleChoice) {
           final idxList = <int>[];
+          final customInputParts = <String>[]; // 存储自定义填写内容
+          
           for (final e in q.options.asMap().entries) {
             final optionIndex = e.key;
+            final option = e.value;
             final key = _getOptionKey(qid, optionIndex);
             final selected = _optionStates[key] ?? false;
-            if (selected) idxList.add(optionIndex);
+            
+            if (selected) {
+              idxList.add(optionIndex);
+              
+              // 如果是自定义填写选项，添加用户输入
+              if (option.text == '__custom_input__') {
+                final customKey = '${qid}_$optionIndex';
+                final customValue = _customInputValues[customKey] ?? '';
+                if (customValue.isNotEmpty) {
+                  // 格式: __custom_input__:选项索引:用户输入
+                  customInputParts.add('__custom_input__:$optionIndex:$customValue');
+                }
+              }
+            }
           }
+          
           if (idxList.isNotEmpty) {
             indices = idxList;
           }
+          
+          // 将自定义填写内容添加到 texts 中
+          if (customInputParts.isNotEmpty) {
+            texts.addAll(customInputParts);
+          }
         }
+        
         final item = <String, dynamic>{
           'questionId': qid,
           'answer': texts,
@@ -469,7 +524,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
               ),
               Expanded(
                 child: isLoading
-                    ? const Center(child: CircularProgressIndicator())
+                    ? const LoadingIndicator.page()
                     : errorMessage != null
                         ? _buildErrorView()
                         : isSubmitted
@@ -578,10 +633,15 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
     
     final visible = questions.where((q) => _runtime?.visibleQuestionIds.contains(q.id) ?? false).toList();
 
-    return ListView(
+    return CustomScrollView(
       controller: _scrollController,
-      padding: const EdgeInsets.all(16),
-      children: [
+      cacheExtent: 800.0,
+      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
         if (description.isNotEmpty)
           _buildGlassCard(
             child: Padding(
@@ -613,48 +673,57 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
         ...visible.asMap().entries.map((entry) {
           final index = entry.key;
           final q = entry.value;
-          return AnimatedContainer(
-            duration: Duration(milliseconds: 300 + (index * 100)),
-            curve: Curves.easeOutBack,
-            child: TweenAnimationBuilder<double>(
-              duration: Duration(milliseconds: 500 + (index * 150)),
-              tween: Tween(begin: 0.0, end: 1.0),
-              curve: Curves.easeOutQuart,
-              builder: (context, value, child) {
-                return Transform.translate(
-                  offset: Offset(0, 30 * (1 - value)),
-                  child: Opacity(
-                    opacity: value,
-                    child: Transform.scale(
-                      scale: 0.8 + (0.2 * value),
+          return TweenAnimationBuilder<double>(
+            duration: Duration(milliseconds: 500 + (index * 150)),
+            tween: Tween(begin: 0.0, end: 1.0),
+            curve: Curves.easeOutQuart,
+            builder: (context, value, child) {
+              return Transform.translate(
+                offset: Offset(0, 30 * (1 - value)),
+                child: Opacity(
+                  opacity: value,
+                  child: Transform.scale(
+                    scale: 0.8 + (0.2 * value),
+                    child: AnimatedSize(
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.fastOutSlowIn,
+                      alignment: Alignment.topCenter,
                       child: _buildGlassCard(
                         child: Padding(
                           padding: const EdgeInsets.all(16),
                           child: QuestionDisplayWidget(
-                            question: q,
-                            mode: QuestionDisplayMode.interactive,
-                            optionStates: _optionStates,
-                            selectedAnswers: _runtime?.answers[q.id] ?? [],
-                            hoverRatings: _hoverRatings,
-                            onSingleChoiceChanged: _updateSingleChoiceAnswer,
-                            onMultipleChoiceChanged: _updateMultipleChoiceAnswer,
-                            onRatingChanged: (questionId, value) {
-                              setState(() {
-                                _runtime?.setAnswerSingle(questionId, value);
-                                _runtime?.recomputeVisible();
-                              });
-                              _checkAutoSubmit();
-                            },
-                            onTextInputChanged: _updateTextInputAnswer,
-                            onMediaOpen: (url, all, index) => _openFullscreenViewer(url, all, index),
+                              question: q,
+                              mode: QuestionDisplayMode.interactive,
+                              optionStates: _optionStates,
+                              selectedAnswers: _runtime?.answers[q.id] ?? [],
+                              hoverRatings: _hoverRatings,
+                              onSingleChoiceChanged: _updateSingleChoiceAnswer,
+                              onMultipleChoiceChanged: _updateMultipleChoiceAnswer,
+                              onRatingChanged: (questionId, value) {
+                                setState(() {
+                                  _runtime?.setAnswerSingle(questionId, value);
+                                  _runtime?.recomputeVisible();
+                                });
+                                _checkAutoSubmit();
+                              },
+                              onTextInputChanged: _updateTextInputAnswer,
+                              onMediaOpen: (url, all, index) => _openFullscreenViewer(url, all, index),
+                              customInputValues: _customInputValues,
+                              onCustomInputChanged: (questionId, optionIndex, value) {
+                                setState(() {
+                                  final key = '${questionId}_$optionIndex';
+                                  _customInputValues[key] = value;
+                                });
+                                // 自定义填写输入不触发自动提交
+                              },
                           ),
                         ),
                       ),
                     ),
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            },
           );
         }),
 
@@ -698,13 +767,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
                       ? const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
+                            LoadingIndicator.button(
                             ),
                             SizedBox(width: 12),
                             Text('提交中...', style: TextStyle(fontSize: 16)),
@@ -718,6 +781,9 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
               ),
             ),
           ),
+            ]),
+          ),
+        ),
       ],
     );
   }

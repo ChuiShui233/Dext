@@ -13,7 +13,9 @@ import '../utils/error_formatter.dart';
 import '../components/survey_actions.dart';
 import '../components/multi_select_actions.dart';
 import '../components/glass_card.dart';
+import '../components/flexible_pagination.dart';
 import '../components/pull_to_refresh_wrapper.dart';
+import '../components/loading_indicator.dart';
 import 'frame_page.dart';
 import '../widgets/frosted_glass_background.dart';
 
@@ -35,6 +37,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   Map<int, SurveyStats> _surveyStats = {};
   Map<int, Project> _projects = {};
   bool _isLoading = true;
+  bool _projectsLoaded = false; // 首次加载后缓存项目，避免每次分页请求项目列表
   String _searchQuery = '';
   int? _selectedSurveyType;
   final int _pageSize = 5;
@@ -62,7 +65,8 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     WidgetsBinding.instance.addObserver(this);
     _apiService = ApiService(authToken: widget.token);
     _typeSelectController = FSelectController<String>(vsync: this);
-    _loadData();
+    // 首次加载跳过缓存，确保显示最新数据
+    _loadData(skipCache: true);
     
     _startAutoRefresh();
     _startCountdown();
@@ -82,7 +86,8 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _loadData();
+      // 应用恢复时跳过缓存，加载最新数据
+      _loadData(skipCache: true);
       _startAutoRefresh();
       _startCountdown();
     } else if (state == AppLifecycleState.paused) {
@@ -173,22 +178,12 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     await Future.delayed(const Duration(seconds: 1));
     
     try {
-      final surveys = await _apiService.forceRefreshSurveys();
-      final projects = await _apiService.forceRefreshProjects();
-      
+      // 使用分页加载，避免一次性加载全部列表；同时刷新项目缓存
+      await _loadData(silent: true, refreshProjects: true);
       if (!mounted) {
         _refreshController.refreshCompleted();
         return;
       }
-      
-      setState(() {
-        _surveys = surveys;
-        _projects = {for (var p in projects) p.id: p};
-        _isLoading = false;
-      });
-      
-      _loadSurveyStats();
-      
       _refreshController.refreshCompleted();
     } catch (e) {
       if (!mounted) {
@@ -222,7 +217,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     }
   }
 
-  Future<void> _loadData({bool silent = false}) async {
+  Future<void> _loadData({bool silent = false, bool refreshProjects = false, bool skipCache = false}) async {
     if (!mounted) return;
     final context = this.context;
     
@@ -241,8 +236,17 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
         pageSize: _pageSize,
         search: _searchQuery.isNotEmpty ? _searchQuery : null,
         type: _selectedSurveyType?.toString(),
+        skipCache: skipCache,
       );
-      final projectResponse = await _apiService.getProjectsPaginated();
+      // 仅在首次或强制刷新时加载全部项目，避免分页项目接口导致缺失
+      if (refreshProjects) {
+        _projectsLoaded = false;
+      }
+      if (!_projectsLoaded) {
+        final allProjects = await _apiService.getProjects();
+        _projects = {for (var p in allProjects) p.id: p};
+        _projectsLoaded = true;
+      }
       
       loadingTimer?.cancel();
       if (!mounted) return;
@@ -251,8 +255,12 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
         _surveys = surveyResponse.items;
         _totalPages = surveyResponse.totalPages;
         _totalItems = surveyResponse.total;
-        _projects = {for (var p in projectResponse.items) p.id: p};
         _isLoading = false;
+        // 数据刷新时清空选中列表，避免选中已不存在的问卷导致删除失败
+        if (_selectedSurveyIds.isNotEmpty) {
+          _selectedSurveyIds.clear();
+          _isMultiSelectMode = false;
+        }
       });
       
       _paginationController.dispose();
@@ -265,7 +273,43 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
       loadingTimer?.cancel();
       if (!mounted) return;
       
-      setState(() => _isLoading = false);
+      // 加载失败时尝试使用缓存数据
+      if (skipCache) {
+        try {
+          final cachedResponse = await _apiService.getSurveysPaginated(
+            page: _currentPage,
+            pageSize: _pageSize,
+            search: _searchQuery.isNotEmpty ? _searchQuery : null,
+            type: _selectedSurveyType?.toString(),
+            skipCache: false,
+          );
+          // 同时加载项目缓存数据
+          if (!_projectsLoaded) {
+            try {
+              final allProjects = await _apiService.getProjects();
+              _projects = {for (var p in allProjects) p.id: p};
+              _projectsLoaded = true;
+            } catch (_) {
+              // 项目数据加载失败，继续显示问卷
+            }
+          }
+          if (mounted) {
+            setState(() {
+              _surveys = cachedResponse.items;
+              _totalPages = cachedResponse.totalPages;
+              _totalItems = cachedResponse.total;
+              _isLoading = false;
+            });
+            _paginationController.dispose();
+            _paginationController = FPaginationController(pages: _totalPages > 0 ? _totalPages : 1);
+            _paginationController.page = (_currentPage - 1).clamp(0, (_totalPages - 1).clamp(0, double.infinity).toInt());
+          }
+        } catch (_) {
+          if (mounted) setState(() => _isLoading = false);
+        }
+      } else {
+        setState(() => _isLoading = false);
+      }
       
       if (!silent && context.mounted) {
         showFToast(
@@ -473,7 +517,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          '共 ${_surveys.length} 份',
+                          '共 $_totalItems 份',
                           style: TextStyle(
                             fontSize: 14,
                             color: Theme.of(context).colorScheme.primary,
@@ -650,7 +694,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                 ),
                 Expanded(
                   child: _isLoading
-                      ? const Center(child: CircularProgressIndicator())
+                      ? const LoadingIndicator.page()
                       : _surveys.isEmpty
                           ? Center(
                               child: Column(
@@ -681,16 +725,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                   if (_searchQuery.isNotEmpty || _selectedSurveyType != null)
                                     Padding(
                                       padding: const EdgeInsets.symmetric(horizontal: 32),
-                                      child: FButton(
-                                        onPress: () {
-                                          setState(() {
-                                            _searchQuery = '';
-                                            _selectedSurveyType = null;
-                                            _typeSelectController.value = '';
-                                          });
-                                        },
-                                        child: const Text('清除筛选'),
-                                      ),
                                     )
                                   else
                                     Padding(
@@ -981,36 +1015,21 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   }
 
   Widget _buildFPagination(BuildContext context, int totalPages) {
-    return Container(
+    // 同步 controller 的页码（0-based）
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_paginationController.page != _currentPage - 1) {
+        _paginationController.page = (_currentPage - 1).clamp(0, (totalPages - 1).clamp(0, double.infinity).toInt());
+      }
+    });
+
+    return FlexiblePagination(
+      controller: _paginationController,
+      currentPage: _currentPage,
+      totalPages: totalPages,
+      totalItems: _totalItems,
+      onPageChange: _handlePageChange,
       margin: const EdgeInsets.all(16.0),
       padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.white.withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.06),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            '共 $_totalItems 份问卷，第 $_currentPage / $_totalPages 页',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
-            ),
-          ),
-          FPagination(
-            controller: _paginationController,
-            onChange: _handlePageChange,
-          ),
-        ],
-      ),
     );
   }
 
@@ -1161,16 +1180,9 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
           _isMultiSelectMode = false;
         });
         
+        // 使用分页加载，避免一次性加载全部数据，跳过缓存强制刷新
         if (mounted) {
-          final surveys = await _apiService.forceRefreshSurveys();
-          final projects = await _apiService.getProjects();
-          
-          setState(() {
-            _surveys = surveys;
-            _projects = {for (var p in projects) p.id: p};
-          });
-          
-          _loadSurveyStats();
+          await _loadData(silent: true, skipCache: true);
         }
         
         if (mounted) {

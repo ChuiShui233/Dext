@@ -22,7 +22,13 @@ class MarkdownTextWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final defaultStyle = style ?? theme.textTheme.bodyMedium ?? const TextStyle();
+    final baseStyle = style ?? theme.textTheme.bodyMedium ?? const TextStyle();
+    
+    final defaultStyle = baseStyle.copyWith(
+      fontFamily: baseStyle.fontFamily ?? theme.textTheme.bodyMedium?.fontFamily,
+      fontWeight: FontWeight.normal,
+      color: baseStyle.color ?? theme.textTheme.bodyMedium?.color,
+    );
     
     return RichText(
       text: _parseMarkdown(text, defaultStyle, theme),

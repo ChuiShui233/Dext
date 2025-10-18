@@ -8,9 +8,10 @@ import '../components/glass_card.dart';
 import '../widgets/question_display_widget.dart';
 import '../models/question.dart';
 import '../services/api_service.dart';
-import '../main.dart' show isDesktop;
+import '../widgets/top_safe_spacer.dart';
 import 'fullscreen_media_viewer.dart';
 import '../widgets/frosted_glass_background.dart';
+import '../components/loading_indicator.dart';
 import '../utils/error_formatter.dart';
 
 class SubmissionDetailPage extends StatefulWidget {
@@ -282,7 +283,7 @@ class _SubmissionDetailPageState extends State<SubmissionDetailPage> {
           const FrostedGlassBackground(),
           Column(
             children: [
-              SizedBox(height: isDesktop ? 38 : 24),
+              const TopSafeSpacer(),
               FHeader.nested(
                 title: Text('提交详情'),
                 prefixes: [
@@ -297,7 +298,7 @@ class _SubmissionDetailPageState extends State<SubmissionDetailPage> {
                     ? (_error != null
                         ? _buildError(_error!)
                         : (_loading 
-                            ? const Center(child: CircularProgressIndicator())
+                            ? const LoadingIndicator.page()
                             : const SizedBox.shrink()))
                     : _buildContent(),
               ),
