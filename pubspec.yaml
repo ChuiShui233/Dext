@@ -2,7 +2,7 @@ name: dext
 description: "问卷调查应用"
 # 以下行防止包意外发布到 pub.dev 使用 `flutter pub publish`。对于私有包，建议保留此行。
 publish_to: 'none' # 如果您希望发布到 pub.dev，请移除此行
-version: 1.0.2+1
+version: 1.0.5+20251020
 
 environment:
   sdk: ^3.7.2
@@ -39,7 +39,7 @@ dependencies:
   radio_player: ^2.1.0
   pull_to_refresh: ^2.0.0
   flutter_staggered_grid_view: ^0.7.0
-  syncfusion_flutter_xlsio: ^31.2.2 
+  syncfusion_flutter_xlsio: ^31.1.19
 
   # 以下行将 Cupertino 图标字体添加到您的应用程序中。
   # 使用 CupertinoIcons 类以获取 iOS 样式图标。
@@ -64,10 +64,6 @@ dependencies:
       url: https://github.com/ChuiShui233/crop_image_plus.git
       ref: master
   shimmer: ^3.0.0
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
 
   # 以下 "flutter_lints" 包包含一组建议的 lints 以鼓励良好的编码实践。
   # 在 `analysis_options.yaml` 文件中激活了包提供的 lint 集。
