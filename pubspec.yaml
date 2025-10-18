@@ -57,7 +57,7 @@ dependencies:
   oauth2_client: ^4.2.0
   flutter_speed_dial: ^7.0.0
   connectivity_plus: ^7.0.0
-  fl_chart: ^1.1.1
+  fl_chart: ^1.0.2
   package_info_plus: ^8.0.0
   crop_image_plus:
     git:
