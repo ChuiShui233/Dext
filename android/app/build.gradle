@@ -29,7 +29,7 @@ android {
 
     defaultConfig {
         applicationId "com.chuishui.Dext"
-        minSdkVersion flutter.minSdkVersion
+        minSdkVersion 23
         targetSdk 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName

@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import 'package:layout/layout.dart';
+import 'package:dext/services/settings_service.dart';
 import '../services/api_service.dart';
 import '../models/project.dart';
 import '../models/survey.dart';
@@ -1096,7 +1097,8 @@ Widget _buildSidebarHeader(BuildContext context) {
           children: [
             FButton(
               style: FButtonStyle.ghost,
-              onPress: () {
+              onPress: () async {
+                await SettingsService().setThemeMode('system');
                 widget.onThemeModeChange(ThemeMode.system);
                 Navigator.pop(context);
               },
@@ -1104,7 +1106,8 @@ Widget _buildSidebarHeader(BuildContext context) {
             ),
             FButton(
               style: FButtonStyle.ghost,
-              onPress: () {
+              onPress: () async {
+                await SettingsService().setThemeMode('light');
                 widget.onThemeModeChange(ThemeMode.light);
                 Navigator.pop(context);
               },
@@ -1112,7 +1115,8 @@ Widget _buildSidebarHeader(BuildContext context) {
             ),
             FButton(
               style: FButtonStyle.ghost,
-              onPress: () {
+              onPress: () async {
+                await SettingsService().setThemeMode('dark');
                 widget.onThemeModeChange(ThemeMode.dark);
                 Navigator.pop(context);
               },
