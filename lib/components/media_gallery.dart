@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../components/video_player_widget.dart';
 import '../services/config.dart';
+import '../components/loading_indicator.dart';
 
 class MediaGallery extends StatelessWidget {
   final List<String> mediaUrls;
@@ -10,7 +11,8 @@ class MediaGallery extends StatelessWidget {
   final bool enableVideoPlayer;
   final bool showVideoOverlay; 
   final void Function(int index, String url, List<String> all)? onOpen;
-
+  /// 是否启用自适应高度模式（只限制高度，宽度自适应图片比例）
+  final bool adaptiveHeight;
   final String? authToken;
 
   const MediaGallery({
@@ -21,6 +23,7 @@ class MediaGallery extends StatelessWidget {
     this.enableVideoPlayer = true,
     this.showVideoOverlay = true,
     this.onOpen,
+    this.adaptiveHeight = false,
     this.authToken,
   });
 
@@ -48,8 +51,13 @@ class MediaGallery extends StatelessWidget {
             httpHeaders: authToken != null && authToken!.isNotEmpty
                 ? { 'Authorization': 'Bearer ${authToken!}' }
                 : null,
-            fit: BoxFit.cover,
-            placeholder: (context, _) => const Center(child: CircularProgressIndicator()),
+            fit: adaptiveHeight ? BoxFit.contain : BoxFit.cover,
+            progressIndicatorBuilder: (context, url, progress) {
+              final pct = progress.progress != null
+                  ? '加载中 ${(progress.progress! * 100).toInt()}%'
+                  : '加载中...';
+              return Center(child: LoadingIndicator.inline(message: pct));
+            },
             errorWidget: (context, _, __) => Container(color: Colors.grey.shade200, child: const Icon(Icons.error)),
           );
         } else if (isVideo) {
@@ -79,8 +87,9 @@ class MediaGallery extends StatelessWidget {
         }
 
         Widget thumb = Container(
-          width: w,
+          width: adaptiveHeight ? null : w,
           height: h,
+          constraints: adaptiveHeight ? BoxConstraints(maxHeight: h) : null,
           decoration: BoxDecoration(
             border: Border.all(color: Colors.grey.shade300),
             borderRadius: BorderRadius.circular(8),
@@ -88,9 +97,9 @@ class MediaGallery extends StatelessWidget {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: Stack(
+              fit: adaptiveHeight ? StackFit.passthrough : StackFit.loose,
               children: [
-                Positioned.fill(child: Center(child: mediaWidget)),
-                // 仅在未启用内置视频播放器时显示覆盖的播放图标，避免遮挡控制条
+                adaptiveHeight ? mediaWidget : Positioned.fill(child: Center(child: mediaWidget)),
                 if (isVideo && showVideoOverlay && !enableVideoPlayer)
                   Positioned.fill(
                     child: Container(

@@ -3,7 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
-class FrostedGlassBackground extends StatelessWidget {
+class FrostedGlassBackground extends StatefulWidget {
   final int count;
   final double blurSigma;
   final double blobOpacity;
@@ -11,6 +11,8 @@ class FrostedGlassBackground extends StatelessWidget {
   final List<Color> palette;
   final int? seed;
   final bool vignette;
+  final Duration colorTransitionDuration;
+  final Curve colorTransitionCurve;
 
   const FrostedGlassBackground({
     super.key,
@@ -20,6 +22,8 @@ class FrostedGlassBackground extends StatelessWidget {
     this.animated = false,
     this.seed,
     this.vignette = true,
+    this.colorTransitionDuration = const Duration(milliseconds: 350),
+    this.colorTransitionCurve = Curves.easeInOut,
     this.palette = const [
       Color(0xFFF44336),
       Color(0xFFE91E63),
@@ -42,19 +46,51 @@ class FrostedGlassBackground extends StatelessWidget {
   });
 
   @override
+  State<FrostedGlassBackground> createState() => _FrostedGlassBackgroundState();
+}
+
+class _FrostedGlassBackgroundState extends State<FrostedGlassBackground>
+    with AutomaticKeepAliveClientMixin {
+  late final int _seed;
+
+  @override
+  void initState() {
+    super.initState();
+    // 固定随机种子，避免快速切换页面时重建导致的图形与模糊层不同步
+    _seed = widget.seed ?? DateTime.now().millisecondsSinceEpoch;
+  }
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
-    final dynamicSeed = seed ?? DateTime.now().millisecondsSinceEpoch;
+    super.build(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // 底层背景色：在主题切换时平滑过渡
+    final Color baseBackgroundColor = isDark
+        ? const Color(0xFF0A0A0A) // 深色模式：深黑背景
+        : Colors.white; // 浅色模式：纯白背景
 
     return IgnorePointer(
       child: Stack(
         children: [
+          // 最底层：主题背景色，切换时带动画
+          Positioned.fill(
+            child: AnimatedContainer(
+              duration: widget.colorTransitionDuration,
+              curve: widget.colorTransitionCurve,
+              color: baseBackgroundColor,
+            ),
+          ),
+          // 彩色壁纸blob层（使用稳定的种子）
           Positioned.fill(
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final width = constraints.maxWidth;
                 final height = constraints.maxHeight;
-                final blobs = List.generate(count, (i) {
-                  final localRand = math.Random(dynamicSeed + i);
+                final blobs = List.generate(widget.count, (i) {
+                  final localRand = math.Random(_seed + i);
 
                   final w = _randDouble(localRand, 0.5, 0.8) * math.min(width, height);
                   final h = _randDouble(localRand, 0.5, 0.8) * math.min(width, height);
@@ -64,9 +100,9 @@ class FrostedGlassBackground extends StatelessWidget {
                   final offsetY = _randDouble(localRand, -0.3, 0.3) * height;
                   final left = centerX + offsetX - w * 0.5;
                   final top = centerY + offsetY - h * 0.5;
-                  final c1 = palette[localRand.nextInt(palette.length)];
-                  final c2 = palette[localRand.nextInt(palette.length)];
-                  final c3 = palette[localRand.nextInt(palette.length)];
+                  final c1 = widget.palette[localRand.nextInt(widget.palette.length)];
+                  final c2 = widget.palette[localRand.nextInt(widget.palette.length)];
+                  final c3 = widget.palette[localRand.nextInt(widget.palette.length)];
                   final rot = _randDouble(localRand, -math.pi * 0.25, math.pi * 0.25);
                   final pts = _randomPolygon(localRand);
                   final durationMs = 8000 + localRand.nextInt(4000);
@@ -78,9 +114,9 @@ class FrostedGlassBackground extends StatelessWidget {
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: [
-                          c1.withValues(alpha: blobOpacity),
-                          c2.withValues(alpha: blobOpacity * 0.8),
-                          c3.withValues(alpha: blobOpacity * 0.6),
+                          c1.withValues(alpha: widget.blobOpacity),
+                          c2.withValues(alpha: widget.blobOpacity * 0.8),
+                          c3.withValues(alpha: widget.blobOpacity * 0.6),
                         ],
                         stops: const [0.0, 0.5, 1.0],
                       );
@@ -90,8 +126,8 @@ class FrostedGlassBackground extends StatelessWidget {
                         center: Alignment.center,
                         radius: 0.8,
                         colors: [
-                          c1.withValues(alpha: blobOpacity),
-                          c2.withValues(alpha: blobOpacity * 0.7),
+                          c1.withValues(alpha: widget.blobOpacity),
+                          c2.withValues(alpha: widget.blobOpacity * 0.7),
                         ],
                         stops: const [0.0, 1.0],
                       );
@@ -103,7 +139,7 @@ class FrostedGlassBackground extends StatelessWidget {
                     rotation: rot,
                     points: pts,
                     gradient: gradient,
-                    animated: animated,
+                    animated: widget.animated,
                     durationMs: durationMs,
                     initialOffset: Offset.zero,
                   );
@@ -119,13 +155,16 @@ class FrostedGlassBackground extends StatelessWidget {
               },
             ),
           ),
+          // 将模糊层与其重绘隔离，避免在快速切换页面时被频繁重置
           Positioned.fill(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-              child: const SizedBox.expand(),
+            child: RepaintBoundary(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: widget.blurSigma, sigmaY: widget.blurSigma),
+                child: const SizedBox.expand(),
+              ),
             ),
           ),
-          if (vignette)
+          if (widget.vignette)
             Positioned.fill(
               child: DecoratedBox(
                 decoration: BoxDecoration(

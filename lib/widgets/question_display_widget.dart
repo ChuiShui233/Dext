@@ -152,6 +152,7 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
               ),
               enableVideoPlayer: true,
               showVideoOverlay: true,
+              adaptiveHeight: true,
               authToken: widget.authToken,
               onOpen: widget.onMediaOpen != null 
                 ? (index, url, all) => widget.onMediaOpen!(url, all, index)
@@ -337,8 +338,8 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
         }
       },
       child: Container(
-        width: 40,
-        height: 40,
+        // 仅限制高度，不固定宽度，让宽度随图片比例自适应
+        constraints: const BoxConstraints(maxHeight: 40),
         margin: const EdgeInsets.only(left: 8),
         decoration: BoxDecoration(
           border: Border.all(color: isDark ? Colors.grey[700]! : Colors.grey.shade300),
@@ -347,13 +348,15 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(4),
           child: Stack(
+            fit: StackFit.passthrough,
             children: [
               CachedNetworkImage(
                 imageUrl: absUrl,
                 httpHeaders: (widget.authToken != null && widget.authToken!.isNotEmpty)
                     ? { 'Authorization': 'Bearer ${widget.authToken!}' }
                     : null,
-                fit: BoxFit.cover,
+                height: 40,
+                fit: BoxFit.contain, // 按比例完整显示，避免被裁剪
                 placeholder: (context, url) => const Center(
                   child: LoadingIndicator.button(),
                 ),

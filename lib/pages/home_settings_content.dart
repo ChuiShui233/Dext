@@ -12,7 +12,6 @@ import '../services/config.dart';
 import '../widgets/crop_image_dialog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'account_security_page.dart';
-import 'debug_tools_page.dart';
 import '../components/loading_indicator.dart';
 
 class HomeSettingsContent extends StatefulWidget {
@@ -48,45 +47,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
     _loadThemeModePref();
   }
 
-  // ==================== 调试设置卡片 ====================
-  Widget _buildDebugCard(BuildContext context, ThemeData theme) {
-    return _buildSectionCard(
-      context,
-      title: '调试设置',
-      icon: Icons.bug_report_outlined,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '进入调试工具，可一键创建500个项目与500份随机归属的问卷（请仅用于测试环境）',
-                  style: TextStyle(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              FButton(
-                onPress: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => DebugToolsPage(apiService: widget.apiService),
-                    ),
-                  );
-                },
-                child: const Text('打开调试工具'),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
 
-  // 读取并应用保存的主题模式偏好
   Future<void> _loadThemeModePref() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString('theme_mode') ?? 'system';
@@ -94,7 +55,6 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
     setState(() {
       _themeModePref = saved;
     });
-    // 应用为当前主题
     switch (saved) {
       case 'light':
         widget.onThemeModeChange(ThemeMode.light);
@@ -113,7 +73,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
       final packageInfo = await PackageInfo.fromPlatform();
       if (mounted) {
         setState(() {
-          _appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+          _appVersion = packageInfo.version;
         });
       }
     } catch (e) {
@@ -343,11 +303,14 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+    final bool isCompactWidth = MediaQuery.of(context).size.width < 1025;
+    final double horizontalPadding = isMobile ? 12.0 : 4.0;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.fromLTRB(horizontalPadding, 4, horizontalPadding, 4),
         child: Column(
           children: [
             const SizedBox(height: 20),
@@ -361,9 +324,10 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
             ],
             _buildAccountCard(context, theme),
             const SizedBox(height: 16),
-            _buildAppInfoCard(context, theme),
+            _buildAppearanceEffectsCard(context),
             const SizedBox(height: 16),
-            _buildDebugCard(context, theme),
+            _buildAppInfoCard(context, theme),
+            if (isMobile || isCompactWidth) const SizedBox(height: 50),
           ],
         ),
       ),
@@ -969,5 +933,69 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
     if (confirmed == true && context.mounted) {
       onLogout();
     }
+  }
+
+  // ==================== 界面效果设置卡片 ====================
+  Widget _buildAppearanceEffectsCard(BuildContext context) {
+    final theme = Theme.of(context);
+    return _buildSectionCard(
+      context,
+      title: '界面效果',
+      icon: Icons.blur_on_outlined,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+          child: _buildNoHighlightListTile(
+            leading: Icon(Icons.layers_outlined, color: theme.colorScheme.primary),
+            title: const Text('毛玻璃卡片'),
+            subtitle: Text(
+              '开启后卡片将采用毛玻璃效果，关闭则使用普通半透明卡片',
+              style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 12),
+            ),
+            trailing: _FrostedSwitch(onChanged: (v) async {
+              final settings = SettingsService();
+              await settings.setGlassCardEnabled(v);
+              if (!mounted || !context.mounted) return;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && context.mounted) {
+                  setState(() {});
+                }
+              });
+            }),
+          ),
+        ),
+      ],
+    );
+  }
+
+}
+
+// 独立小部件以便保持 trailing 尺寸合适并读取当前设置值
+class _FrostedSwitch extends StatefulWidget {
+  final ValueChanged<bool> onChanged;
+  const _FrostedSwitch({required this.onChanged});
+
+  @override
+  State<_FrostedSwitch> createState() => _FrostedSwitchState();
+}
+
+class _FrostedSwitchState extends State<_FrostedSwitch> {
+  late bool _value;
+
+  @override
+  void initState() {
+    super.initState();
+    _value = SettingsService().glassCardEnabled;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FSwitch(
+      value: _value,
+      onChange: (v) {
+        setState(() => _value = v);
+        widget.onChanged(v);
+      },
+    );
   }
 }

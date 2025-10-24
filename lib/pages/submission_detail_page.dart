@@ -463,6 +463,7 @@ class _SubmissionDetailPageState extends State<SubmissionDetailPage> {
       required: (q['required'] ?? false) as bool,
       order: (q['order'] ?? 0) as int,
       mediaUrls: mediaUrls,
+      imageScale: (q['imageScale'] as num?)?.toDouble() ?? 1.0,
     );
   }
 

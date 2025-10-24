@@ -25,6 +25,7 @@ import '../widgets/frosted_glass_background.dart';
 import '../widgets/markdown_text_widget.dart';
 import '../services/config.dart';
 import '../components/loading_indicator.dart';
+import '../components/glass_card.dart';
 
 class SurveyResultsPage extends StatefulWidget {
   final String token;
@@ -853,33 +854,23 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
   }
 
   Widget _buildGlassCard({required Widget child, bool highlighted = false}) {
-    return Container(
+    // 使用全局 GlassCard 以跟随设置中的“毛玻璃卡片”开关
+    final Color bg = highlighted
+        ? Colors.white.withAlpha(68)
+        : Colors.white.withAlpha(51);
+    final Color bd = highlighted
+        ? Colors.white.withAlpha(102)
+        : Colors.white.withAlpha(51);
+
+    return GlassCard(
       margin: const EdgeInsets.only(bottom: 16),
-      child: Material(
-        color: Colors.transparent,
-        shape: RoundedSuperellipseBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            decoration: BoxDecoration(
-              color: highlighted
-                  ? Colors.white.withAlpha(68)
-                  : Colors.white.withAlpha(51),
-              border: Border.all(
-                color: highlighted
-                    ? Colors.white.withAlpha(102)
-                    : Colors.white.withAlpha(51),
-                width: 0.8,
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: child,
-          ),
-        ),
+      shape: RoundedSuperellipseBorder(
+        borderRadius: BorderRadius.circular(12),
       ),
+      backgroundColor: bg,
+      borderColor: bd,
+      blurSigma: 12,
+      child: child,
     );
   }
 
@@ -2253,7 +2244,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
                       icon: const Icon(Icons.select_all, size: 20),
                       onPress: _toggleSelectionMode,
                     ),
-                  // 导出按钮已移入“导出格式”折叠面板中
                   if (_isSelectionMode) ...[
                     FHeaderAction(
                       icon: Icon(

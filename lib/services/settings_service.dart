@@ -13,11 +13,13 @@ class SettingsService {
   late bool _windowCloseDontAsk;
   late String _windowCloseDefaultAction;
   late String _themeMode;
+  late bool _glassCardEnabled;
 
   // 设置键名常量
   static const String keyWindowCloseDontAsk = 'window_close_dont_ask';
   static const String keyWindowCloseDefaultAction = 'window_close_default_action';
   static const String keyThemeMode = 'theme_mode';
+  static const String keyGlassCardEnabled = 'glass_card_enabled';
 
   /// 初始化设置服务（在 main 函数中调用）
   Future<void> initialize() async {
@@ -28,6 +30,7 @@ class SettingsService {
     _windowCloseDontAsk = _prefs!.getBool(keyWindowCloseDontAsk) ?? false;
     _windowCloseDefaultAction = _prefs!.getString(keyWindowCloseDefaultAction) ?? 'ask';
     _themeMode = _prefs!.getString(keyThemeMode) ?? 'system';
+    _glassCardEnabled = _prefs!.getBool(keyGlassCardEnabled) ?? true;
     
     _isInitialized = true;
   }
@@ -76,6 +79,18 @@ class SettingsService {
     await _prefs!.setString(keyThemeMode, value);
   }
 
+  // === 界面效果设置：毛玻璃卡片 ===
+  bool get glassCardEnabled {
+    _ensureInitialized();
+    return _glassCardEnabled;
+  }
+
+  Future<void> setGlassCardEnabled(bool value) async {
+    _ensureInitialized();
+    _glassCardEnabled = value;
+    await _prefs!.setBool(keyGlassCardEnabled, value);
+  }
+
   // === 通用方法 ===
   
   Future<void> clear() async {
@@ -90,5 +105,6 @@ class SettingsService {
     _windowCloseDontAsk = _prefs!.getBool(keyWindowCloseDontAsk) ?? false;
     _windowCloseDefaultAction = _prefs!.getString(keyWindowCloseDefaultAction) ?? 'ask';
     _themeMode = _prefs!.getString(keyThemeMode) ?? 'system';
+    _glassCardEnabled = _prefs!.getBool(keyGlassCardEnabled) ?? true;
   }
 }

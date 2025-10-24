@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import '../services/settings_service.dart';
 
 class GlassCard extends StatelessWidget {
   final Widget child;
@@ -10,6 +11,8 @@ class GlassCard extends StatelessWidget {
   final Color? backgroundColor;
   final Color? borderColor;
   final EdgeInsetsGeometry? margin;
+  /// 可选覆盖是否启用毛玻璃
+  final bool? frosted;
 
   const GlassCard({
     super.key,
@@ -20,6 +23,7 @@ class GlassCard extends StatelessWidget {
     this.backgroundColor,
     this.borderColor,
     this.margin,
+    this.frosted,
   });
 
   @override
@@ -35,12 +39,63 @@ class GlassCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(borderRadius),
     );
 
-    // 若传入的 shape 支持边框（OutlinedBorder），则克隆并附加边框；否则直接使用原 shape
+    final bool useFrost = frosted ?? SettingsService().glassCardEnabled;
     late final ShapeBorder paintShape;
     if (effectiveShape is OutlinedBorder) {
-      paintShape = effectiveShape.copyWith(side: BorderSide(color: bd, width: 0.8));
+      if (useFrost) {
+        // 毛玻璃开启：添加边框
+        paintShape = effectiveShape.copyWith(side: BorderSide(color: bd, width: 0.8));
+      } else {
+        // 毛玻璃关闭：显式移除边框
+        paintShape = effectiveShape.copyWith(side: BorderSide.none);
+      }
     } else {
       paintShape = effectiveShape;
+    }
+
+    Widget baseChild;
+    
+    if (useFrost) {
+      // 毛玻璃模式：使用 BackdropFilter
+      baseChild = BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+        child: Container(
+          decoration: ShapeDecoration(
+            color: bg,
+            shape: paintShape,
+            shadows: const [],
+          ),
+          child: child,
+        ),
+      );
+    } else {
+      // 非毛玻璃模式：叠加遮罩提高不透明度
+      baseChild = Stack(
+        children: [
+          // 底层：基础背景
+          Positioned.fill(
+            child: Container(
+              decoration: ShapeDecoration(
+                color: bg,
+                shape: paintShape,
+              ),
+            ),
+          ),
+          // 中层：遮罩层
+          Positioned.fill(
+            child: Container(
+              decoration: ShapeDecoration(
+                color: isDark 
+                    ? Colors.black.withAlpha(128) // 深色模式叠加黑色遮罩
+                    : Colors.white.withAlpha(179), // 浅色模式叠加白色遮罩
+                shape: paintShape,
+              ),
+            ),
+          ),
+          // 顶层：内容
+          child,
+        ],
+      );
     }
 
     return Container(
@@ -49,17 +104,7 @@ class GlassCard extends StatelessWidget {
         color: Colors.transparent,
         shape: effectiveShape,
         clipBehavior: Clip.antiAlias,
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-          child: Container(
-            decoration: ShapeDecoration(
-              color: bg,
-              shape: paintShape,
-              shadows: const [],
-            ),
-            child: child,
-          ),
-        ),
+        child: baseChild,
       ),
     );
   }

@@ -1458,11 +1458,6 @@ class ApiService {
     }
   }
 
-  // 公开的手动刷新令牌方法（供debug使用）
-  Future<bool> manualRefreshToken() async {
-    return await _refreshToken();
-  }
-
   // 自动刷新token并重试的通用方法
   Future<bool> _refreshToken() async {
     try {
@@ -1482,15 +1477,31 @@ class ApiService {
           authToken = token;
           // 同步到核心层，确保headers中包含Authorization
           _core.updateAuthToken(authToken);
-          if (kDebugMode) print('[RefreshToken] 从本地存储恢复 token: ${token.substring(0, min(20, token.length))}...');
+          if (kDebugMode) print('[RefreshToken] 从SharedPreferences恢复 token: ${token.substring(0, min(20, token.length))}...');
         } else {
-          if (kDebugMode) print('[RefreshToken] 本地存储也没有 token');
+          // 尝试从FlutterSecureStorage读取
+          if (kDebugMode) print('[RefreshToken] SharedPreferences没有 token，尝试从FlutterSecureStorage读取...');
+          try {
+            const storage = FlutterSecureStorage();
+            token = await storage.read(key: 'auth_token');
+            if (token != null && token.isNotEmpty) {
+              authToken = token;
+              _core.updateAuthToken(authToken);
+              // 同步回SharedPreferences
+              await prefs.setString('auth_token', token);
+              if (kDebugMode) print('[RefreshToken] 从FlutterSecureStorage恢复 token: ${token.substring(0, min(20, token.length))}...');
+            } else {
+              if (kDebugMode) print('[RefreshToken] FlutterSecureStorage也没有 token');
+            }
+          } catch (e) {
+            if (kDebugMode) print('[RefreshToken] 从FlutterSecureStorage读取失败: $e');
+          }
         }
       }
       
       // 检查是否有有效的token
       if (authToken == null || authToken!.isEmpty) {
-        if (kDebugMode) print('[RefreshToken] 没有有效的 token，放弃刷新');
+        if (kDebugMode) print('[RefreshToken] ❌ 所有存储位置都没有有效的 token，无法刷新，需要重新登录');
         return false;
       }
       
@@ -1499,6 +1510,12 @@ class ApiService {
       if (kDebugMode) {
         print('[RefreshToken] Token 已同步到核心层');
         print('[RefreshToken] 核心层 token: ${_core.authToken?.substring(0, min(20, _core.authToken?.length ?? 0))}...');
+      }
+      
+      // 最终检查：确保token不为空再发送请求
+      if (authToken == null || authToken!.isEmpty) {
+        if (kDebugMode) print('[RefreshToken] ❌ 发送前最终检查失败：token为空，取消请求');
+        return false;
       }
       
       // 使用普通HTTP请求（不加密），因为后端已将refresh端点加入白名单
@@ -1510,12 +1527,12 @@ class ApiService {
         final uri = Uri.parse(refreshUrl);
         final headers = {
           'Content-Type': 'application/json',
-          if (authToken != null) 'Authorization': 'Bearer $authToken',
+          'Authorization': 'Bearer $authToken',  // 不使用if条件，直接添加（已确保authToken不为空）
         };
         
         if (kDebugMode) {
           print('[RefreshToken] 发送刷新请求到: $refreshUrl');
-          print('[RefreshToken] authToken 状态: ${authToken != null ? "存在 (${authToken!.substring(0, min(20, authToken!.length))}...)" : "为空"}');
+          print('[RefreshToken] ✓ Token: ${authToken!.substring(0, min(20, authToken!.length))}...');
           print('[RefreshToken] Headers: ${headers.keys.join(", ")}');
         }
         

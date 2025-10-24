@@ -577,6 +577,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
 
   Widget _buildPagination(BuildContext context) {
     final totalPages = (_total / _pageSize).ceil();
+    final bool isCompactWidth = MediaQuery.of(context).size.width < 1025;
     // 同步 controller 的页码（0-based）
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_paginationController.page != _page - 1) {
@@ -584,12 +585,19 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
       }
     });
 
-    return FlexiblePagination(
-      controller: _paginationController,
-      currentPage: _page,
-      totalPages: totalPages,
-      totalItems: _total,
-      onPageChange: _handlePageChange,
+    return Column(
+      children: [
+        FlexiblePagination(
+          controller: _paginationController,
+          currentPage: _page,
+          totalPages: totalPages,
+          totalItems: _total,
+          onPageChange: _handlePageChange,
+          margin: const EdgeInsets.fromLTRB(0, 16, 0, 16),
+          padding: const EdgeInsets.all(16.0),
+        ),
+        if (isCompactWidth) const SizedBox(height: 40),
+      ],
     );
   }
 

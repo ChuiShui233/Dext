@@ -426,7 +426,8 @@ class _YuMeng233AppState extends State<YuMeng233App>
         if (!_isRefreshingToken) {
           try {
             _isRefreshingToken = true;
-            final newToken = await ApiService().refreshToken();
+            // 使用从storage读取的token，而不是状态变量_token（可能是null或旧值）
+            final newToken = await ApiService(authToken: token).refreshToken();
             await _storage.write(key: 'auth_token', value: newToken);
             await _checkAuthStatus();
           } catch (e) {
@@ -458,7 +459,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
     
     try {
       _isRefreshingToken = true;
-      final newToken = await ApiService().refreshToken();
+      final newToken = await ApiService(authToken: _token).refreshToken();
       await _storage.write(key: 'auth_token', value: newToken);
       // 更新令牌后重新检查状态
       await _checkAuthStatus();

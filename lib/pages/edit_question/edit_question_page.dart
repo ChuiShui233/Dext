@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
 import 'dart:convert';
 import 'package:forui/forui.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image/image.dart' as img;
 import '../../widgets/top_safe_spacer.dart';
 import '../../models/question.dart';
 import '../../services/api_service.dart';
@@ -56,6 +58,7 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
   final Map<String, double> _uploadProgress = {};
   final Map<String, bool> _uploadingFiles = {};
   final Map<String, bool> _cancelledUploads = {};
+  final Map<String, String> _uploadStatus = {};
 
   double _minValue = 0.0;
   double _maxValue = 100.0;
@@ -88,6 +91,39 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
         _perStarLabelCtrls[i].dispose();
       }
       _perStarLabelCtrls.removeRange(stars, _perStarLabelCtrls.length);
+    }
+  }
+
+  // 将大图压缩到最大边<=1920；
+  // 若原文件为PNG则保持PNG编码（避免把PNG压成JPG导致透明丢失/格式变化）；
+  // 其他图片统一以JPEG质量85编码。
+  Uint8List _compressImageBytesWithFormat(Uint8List input, String fileName) {
+    final decoded = img.decodeImage(input);
+    if (decoded == null) return input;
+
+    const int maxSide = 1920;
+    img.Image processed = decoded;
+    final int w = decoded.width;
+    final int h = decoded.height;
+    if (w > maxSide || h > maxSide) {
+      processed = img.copyResize(
+        decoded,
+        width: w >= h ? maxSide : (w * maxSide / h).round(),
+        height: h > w ? maxSide : (h * maxSide / w).round(),
+        interpolation: img.Interpolation.average,
+      );
+    }
+
+    final lower = fileName.toLowerCase();
+    final isPng = lower.endsWith('.png');
+    if (isPng) {
+      // 保持PNG编码（默认压缩级别）
+      final pngBytes = img.encodePng(processed);
+      return Uint8List.fromList(pngBytes);
+    } else {
+      // 非PNG统一使用JPEG 85
+      final jpg = img.encodeJpg(processed, quality: 85);
+      return Uint8List.fromList(jpg);
     }
   }
 
@@ -328,6 +364,7 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
     final result = await FilePicker.platform.pickFiles(
       type: FileType.media,
       allowMultiple: true,
+      withData: true, // 确保在桌面端也能直接拿到 bytes
     );
 
     if (result != null && result.files.isNotEmpty) {
@@ -337,42 +374,84 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
 
   Future<void> _uploadFiles(List<PlatformFile> files) async {
     for (final file in files) {
-      if (file.bytes != null) {
-        final fileName = file.name;
-        setState(() {
-          _uploadingFiles[fileName] = true;
-          _uploadProgress[fileName] = 0.0;
-        });
-
+      // 尝试优先使用内存中的 bytes，其次使用 readStream 聚合为 bytes
+      Uint8List? bytes = file.bytes;
+      if (bytes == null && file.readStream != null) {
         try {
-          final url = await _apiService.uploadMediaBytes(
-            widget.surveyId,
-            file.bytes!,
-            fileName,
-            onProgress: (sent, total) {
-              if (mounted && !(_cancelledUploads[fileName] ?? false)) {
-                setState(() {
-                  _uploadProgress[fileName] = sent / total;
-                });
-              }
-            },
-          );
+          final builder = BytesBuilder();
+          await for (final chunk in file.readStream!) {
+            builder.add(chunk);
+          }
+          bytes = builder.takeBytes();
+        } catch (_) {
+          bytes = null;
+        }
+      }
 
-          if (mounted && !(_cancelledUploads[fileName] ?? false)) {
+      if (bytes == null) {
+        // 无可用数据，跳过该文件
+        continue;
+      }
+
+      // 若为图片，先尝试压缩与限制尺寸
+      final lowerName = file.name.toLowerCase();
+      final isImage = lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg') || lowerName.endsWith('.png') || lowerName.endsWith('.webp');
+      if (isImage) {
+        try {
+          bytes = _compressImageBytesWithFormat(bytes, file.name);
+        } catch (_) {
+          // 压缩失败则使用原始数据
+        }
+      }
+
+      final fileName = file.name;
+      setState(() {
+        _uploadingFiles[fileName] = true;
+        _uploadProgress[fileName] = 0.0;
+        _uploadStatus[fileName] = '正在准备上传...';
+      });
+
+      try {
+        final url = await _apiService.uploadMediaBytes(
+          widget.surveyId,
+          bytes!,
+          fileName,
+          onProgress: (sent, total) {
+            if (mounted && !(_cancelledUploads[fileName] ?? false)) {
+              setState(() {
+                _uploadProgress[fileName] = sent / total;
+                final pct = (_uploadProgress[fileName]! * 100).toInt();
+                _uploadStatus[fileName] = '上传中 $pct%';
+              });
+            }
+          },
+          onStatus: (status, message) {
+            if (!mounted) return;
+            if (_cancelledUploads[fileName] ?? false) return;
             setState(() {
-              _mediaUrls.add(url);
-              _uploadingFiles.remove(fileName);
-              _uploadProgress.remove(fileName);
+              if (message != null && message.isNotEmpty) {
+                _uploadStatus[fileName] = message;
+              }
             });
-          }
-        } catch (e) {
-          if (mounted) {
-            setState(() {
-              _uploadingFiles.remove(fileName);
-              _uploadProgress.remove(fileName);
-            });
-            _showErrorToast('上传失败', e.toString());
-          }
+          },
+        );
+
+        if (mounted && !(_cancelledUploads[fileName] ?? false)) {
+          setState(() {
+            _mediaUrls.add(url);
+            _uploadingFiles.remove(fileName);
+            _uploadProgress.remove(fileName);
+            _uploadStatus.remove(fileName);
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _uploadingFiles.remove(fileName);
+            _uploadProgress.remove(fileName);
+            _uploadStatus.remove(fileName);
+          });
+          _showErrorToast('上传失败', e.toString());
         }
       }
     }
@@ -829,6 +908,7 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
       mediaUrls: _mediaUrls,
       uploadProgress: _uploadProgress,
       uploadingFiles: _uploadingFiles,
+      uploadStatus: _uploadStatus,
       onUploadMedia: _addMedia,
       onDeleteMedia: _deleteMedia,
       onCancelUpload: (fileName) {
@@ -836,6 +916,7 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
           _cancelledUploads[fileName] = true;
           _uploadingFiles.remove(fileName);
           _uploadProgress.remove(fileName);
+          _uploadStatus.remove(fileName);
         });
       },
       onDropFiles: _uploadFiles,

@@ -10,6 +10,7 @@ class MediaEditor extends StatefulWidget {
   final List<String> mediaUrls;
   final Map<String, double> uploadProgress;
   final Map<String, bool> uploadingFiles;
+  final Map<String, String> uploadStatus;
   final Function() onUploadMedia;
   final Function(String) onDeleteMedia;
   final Function(String) onCancelUpload;
@@ -22,6 +23,7 @@ class MediaEditor extends StatefulWidget {
     required this.mediaUrls,
     required this.uploadProgress,
     required this.uploadingFiles,
+    required this.uploadStatus,
     required this.onUploadMedia,
     required this.onDeleteMedia,
     required this.onCancelUpload,
@@ -220,6 +222,7 @@ class _MediaEditorState extends State<MediaEditor> {
             }),
             ...widget.uploadingFiles.keys.map((fileName) {
               final progress = widget.uploadProgress[fileName] ?? 0.0;
+              final statusText = widget.uploadStatus[fileName];
               final isImage = fileName.toLowerCase().endsWith('.jpg') || 
                              fileName.toLowerCase().endsWith('.jpeg') || 
                              fileName.toLowerCase().endsWith('.png') ||
@@ -279,7 +282,9 @@ class _MediaEditorState extends State<MediaEditor> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '${(progress * 100).toInt()}%',
+                            statusText != null && statusText.isNotEmpty
+                                ? statusText
+                                : '${(progress * 100).toInt()}%',
                             style: const TextStyle(fontSize: 10),
                           ),
                         ],

@@ -49,6 +49,7 @@ dependencies:
   flutter_launcher_icons: ^0.13.1
   provider: ^6.1.5+1
   http_parser: ^4.1.2
+  image: ^4.2.0
   app_links: ^3.5.0
   clipboard_watcher: ^0.2.0
   pointycastle: ^4.0.0

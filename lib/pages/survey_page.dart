@@ -172,8 +172,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   }
 
   void _onRefresh() async {
-    _refreshController.refreshToIdle();
-    
+    // 让SmartRefresher自行管理刷新状态，避免动画被立即复位
     // 延迟1秒后实际刷新数据
     await Future.delayed(const Duration(seconds: 1));
     

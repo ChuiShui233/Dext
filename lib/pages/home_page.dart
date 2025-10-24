@@ -134,8 +134,7 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
   @override
   Widget build(BuildContext context) {
     super.build(context); // 必须调用以支持 AutomaticKeepAliveClientMixin
-    final bool isMobileOrTablet = showSidebarInDrawer.resolve(context);
-    // 当达到桌面布局断点（md+）时，隐藏底部导航栏（跨平台统一：含 Web/其他端）
+    showSidebarInDrawer.resolve(context);
     final bool showDesktopLayout = showSidebarInline.resolve(context);
     final EdgeInsets padding = contentPadding.resolve(context);
 
@@ -168,7 +167,6 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
     ];
 
     return Scaffold(
-      drawer: isMobileOrTablet ? _buildDrawer(context) : null,
       body: Stack(
         children: [
           const FrostedGlassBackground(
@@ -207,44 +205,6 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
                 );
               },
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDrawer(BuildContext context) {
-    return Drawer(
-      child: Column(
-        children: [
-          const SizedBox(height: 25),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: Row(
-              children: [
-                Image.asset(
-                  'assets/images/Dext.png',
-                  width: 32,
-                  height: 32,
-                  errorBuilder: (context, error, stackTrace) => const Icon(
-                    FIcons.house,
-                    size: 32,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
-          BottomNavigationBar(
-            currentIndex: widget.currentIndex,
-            onTap: (index) {
-              widget.onTabChanged?.call(index);
-            },
-            items: const [
-              BottomNavigationBarItem(icon: Icon(FIcons.house), label: '主页'),
-              BottomNavigationBarItem(icon: Icon(FIcons.clock), label: '历史记录'),
-              BottomNavigationBarItem(icon: Icon(FIcons.settings), label: '设置'),
-            ],
           ),
         ],
       ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:forui/forui.dart';
+import 'loading_indicator.dart';
 
 class VideoPlayerWidget extends StatefulWidget {
   final String videoUrl;
@@ -138,7 +139,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
           borderRadius: BorderRadius.circular(8),
         ),
         child: const Center(
-          child: CircularProgressIndicator(),
+          child: LoadingIndicator.inline(message: '视频加载中...'),
         ),
       );
     }
@@ -159,6 +160,12 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
                     aspectRatio: _controller.value.aspectRatio,
                     child: VideoPlayer(_controller),
                   ),
+                  if (_controller.value.isBuffering)
+                    const Positioned(
+                      child: Center(
+                        child: LoadingIndicator.inline(message: '缓冲中...'),
+                      ),
+                    ),
                   // Built-in fullscreen button (top-right). It pauses before opening
                   if (widget.showFullscreenButton && widget.onOpen != null)
                     Positioned(
