@@ -37,37 +37,13 @@ class HomeSettingsContent extends StatefulWidget {
 class _HomeSettingsContentState extends State<HomeSettingsContent> {
   User? _currentUser;
   String _appVersion = '加载中...';
-  String _themeModePref = 'system'; // system | light | dark
 
   @override
   void initState() {
     super.initState();
     _fetchUserData();
     _loadAppVersion();
-    _loadThemeModePref();
   }
-
-
-  Future<void> _loadThemeModePref() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString('theme_mode') ?? 'system';
-    if (!mounted) return;
-    setState(() {
-      _themeModePref = saved;
-    });
-    switch (saved) {
-      case 'light':
-        widget.onThemeModeChange(ThemeMode.light);
-        break;
-      case 'dark':
-        widget.onThemeModeChange(ThemeMode.dark);
-        break;
-      case 'system':
-      default:
-        widget.onThemeModeChange(ThemeMode.system);
-    }
-  }
-
   Future<void> _loadAppVersion() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
@@ -94,7 +70,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
         setState(() {
           _currentUser = user;
         });
-        // 更新全局用户通知器，刷新侧边栏
+
         widget.userNotifier?.value = user;
       }
     } catch (e) {
@@ -559,7 +535,11 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
-                  '当前: ${_themeModePref == 'light' ? '浅色模式' : _themeModePref == 'dark' ? '深色模式' : '跟随系统'}',
+                  // 直接从 SettingsService 获取，以便在外部变更主题后也能即时反映
+                  () {
+                    final mode = SettingsService().themeMode;
+                    return '当前: ${mode == 'light' ? '浅色模式' : mode == 'dark' ? '深色模式' : '跟随系统'}';
+                  }(),
                   style: TextStyle(
                     fontSize: 12,
                     color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
@@ -577,26 +557,26 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
                 onChange: (mode) async {
                   if (mode != null) {
                     String pref;
+                    ThemeMode themeMode;
                     switch (mode) {
                       case '浅色模式':
-                        widget.onThemeModeChange(ThemeMode.light);
+                        themeMode = ThemeMode.light;
                         pref = 'light';
                         break;
                       case '深色模式':
-                        widget.onThemeModeChange(ThemeMode.dark);
+                        themeMode = ThemeMode.dark;
                         pref = 'dark';
                         break;
                       case '跟随系统':
                       default:
-                        widget.onThemeModeChange(ThemeMode.system);
+                        themeMode = ThemeMode.system;
                         pref = 'system';
                     }
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.setString('theme_mode', pref);
-                    if (mounted && context.mounted) {
-                      setState(() {
-                        _themeModePref = pref;
-                      });
+                    // 先持久化设置，再触发主题切换
+                    await SettingsService().setThemeMode(pref);
+                    if (mounted) {
+                      widget.onThemeModeChange(themeMode);
+                      setState(() {}); // 触发重建以刷新展示
                     }
                   }
                 },

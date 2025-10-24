@@ -147,12 +147,17 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
 
       // 初始化移动端侧滑菜单动画
       _menuController = AnimationController(vsync: this, duration: const Duration(milliseconds: 280));
-      _menuScale = Tween<double>(begin: 0.9, end: 1.0)
+      // 侧边栏不使用缩放动画，始终保持原始大小
+      _menuScale = Tween<double>(begin: 1.0, end: 1.0)
           .animate(CurvedAnimation(parent: _menuController, curve: Curves.easeOutCubic));
       _pageScale = Tween<double>(begin: 1.0, end: 0.86)
           .animate(CurvedAnimation(parent: _menuController, curve: Curves.easeOutCubic));
+      // 侧边栏滑入动画延迟启动，让页面先开始缩放，营造分层视觉效果
       _menuSlide = Tween<Offset>(begin: const Offset(-1, 0), end: Offset.zero)
-          .animate(CurvedAnimation(parent: _menuController, curve: Curves.easeOutCubic));
+          .animate(CurvedAnimation(
+            parent: _menuController, 
+            curve: const Interval(0.16, 1.0, curve: Curves.easeOutCubic),
+          ));
 
       // 侧滑进度变化时，仅在侧边栏打开时实时更新背景截图
       _menuController.addListener(() {
@@ -467,7 +472,8 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
                   child: Container(
                     width: sidebarWidth,
                     height: double.infinity,
-                    margin: EdgeInsets.zero,
+                    // 在侧边栏与内容区域之间留出固定间距，避免视觉重叠
+                    margin: EdgeInsets.only(right: gapBetweenSidebarAndContent),
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.6),
                       borderRadius: BorderRadius.zero,
@@ -1098,27 +1104,36 @@ Widget _buildSidebarHeader(BuildContext context) {
             FButton(
               style: FButtonStyle.ghost,
               onPress: () async {
+                final navigator = Navigator.of(context);
                 await SettingsService().setThemeMode('system');
                 widget.onThemeModeChange(ThemeMode.system);
-                Navigator.pop(context);
+                if (mounted) {
+                  navigator.pop();
+                }
               },
               child: const Text('跟随系统'),
             ),
             FButton(
               style: FButtonStyle.ghost,
               onPress: () async {
+                final navigator = Navigator.of(context);
                 await SettingsService().setThemeMode('light');
                 widget.onThemeModeChange(ThemeMode.light);
-                Navigator.pop(context);
+                if (mounted) {
+                  navigator.pop();
+                }
               },
               child: const Text('浅色模式'),
             ),
             FButton(
               style: FButtonStyle.ghost,
               onPress: () async {
+                final navigator = Navigator.of(context);
                 await SettingsService().setThemeMode('dark');
                 widget.onThemeModeChange(ThemeMode.dark);
-                Navigator.pop(context);
+                if (mounted) {
+                  navigator.pop();
+                }
               },
               child: const Text('深色模式'),
             ),
