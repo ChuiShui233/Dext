@@ -265,9 +265,8 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
         isBound 
             ? '已绑定${providerName != null ? ': $providerName' : ''}' 
             : '未绑定',
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 12, 
-          color: isBound ? Colors.green : Colors.grey,
         ),
       ),
       trailing: TextButton(
@@ -452,18 +451,19 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
   void _unbindOAuth(String provider) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('确认解绑'),
-        content: Text('确定要解绑${_getProviderDisplayName(provider)}账号吗？'),
+      builder: (context) => FDialog(
+        direction: Axis.horizontal,
+        title: const Text('确认解绑'),
+        body: Text('确定要解绑${_getProviderDisplayName(provider)}账号吗？'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('取消'),
+          FButton(
+            style: FButtonStyle.outline,
+            onPress: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text('确认'),
+          FButton(
+            onPress: () => Navigator.of(context).pop(true),
+            child: const Text('确认'),
           ),
         ],
       ),

@@ -675,14 +675,11 @@ class _YuMeng233AppState extends State<YuMeng233App>
       _isLoadingProjects = false;
     }
   }
-  /// 处理初始URL和深度链接
   void _handleInitialUrl() async {
     try {
       if (kIsWeb) {
-        // Web平台：从浏览器URL获取参数
         _handleWebUrl();
       } else {
-        // 移动平台：处理深度链接
         _handleMobileDeepLink();
       }
     } catch (e) {
@@ -695,13 +692,17 @@ class _YuMeng233AppState extends State<YuMeng233App>
     if (kIsWeb) {
       try {
         final surveyId = UrlHandler.instance.getWebUrlParameter('id');
-
         
         if (surveyId != null && surveyId.isNotEmpty) {
-          // 保存surveyId，在build完成后处理
-          _pendingSurveyId = surveyId;
-        } else {
 
+          final hash = Uri.base.fragment;
+          
+          // 如果 hash 已经包含问卷路由，说明Flutter已经处理了，不再重复导航
+          if (hash.isNotEmpty && hash.contains('/public/survey/')) {
+            return;
+          }
+
+          _pendingSurveyId = surveyId;
         }
       } catch (e) {
         debugPrint('Web URL解析失败: $e');
@@ -773,12 +774,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
       // 否则使用全局导航
       final navigatorState = appNavigatorKey.currentState ?? _navigatorKey.currentState;
       if (navigatorState != null) {
-        navigatorState.push(
-          MaterialPageRoute(
-            builder: (context) => PublicSurveyPage(surveyUID: surveyId),
-            settings: RouteSettings(name: '/public/survey/$surveyId'),
-          ),
-        );
+        navigatorState.pushNamed('/public/survey/$surveyId');
       }
     }
   }
@@ -944,25 +940,11 @@ class _NotFoundPageState extends State<_NotFoundPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            const SizedBox(height: 24),
             const Text(
               '页面不存在',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '路径: ${widget.routeName}',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
               ),
             ),
             const SizedBox(height: 32),
@@ -974,7 +956,7 @@ class _NotFoundPageState extends State<_NotFoundPage> {
               ),
             ),
             const SizedBox(height: 16),
-            ElevatedButton(
+            TextButton(
               onPressed: () {
                 _timer?.cancel();
                 Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);

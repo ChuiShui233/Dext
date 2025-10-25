@@ -32,12 +32,15 @@
   <title>Dext</title>
   <link rel="manifest" href="manifest.json">
   <style>
-    :root {
-      --slide-duration: 480ms;
-      --slide-curve: cubic-bezier(0.22, 1, 0.36, 1);
-      --fade-duration: 300ms;
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: 'PingFang SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      overflow: hidden;
     }
-    /* 页面加载阶段的覆盖层与动画 */
+
     #app-loader {
       position: fixed;
       inset: 0;
@@ -46,22 +49,47 @@
       justify-content: center;
       background: #0b0b0b;
       z-index: 9999;
-      transition: transform var(--slide-duration) var(--slide-curve), opacity var(--fade-duration) ease;
-      will-change: transform, opacity;
+      transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    #app-loader.fade-out { opacity: 0; pointer-events: none; }
-    #app-loader.slide-up { transform: translateY(-100%); opacity: 0; pointer-events: none; }
-    #app-loader .loader-content { text-align: center; color: #8a9299; font-family: inherit; }
-    #app-loader .loader-img { width: 45vmin; height: 45vmin; object-fit: contain; display: block; margin: 0 auto 16px; }
-    body {
-      font-family: 'PingFang SC', 'PingFang', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', 'Microsoft YaHei', sans-serif;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
+
+    #app-loader.slide-up {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .loader-content {
+      text-align: center;
+      animation: fadeIn 0.8s ease-out;
+    }
+
+    .loader-img {
+      width: 120px;
+      height: 120px;
+      margin: 0 auto 24px;
+      object-fit: contain;
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.15));
+    }
+
+    .loader-content > div {
+      color: rgba(255, 255, 255, 0.95);
+      font-size: 16px;
+      font-weight: 500;
+      letter-spacing: 0.3px;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     @media (prefers-reduced-motion: reduce) {
-      #app-loader { transition: opacity var(--fade-duration) ease !important; }
-      #app-loader.slide-up { transform: none; opacity: 0; }
+      #app-loader { transition: opacity 0.3s ease !important; }
+      .loader-content { animation: none !important; }
+    }
+
+    @media (max-width: 768px) {
+      .loader-img { width: 100px; height: 100px; }
+      .loader-content > div { font-size: 14px; }
     }
   </style>
 </head>
@@ -69,7 +97,7 @@
   <div id="app-loader" role="status" aria-live="polite">
     <div class="loader-content">
       <img class="loader-img" src="assets/assets/images/loading.gif" alt="loading" />
-      <div>正在加载资源，等等哦~</div>
+      <div>正在加载资源，等等哦</div>
     </div>
   </div>
   <script src="flutter_bootstrap.js" async></script>
