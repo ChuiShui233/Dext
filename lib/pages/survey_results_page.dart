@@ -26,6 +26,8 @@ import '../widgets/markdown_text_widget.dart';
 import '../services/config.dart';
 import '../components/loading_indicator.dart';
 import '../components/glass_card.dart';
+import '../components/adaptive_message_card.dart';
+import '../components/glass_button.dart';
 
 class SurveyResultsPage extends StatefulWidget {
   final String token;
@@ -2281,81 +2283,73 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
                   child: _isLoading
                       ? const LoadingIndicator.page()
                       : _errorMessage != null
-                          ? Center(
-                              child: _buildGlassCard(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(24),
+                          ? AdaptiveMessageCard(
+                              cardWrapper: (content) => _buildGlassCard(child: content),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.error_outline,
+                                    size: 64,
+                                    color: Colors.red[400],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  const Text(
+                                    '加载失败',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _errorMessage!,
+                                    style: const TextStyle(fontSize: 14),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  GlassButton(
+                                    text: '重试',
+                                    color: Colors.blue,
+                                    onPressed: _loadData,
+                                  ),
+                                ],
+                              ),
+                            )
+                          : _results.isEmpty
+                              ? AdaptiveMessageCard(
+                                  cardWrapper: (content) => _buildGlassCard(child: content),
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Icon(
-                                        Icons.error_outline,
+                                        Icons.inbox_outlined,
                                         size: 64,
-                                        color: Colors.red[400],
+                                        color: isDark ? Colors.white38 : Colors.grey[400],
                                       ),
                                       const SizedBox(height: 16),
-                                      const Text(
-                                        '加载失败',
+                                      Text(
+                                        '暂无作答结果',
                                         style: TextStyle(
                                           fontSize: 18,
-                                          fontWeight: FontWeight.bold,
+                                          color: isDark ? Colors.white : Colors.black87,
+                                          fontWeight: FontWeight.w500,
                                         ),
                                       ),
                                       const SizedBox(height: 8),
                                       Text(
-                                        _errorMessage!,
-                                        style: const TextStyle(fontSize: 14),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      const SizedBox(height: 16),
-                                      FButton(
-                                        onPress: _loadData,
-                                        child: const Text('重试'),
+                                        '还没有人填写这份问卷哦~',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: isDark ? Colors.white70 : Colors.grey[600],
+                                        ),
                                       ),
                                     ],
                                   ),
-                                ),
-                              ),
-                            )
-                          : _results.isEmpty
-                              ? Center(
-                                  child: _buildGlassCard(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(32),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Image.asset(
-                                            'assets/images/loading.gif',
-                                            width: 64,
-                                            height: 64,
-                                            color: isDark ? Colors.white54 : Colors.grey,
-                                          ),
-                                          const SizedBox(height: 16),
-                                          Text(
-                                            '暂无作答结果',
-                                            style: TextStyle(
-                                              fontSize: 18,
-                                              color: isDark ? Colors.white : Colors.black87,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            '还没有人填写这份问卷哦~',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              color: isDark ? Colors.white70 : Colors.grey[600],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
                                 )
-                              : Builder(
-                                  builder: (context) {
-                                    final width = MediaQuery.of(context).size.width;
+                              : LayoutBuilder(
+                                  builder: (context, box) {
+                                    final width = box.maxWidth;
                                     final double target = isDesktop ? 2000 : width;
                                     final double side = width > target ? (width - target) / 2 : 0;
                                     return ScrollConfiguration(

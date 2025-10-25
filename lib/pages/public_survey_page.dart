@@ -1,6 +1,4 @@
 import 'dart:convert';
-import 'dart:ui' as ui;
-import 'dart:math' as math;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +9,8 @@ import '../services/api_service.dart';
 import '../models/question.dart';
 import '../controllers/survey_runtime.dart';
 import '../components/glass_card.dart';
+import '../components/adaptive_message_card.dart';
+import '../components/glass_button.dart';
 import '../widgets/question_display_widget.dart';
 import 'fullscreen_media_viewer.dart';
 import '../widgets/frosted_glass_background.dart';
@@ -540,164 +540,72 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
 
   Widget _buildErrorView() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // 按屏幕尺寸计算留白（更适配手机端），并设置最大宽度以适配桌面端
-    final size = MediaQuery.of(context).size;
-    final vw = size.width;
-    final vh = size.height;
-    final EdgeInsets adaptivePadding = EdgeInsets.symmetric(
-      horizontal: (vw * 0.08).clamp(16.0, 48.0),
-      vertical: (vh * 0.04).clamp(12.0, 40.0),
-    );
-    // 外层按比例缩放宽度，避免在小屏上占满全宽（更激进分档）
-    final double widthFactor = vw < 380
-        ? 0.86
-        : (vw < 480
-            ? 0.82
-            : (vw < 800 ? 0.66 : 0.5));
-    // 自适应最大宽度（配合桌面/平板）
-    final double maxWidth = math.min(520.0, vw * 0.84);
-    return Center(
-      child: FractionallySizedBox(
-        widthFactor: widthFactor,
-        child: _buildGlassCard(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxWidth),
-            child: Padding(
-              padding: adaptivePadding,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Image.asset(
-                    'assets/images/loading.gif',
-                    width: 64,
-                    height: 64,
-                    color: Colors.red[400],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    errorMessage!,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: isDark ? Colors.white : Colors.black87,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  _glassMdButton(
-                    text: '返回主界面',
-                    color: Colors.blue,
-                    onPressed: () => Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false),
-                  ),
-                ],
-              ),
-            ),
+    return AdaptiveMessageCard(
+      cardWrapper: (content) => _buildGlassCard(child: content),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Image.asset(
+            'assets/images/loading.gif',
+            width: 64,
+            height: 64,
+            color: Colors.red[400],
           ),
-        ),
+          const SizedBox(height: 16),
+          Text(
+            errorMessage!,
+            style: TextStyle(
+              fontSize: 16,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          GlassButton(
+            text: '返回主界面',
+            color: Colors.blue,
+            onPressed: () => Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildSuccessView() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Center(
-      child: _buildGlassCard(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.check_circle, size: 64, color: Colors.green[400]),
-              const SizedBox(height: 16),
-              Text(
-                '问卷提交成功！',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '感谢您的参与！',
-                style: TextStyle(
-                  color: isDark ? Colors.white70 : Colors.black54,
-                ),
-              ),
-              const SizedBox(height: 24),
-              _glassMdButton(
-                text: '返回',
-                color: Colors.green,
-                onPressed: () => _navigateToPublicAccess(),
-              ),
-            ],
+    return AdaptiveMessageCard(
+      cardWrapper: (content) => _buildGlassCard(child: content),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle, size: 64, color: Colors.green[400]),
+          const SizedBox(height: 16),
+          Text(
+            '问卷提交成功！',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
           ),
-        ),
+          const SizedBox(height: 8),
+          Text(
+            '感谢您的参与！',
+            style: TextStyle(
+              color: isDark ? Colors.white70 : Colors.black54,
+            ),
+          ),
+          const SizedBox(height: 24),
+          GlassButton(
+            text: '返回',
+            color: Colors.green,
+            onPressed: () => _navigateToPublicAccess(),
+          ),
+        ],
       ),
     );
   }
 
-  // 半透明毛玻璃风格的 Material 按钮（MD风格 + Blur）
-  Widget _glassMdButton({
-    required String text,
-    required VoidCallback onPressed,
-    Color? color,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final base = color ?? Colors.blue;
-    final bg = base.withValues(alpha: isDark ? 0.22 : 0.18);
-    final fg = Colors.white;
-
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 120),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Stack(
-          children: [
-            // 毛玻璃
-            BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: Container(
-                color: bg,
-              ),
-            ),
-            // 轻微边框，提升层次
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: isDark ? 0.14 : 0.22),
-                    width: 0.9,
-                  ),
-                ),
-              ),
-            ),
-            // 按钮内容与Ripple
-            Material(
-              type: MaterialType.transparency,
-              child: InkWell(
-                onTap: onPressed,
-                splashColor: base.withValues(alpha: 0.2),
-                highlightColor: base.withValues(alpha: 0.1),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                  child: Center(
-                    child: Text(
-                      text,
-                      style: TextStyle(
-                        color: fg,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildSurveyView() {
     final isDark = Theme.of(context).brightness == Brightness.dark;

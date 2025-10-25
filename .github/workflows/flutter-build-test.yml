@@ -90,6 +90,11 @@ jobs:
       - name: 获取依赖
         run: flutter pub get
 
+      - name: 生成ci编译临时签名
+        run: |
+          chmod +x .github/scripts/generate_ci_keystore.sh
+          .github/scripts/generate_ci_keystore.sh
+
       - name: 分析代码
         run: flutter analyze --no-fatal-infos
 

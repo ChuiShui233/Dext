@@ -40,3 +40,26 @@
     public static *** w(...);
     public static *** e(...);
 }
+
+-assumenosideeffects class kotlinx.coroutines.debug.internal.DebugProbesKt {
+    public static *** probeCoroutineCreated(...);
+    public static *** probeCoroutineResumed(...);
+    public static *** probeCoroutineSuspended(...);
+}
+-dontwarn kotlinx.coroutines.debug.**
+-dontnote kotlinx.coroutines.debug.**
+
+-assumenosideeffects class kotlin.jvm.internal.Intrinsics {
+    public static void check*(...) return;
+    public static void throw*(...) return;
+}
+
+-keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
+-keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
+-keepclassmembers class kotlinx.coroutines.** {
+    volatile <fields>;
+}
+
+-assumenosideeffects class kotlin.jvm.internal.DebugMetadata {
+    *;
+}

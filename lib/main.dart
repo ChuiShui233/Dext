@@ -126,7 +126,7 @@ Future<void> _initDesktopWindowAndTray() async {
 
   await UriHandlerService.initialize();
   
-  await TrayManager.instance.setIcon('assets/images/Dext.ico');
+  await TrayManager.instance.setIcon('assets/images/favicon.ico');
   final menu = Menu(items: [
     MenuItem(key: 'show', label: '显示窗口'),
     MenuItem(key: 'hide', label: '隐藏到托盘'),
@@ -498,7 +498,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
     if (_pendingSurveyId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final surveyId = _pendingSurveyId!;
-        _pendingSurveyId = null; // 清除待处理状态
+        _pendingSurveyId = null;
         _navigateToPublicSurvey(surveyId);
       });
     }
@@ -508,10 +508,10 @@ class _YuMeng233AppState extends State<YuMeng233App>
       child: FToaster(
         child: Layout(
           child: FTheme(
-            data: _isDark ? zincDark : zincLight, // Forui 主题
+            data: _isDark ? zincDark : zincLight,
             child: MaterialApp(
               navigatorKey: appNavigatorKey,
-              title: '问卷调查系统',
+              title: 'DEXT',
               theme: lightTheme,
               darkTheme: darkTheme,
               themeMode: _themeMode,

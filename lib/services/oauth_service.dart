@@ -373,7 +373,6 @@ class OAuthService {
       webAuthOpts: {
         'windowName': 'Dext - Google登录',
         'windowTitle': 'Dext - Google登录',
-        'windowIcon': 'assets/images/Dext.ico',
         'useWebview': false,
         'timeout': 300,
       },
@@ -560,7 +559,6 @@ class OAuthService {
       webAuthOpts: {
         'windowName': 'Dext - GitHub登录',
         'windowTitle': 'Dext - GitHub登录',
-        'windowIcon': 'assets/images/Dext.ico',
         'useWebview': false,
         'timeout': 300,
       },

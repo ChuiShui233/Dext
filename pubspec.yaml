@@ -1,8 +1,8 @@
 name: dext
-description: "问卷调查应用"
+description: "问卷调查"
 # 以下行防止包意外发布到 pub.dev 使用 `flutter pub publish`。对于私有包，建议保留此行。
 publish_to: 'none' # 如果您希望发布到 pub.dev，请移除此行
-version: 1.0.5+20251020
+version: 1.0.6+1020
 
 environment:
   sdk: ^3.7.2
