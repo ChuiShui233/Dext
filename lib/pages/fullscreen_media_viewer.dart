@@ -4,7 +4,11 @@ import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:video_player/video_player.dart';
 import 'package:forui/forui.dart';
+import 'package:photo_view/photo_view.dart';
+import 'package:photo_view/photo_view_gallery.dart';
 import '../services/config.dart';
+
+typedef VideoControllerMap = Map<String, VideoPlayerController>;
 
 class FullscreenMediaViewer extends StatefulWidget {
   final String mediaUrl;
@@ -12,6 +16,8 @@ class FullscreenMediaViewer extends StatefulWidget {
   final List<String>? allMediaUrls;
   final int? currentIndex;
   final String? authToken;
+  /// 外部传入的 VideoPlayerController，用于视频全屏时复用已加载的控制器
+  final VideoPlayerController? externalVideoController;
 
   const FullscreenMediaViewer({
     super.key,
@@ -20,6 +26,7 @@ class FullscreenMediaViewer extends StatefulWidget {
     this.allMediaUrls,
     this.currentIndex,
     this.authToken,
+    this.externalVideoController,
   });
 
 
@@ -29,11 +36,8 @@ class FullscreenMediaViewer extends StatefulWidget {
 
 class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
     with TickerProviderStateMixin {
-  late TransformationController _transformationController;
-  late AnimationController _animationController;
   late AnimationController _entryAnimationController;
   late AnimationController _dismissAnimationController;
-  late Animation<Matrix4> _animation;
   late Animation<double> _entryScaleAnimation;
   late Animation<double> _entryFadeAnimation;
   late Animation<Offset> _dismissSlideAnimation;
@@ -41,8 +45,8 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
   
   int _currentIndex = 0;
   bool _showControls = true;
-  bool _isZoomed = false;
   bool _isDismissing = false;
+  late PageController _pageController;
   
   double _dragDistance = 0.0;
   bool _isDragging = false;
@@ -52,11 +56,9 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
   @override
   void initState() {
     super.initState();
-    _transformationController = TransformationController();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
+    _currentIndex = widget.currentIndex ?? 0;
+    
+    _pageController = PageController(initialPage: _currentIndex);
     
     _entryAnimationController = AnimationController(
       duration: const Duration(milliseconds: 600),
@@ -100,39 +102,22 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
       curve: Curves.easeInCubic,
     ));
     
-    _currentIndex = widget.currentIndex ?? 0;
-    
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
     
     _entryAnimationController.forward();
-    
-    // 3秒后自动隐藏控制栏
-    _hideControlsAfterDelay();
+
+    // _hideControlsAfterDelay();
   }
 
   @override
   void dispose() {
-    _transformationController.dispose();
-    _animationController.dispose();
+    _pageController.dispose();
     _entryAnimationController.dispose();
     _dismissAnimationController.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
-  void _hideControlsAfterDelay() {
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() {
-          _showControls = false;
-        });
-        
-        if (_videoPlayerKey.currentState != null) {
-          _videoPlayerKey.currentState!.updateControlsVisibility(false);
-        }
-      }
-    });
-  }
 
   void _toggleControls() {
     setState(() {
@@ -143,9 +128,9 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
       _videoPlayerKey.currentState!.updateControlsVisibility(_showControls);
     }
     
-    if (_showControls) {
-      _hideControlsAfterDelay();
-    }
+    // if (_showControls) {
+    //   _hideControlsAfterDelay();
+    // }
   }
 
   String get _currentMediaUrl {
@@ -170,59 +155,36 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
         url.toLowerCase().endsWith('.webm');
   }
 
-  void _resetZoom() {
-    _animation = Matrix4Tween(
-      begin: _transformationController.value,
-      end: Matrix4.identity(),
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeInOut,
-    ));
-    
-    _animationController.forward(from: 0).then((_) {
-      setState(() {
-        _isZoomed = false;
-      });
-    });
-    
-    _animation.addListener(() {
-      _transformationController.value = _animation.value;
-    });
-  }
-
-  void _onInteractionUpdate(ScaleUpdateDetails details) {
-    final scale = _transformationController.value.getMaxScaleOnAxis();
-    setState(() {
-      _isZoomed = scale > 1.0;
-    });
-  }
 
   void _previousMedia() {
     if (widget.allMediaUrls != null && widget.allMediaUrls!.isNotEmpty) {
-      setState(() {
-        _currentIndex = (_currentIndex - 1 + widget.allMediaUrls!.length) % widget.allMediaUrls!.length;
-        _resetZoom();
-      });
+      final newIndex = (_currentIndex - 1 + widget.allMediaUrls!.length) % widget.allMediaUrls!.length;
+      _pageController.animateToPage(
+        newIndex,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
     }
   }
 
   void _nextMedia() {
     if (widget.allMediaUrls != null && widget.allMediaUrls!.isNotEmpty) {
-      setState(() {
-        _currentIndex = (_currentIndex + 1) % widget.allMediaUrls!.length;
-        _resetZoom();
-      });
+      final newIndex = (_currentIndex + 1) % widget.allMediaUrls!.length;
+      _pageController.animateToPage(
+        newIndex,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
     }
   }
 
   void _onVerticalDragStart(DragStartDetails details) {
-    if (_isZoomed) return; // 如果正在缩放，不处理滑动
     _isDragging = true;
     _dragDistance = 0.0;
   }
 
   void _onVerticalDragUpdate(DragUpdateDetails details) {
-    if (_isZoomed || !_isDragging) return;
+    if (!_isDragging) return;
     
     setState(() {
       _dragDistance += details.delta.dy;
@@ -233,7 +195,7 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
   }
 
   void _onVerticalDragEnd(DragEndDetails details) {
-    if (_isZoomed || !_isDragging) return;
+    if (!_isDragging) return;
     
     _isDragging = false;
     
@@ -352,24 +314,56 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
                       child: ScaleTransition(
                         scale: AlwaysStoppedAnimation(currentScale),
                         child: isImage
-                            ? GestureDetector(
-                                onTap: _toggleControls,
-                                child: InteractiveViewer(
-                                  transformationController: _transformationController,
-                                  onInteractionUpdate: _onInteractionUpdate,
-                                  minScale: 0.5,
-                                  maxScale: 4.0,
-                                  child: Center(
-                                    child: CachedNetworkImage(
-                                      imageUrl: currentUrl,
-                                      httpHeaders: (widget.authToken != null && widget.authToken!.isNotEmpty)
-                                          ? { 'Authorization': 'Bearer ${widget.authToken!}' }
-                                          : null,
-                                      fit: BoxFit.contain,
-                                      placeholder: (context, url) => const Center(
+                            ? (hasMultipleMedia
+                                ? GestureDetector(
+                                    onTap: _toggleControls,
+                                    child: PhotoViewGallery.builder(
+                                      scrollPhysics: const BouncingScrollPhysics(),
+                                      builder: (BuildContext context, int index) {
+                                        final url = toAbsoluteUrl(widget.allMediaUrls![index]);
+                                        return PhotoViewGalleryPageOptions(
+                                          imageProvider: CachedNetworkImageProvider(
+                                            url,
+                                            headers: (widget.authToken != null && widget.authToken!.isNotEmpty)
+                                                ? { 'Authorization': 'Bearer ${widget.authToken!}' }
+                                                : null,
+                                          ),
+                                          minScale: PhotoViewComputedScale.contained * 0.8,
+                                          maxScale: PhotoViewComputedScale.covered * 4.0,
+                                          heroAttributes: PhotoViewHeroAttributes(tag: url),
+                                        );
+                                      },
+                                      itemCount: widget.allMediaUrls!.length,
+                                      loadingBuilder: (context, event) => const Center(
                                         child: CircularProgressIndicator(color: Colors.white),
                                       ),
-                                      errorWidget: (context, url, error) => const Center(
+                                      backgroundDecoration: const BoxDecoration(
+                                        color: Colors.transparent,
+                                      ),
+                                      pageController: _pageController,
+                                      onPageChanged: (index) {
+                                        setState(() {
+                                          _currentIndex = index;
+                                        });
+                                      },
+                                    ),
+                                  )
+                                : GestureDetector(
+                                    onTap: _toggleControls,
+                                    child: PhotoView(
+                                      imageProvider: CachedNetworkImageProvider(
+                                        currentUrl,
+                                        headers: (widget.authToken != null && widget.authToken!.isNotEmpty)
+                                            ? { 'Authorization': 'Bearer ${widget.authToken!}' }
+                                            : null,
+                                      ),
+                                      minScale: PhotoViewComputedScale.contained * 0.8,
+                                      maxScale: PhotoViewComputedScale.covered * 4.0,
+                                      heroAttributes: PhotoViewHeroAttributes(tag: currentUrl),
+                                      loadingBuilder: (context, event) => const Center(
+                                        child: CircularProgressIndicator(color: Colors.white),
+                                      ),
+                                      errorBuilder: (context, error, stackTrace) => const Center(
                                         child: Column(
                                           mainAxisAlignment: MainAxisAlignment.center,
                                           children: [
@@ -382,9 +376,11 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
                                           ],
                                         ),
                                       ),
+                                      backgroundDecoration: const BoxDecoration(
+                                        color: Colors.transparent,
+                                      ),
                                     ),
-                                  ),
-                                ),
+                                  )
                               )
                             : isVideo
                                 ? _FullscreenVideoPlayer(
@@ -397,6 +393,7 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
                                     httpHeaders: (widget.authToken != null && widget.authToken!.isNotEmpty)
                                         ? { 'Authorization': 'Bearer ${widget.authToken!}' }
                                         : null,
+                                    externalController: widget.externalVideoController,
                                   )
                                 : GestureDetector(
                                     onTap: _toggleControls,
@@ -477,11 +474,6 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
                             ],
                           ),
                         ),
-                        if (isImage && _isZoomed)
-                          GestureDetector(
-                            onTap: _resetZoom,
-                            child: const Icon(FIcons.zoomOut, color: Colors.white, size: 24),
-                          ),
                       ],
                     ),
                   ),
@@ -526,67 +518,6 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
             ),
           ],
 
-          if (!isVideo)
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 300),
-              bottom: _showControls ? 0 : -80,
-              left: 0,
-              right: 0,
-              child: Container(
-                height: 80,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.7),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                isImage ? '图片' : isVideo ? '视频' : '文件',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              if (isImage)
-                                const Text(
-                                  '双指缩放 • 拖拽移动',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              if (isVideo)
-                                const Text(
-                                  '双击播放/暂停 • 点击视频显示/隐藏控制',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -602,6 +533,8 @@ class _FullscreenVideoPlayer extends StatefulWidget {
   final VoidCallback? onToggleControls;
   // 可选：HTTP 头用于鉴权播放
   final Map<String, String>? httpHeaders;
+  // 外部传入的控制器，用于复用已加载的视频
+  final VideoPlayerController? externalController;
 
   const _FullscreenVideoPlayer({
     super.key,
@@ -611,6 +544,7 @@ class _FullscreenVideoPlayer extends StatefulWidget {
     this.parentControlsVisible = false,
     this.onToggleControls,
     this.httpHeaders,
+    this.externalController,
   });
 
   @override
@@ -638,6 +572,8 @@ class _FullscreenVideoPlayerState extends State<_FullscreenVideoPlayer> {
   final FocusNode _focusNode = FocusNode();
   Timer? _volumeAdjustTimer;
   LogicalKeyboardKey? _currentPressedKey;
+  // 标记是否使用外部控制器
+  bool _usingExternalController = false;
 
   @override
   void initState() {
@@ -651,23 +587,47 @@ class _FullscreenVideoPlayerState extends State<_FullscreenVideoPlayer> {
 
   Future<void> _initializeVideo() async {
     try {
-      _controller = VideoPlayerController.networkUrl(
-        Uri.parse(widget.videoUrl),
-        httpHeaders: widget.httpHeaders ?? const <String, String>{},
-      );
-      await _controller.initialize();
-      
-      if (mounted) {
-        setState(() {
-          _isInitialized = true;
-        });
+      // 如果有外部控制器，直接使用
+      if (widget.externalController != null) {
+        _controller = widget.externalController!;
+        _usingExternalController = true;
         
-        if (widget.autoPlay) {
-          _controller.play();
+        if (mounted) {
+          setState(() {
+            _isInitialized = _controller.value.isInitialized;
+          });
+          
+          if (_isInitialized) {
+            _volume = _controller.value.volume;
+            _isMuted = _volume == 0.0;
+            _controller.addListener(_videoListener);
+            
+            // 如果需要自动播放且当前没有播放
+            if (widget.autoPlay && !_controller.value.isPlaying) {
+              _controller.play();
+            }
+          }
         }
-        _controller.setVolume(_volume);
+      } else {
+        // 没有外部控制器，创建新的
+        _controller = VideoPlayerController.networkUrl(
+          Uri.parse(widget.videoUrl),
+          httpHeaders: widget.httpHeaders ?? const <String, String>{},
+        );
+        await _controller.initialize();
         
-        _controller.addListener(_videoListener);
+        if (mounted) {
+          setState(() {
+            _isInitialized = true;
+          });
+          
+          if (widget.autoPlay) {
+            _controller.play();
+          }
+          _controller.setVolume(_volume);
+          
+          _controller.addListener(_videoListener);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -691,9 +651,11 @@ class _FullscreenVideoPlayerState extends State<_FullscreenVideoPlayer> {
       if (remaining <= const Duration(milliseconds: 100) && _controller.value.isPlaying) {
         _controller.pause();
         _controller.seekTo(duration);
-        setState(() {});
       }
     }
+    
+    // 每次都调用 setState 以更新进度条
+    setState(() {});
   }
 
   @override
@@ -701,7 +663,10 @@ class _FullscreenVideoPlayerState extends State<_FullscreenVideoPlayer> {
     _hideVolumeOverlay();
     _volumeAdjustTimer?.cancel();
     _controller.removeListener(_videoListener);
-    _controller.dispose();
+    // 只有内部创建的控制器才需要销毁，外部控制器由外部管理
+    if (!_usingExternalController) {
+      _controller.dispose();
+    }
     _focusNode.dispose();
     super.dispose();
   }

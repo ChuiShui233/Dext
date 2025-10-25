@@ -27,7 +27,7 @@ class _GlassFabMenuState extends State<GlassFabMenu> {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isLargeScreen = screenWidth > 600; // 大屏幕阈值
+    final isLargeScreen = screenWidth > 600;
 
     final double mainButtonSize = isLargeScreen ? 68 : 60;
     final double iconSize = isLargeScreen ? 28 : 24;
@@ -37,11 +37,9 @@ class _GlassFabMenuState extends State<GlassFabMenu> {
       vertical: isLargeScreen ? 10 : 8,
     );
 
-    // 主按钮图标颜色：浅色用深色、深色用白色
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color fabFg = isDark ? Colors.white : const Color(0xFF222222);
 
-    // 玻璃底色整体调暗（面板与主按钮各自略有差异）
     final Color panelBg = isDark
         ? Colors.black.withValues(alpha: 0.50)
         : Colors.black.withValues(alpha: 0.12);
@@ -58,7 +56,6 @@ class _GlassFabMenuState extends State<GlassFabMenu> {
       child: Stack(
         alignment: Alignment.bottomRight,
         children: [
-          // 菜单面板（显示在主按钮上方）
           AnimatedSlide(
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
@@ -126,7 +123,6 @@ class _GlassFabMenuState extends State<GlassFabMenu> {
             ),
           ),
 
-          // 主按钮（玻璃风格）
           GestureDetector(
             onTap: _toggle,
             child: GlassCard(

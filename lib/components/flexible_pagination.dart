@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 
-/// 通用分页组件：统一三处页面的分页 UI 与逻辑
-/// - 使用 FPagination + 信息文本（共 N 条记录，第 P / T 页）
 class FlexiblePagination extends StatelessWidget {
   final FPaginationController controller;
   final int currentPage; // 1-based

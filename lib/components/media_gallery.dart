@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:video_player/video_player.dart';
 import '../components/video_player_widget.dart';
 import '../services/config.dart';
 import '../components/loading_indicator.dart';
@@ -10,7 +11,7 @@ class MediaGallery extends StatelessWidget {
   final Size? videoItemSize; 
   final bool enableVideoPlayer;
   final bool showVideoOverlay; 
-  final void Function(int index, String url, List<String> all)? onOpen;
+  final void Function(int index, String url, List<String> all, {VideoPlayerController? controller})? onOpen;
   /// 是否启用自适应高度模式（只限制高度，宽度自适应图片比例）
   final bool adaptiveHeight;
   final String? authToken;
@@ -56,7 +57,11 @@ class MediaGallery extends StatelessWidget {
               final pct = progress.progress != null
                   ? '加载中 ${(progress.progress! * 100).toInt()}%'
                   : '加载中...';
-              return Center(child: LoadingIndicator.inline(message: pct));
+              return SizedBox(
+                width: adaptiveHeight ? w : null,
+                height: adaptiveHeight ? h : null,
+                child: Center(child: LoadingIndicator.inline(message: pct)),
+              );
             },
             errorWidget: (context, _, __) => Container(color: Colors.grey.shade200, child: const Icon(Icons.error)),
           );
@@ -74,7 +79,7 @@ class MediaGallery extends StatelessWidget {
               httpHeaders: authToken != null && authToken!.isNotEmpty
                   ? { 'Authorization': 'Bearer ${authToken!}' }
                   : null,
-              onOpen: onOpen == null ? null : () => onOpen!(index, absUrl, mediaUrls.map(toAbsoluteUrl).toList()),
+              onOpen: onOpen == null ? null : (controller) => onOpen!(index, absUrl, mediaUrls.map(toAbsoluteUrl).toList(), controller: controller),
               showFullscreenButton: onOpen != null,
             );
           } else {
@@ -86,20 +91,26 @@ class MediaGallery extends StatelessWidget {
           mediaWidget = const Center(child: Icon(Icons.file_present, size: 40));
         }
 
-        Widget thumb = Container(
-          width: adaptiveHeight ? null : w,
-          height: h,
-          constraints: adaptiveHeight ? BoxConstraints(maxHeight: h) : null,
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.shade300),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Stack(
-              fit: adaptiveHeight ? StackFit.passthrough : StackFit.loose,
-              children: [
-                adaptiveHeight ? mediaWidget : Positioned.fill(child: Center(child: mediaWidget)),
+        Widget thumb = AnimatedSize(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          alignment: Alignment.centerLeft,
+          child: Container(
+            width: adaptiveHeight ? null : w,
+            height: adaptiveHeight ? null : h,
+            constraints: adaptiveHeight 
+                ? BoxConstraints(maxHeight: h, maxWidth: w * 2) 
+                : null,
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Stack(
+                fit: adaptiveHeight ? StackFit.passthrough : StackFit.loose,
+                children: [
+                  adaptiveHeight ? mediaWidget : Positioned.fill(child: Center(child: mediaWidget)),
                 if (isVideo && showVideoOverlay && !enableVideoPlayer)
                   Positioned.fill(
                     child: Container(
@@ -126,6 +137,7 @@ class MediaGallery extends StatelessWidget {
               ],
             ),
           ),
+        ),
         );
 
         // 仅在非视频或未启用内置播放器时，用外层点击打开全屏；

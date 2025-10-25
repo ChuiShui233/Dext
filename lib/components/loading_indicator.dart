@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 
-/// 统一的加载指示器组件，使用 Forui 主题样式
 class LoadingIndicator extends StatelessWidget {
   final LoadingSize size;
   final String? message;

@@ -27,7 +27,6 @@ class GlassButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Stack(
           children: [
-            // 毛玻璃背景
             BackdropFilter(
               filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
               child: Container(
@@ -46,7 +45,6 @@ class GlassButton extends StatelessWidget {
                 ),
               ),
             ),
-            // 按钮内容与Ripple
             Material(
               type: MaterialType.transparency,
               child: InkWell(

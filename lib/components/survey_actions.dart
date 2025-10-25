@@ -302,7 +302,6 @@ class SurveyActions extends StatelessWidget {
       spacing: 8,
       runSpacing: 6,
       children: [
-        // 如果问卷已发布，显示公开链接按钮
         if (survey.surveyStatus == 1)
           FButton(
             style: FButtonStyle.outline,

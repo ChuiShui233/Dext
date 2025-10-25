@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:video_player/video_player.dart';
 import '../components/loading_indicator.dart';
 import '../components/glass_card.dart';
 import '../components/media_gallery.dart';
@@ -155,7 +156,7 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
               adaptiveHeight: true,
               authToken: widget.authToken,
               onOpen: widget.onMediaOpen != null 
-                ? (index, url, all) => widget.onMediaOpen!(url, all, index)
+                ? (index, url, all, {VideoPlayerController? controller}) => widget.onMediaOpen!(url, all, index)
                 : _defaultMediaOpen,
             ),
           ],
@@ -724,17 +725,13 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
               : TextFormField(
                   initialValue: currentAnswer,
                   maxLines: multiline ? 5 : 1,
-                  maxLength: maxLength > 0 ? maxLength : null,
                   decoration: InputDecoration(
                     hintText: placeholder,
                     hintStyle: TextStyle(
                       color: isDark ? Colors.grey[400] : Colors.grey[600],
                     ),
                     border: InputBorder.none,
-                    counterStyle: TextStyle(
-                      color: isDark ? Colors.grey[400] : Colors.grey[600],
-                      fontSize: 12,
-                    ),
+                    counterText: '',
                   ),
                   style: TextStyle(
                     color: isDark ? Colors.white : Colors.black87,
@@ -747,10 +744,12 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
         ),
         const SizedBox(height: 8),
         Text(
-          '${multiline ? '多行' : '单行'}输入框，最多 $maxLength 个字符',
+          '${multiline ? '多行' : '单行'}输入框，当前 ${currentAnswer.length}/$maxLength 字符',
           style: TextStyle(
             fontSize: 12,
-            color: isDark ? Colors.grey[400] : Colors.grey[600],
+            color: currentAnswer.length > maxLength 
+                ? (isDark ? Colors.red[300] : Colors.red[700])
+                : (isDark ? Colors.grey[400] : Colors.grey[600]),
           ),
         ),
       ],
@@ -815,7 +814,7 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
     );
   }
 
-  void _defaultMediaOpen(int index, String url, List<String> allUrls) {
+  void _defaultMediaOpen(int index, String url, List<String> allUrls, {VideoPlayerController? controller}) {
     Navigator.push(
       context,
       PageRouteBuilder(
@@ -828,6 +827,7 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
           title: '问卷媒体',
           allMediaUrls: allUrls,
           currentIndex: index,
+          externalVideoController: controller,
         ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(

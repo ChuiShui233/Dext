@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 import '../widgets/top_safe_spacer.dart';
 import 'package:forui/forui.dart';
 import '../models/survey.dart';
@@ -54,12 +55,12 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
       final backgroundData =
           await _apiService.getSurveyBackground(widget.survey.id);
       if (!mounted) return;
-      setState(() {
-        _desktopBackground = backgroundData['desktopBackground'] as String?;
-        _mobileBackground = backgroundData['mobileBackground'] as String?;
-      });
-      // 延迟标记加载完成，触发淡入动画
-      await Future.delayed(const Duration(milliseconds: 0));
+      
+      _desktopBackground = backgroundData['desktopBackground'] as String?;
+      _mobileBackground = backgroundData['mobileBackground'] as String?;
+      
+      await _preloadBackground();
+      
       if (!mounted) return;
       setState(() {
         _backgroundLoaded = true;
@@ -75,6 +76,20 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
     }
   }
 
+  Future<void> _preloadBackground() async {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWide = screenWidth > 800;
+    final backgroundUrl = isWide ? _desktopBackground : _mobileBackground;
+    
+    if (backgroundUrl == null || backgroundUrl.isEmpty) {
+      return;
+    }
+   {
+      final imageProvider = NetworkImage(toAbsoluteUrl(backgroundUrl));
+      await precacheImage(imageProvider, context);
+    } 
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -85,10 +100,16 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: AnimatedOpacity(
-              opacity: _backgroundLoaded ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 600),
-              curve: Curves.easeInOut,
+            child: TweenAnimationBuilder<double>(
+              duration: const Duration(milliseconds: 800),
+              curve: Curves.easeOutCubic,
+              tween: Tween(begin: _backgroundLoaded ? 0.0 : 1.0, end: 0.0),
+              builder: (context, value, child) {
+                return Transform.translate(
+                  offset: Offset(MediaQuery.of(context).size.width * value, 0),
+                  child: child,
+                );
+              },
               child: (_desktopBackground != null && _desktopBackground!.isNotEmpty) ||
                      (_mobileBackground != null && _mobileBackground!.isNotEmpty)
                   ? Container(
@@ -256,7 +277,7 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
   }
 
 
-  void _openFullscreenViewer(String mediaUrl, List<String> allMediaUrls, int currentIndex) {
+  void _openFullscreenViewer(String mediaUrl, List<String> allMediaUrls, int currentIndex, {VideoPlayerController? controller}) {
     Navigator.of(context).push(
       PageRouteBuilder(
         opaque: false, // 允许下层页面透出
@@ -269,6 +290,7 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
           allMediaUrls: allMediaUrls,
           currentIndex: currentIndex,
           authToken: widget.token,
+          externalVideoController: controller,
         ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           // 组合动画：缩放 + 淡入 + 轻微位移

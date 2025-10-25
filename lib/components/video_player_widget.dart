@@ -9,8 +9,8 @@ class VideoPlayerWidget extends StatefulWidget {
   final double? height;
   final bool autoPlay;
   final bool showControls;
-  // When provided, a fullscreen button can be shown which will call this.
-  final VoidCallback? onOpen;
+  // When provided, a fullscreen button can be shown which will call this with the controller.
+  final void Function(VideoPlayerController controller)? onOpen;
   // Whether to show the built-in fullscreen button (top-right)
   final bool showFullscreenButton;
   // Optional HTTP headers for authenticated requests
@@ -176,11 +176,11 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
                         child: InkWell(
                           borderRadius: BorderRadius.circular(16),
                           onTap: () {
-                            // Pause first, then open
+                            // Pause first, then open with the controller
                             if (_controller.value.isPlaying) {
                               _controller.pause();
                             }
-                            widget.onOpen?.call();
+                            widget.onOpen?.call(_controller);
                           },
                           child: Container(
                             decoration: BoxDecoration(

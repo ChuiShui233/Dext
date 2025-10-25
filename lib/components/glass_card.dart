@@ -1,7 +1,7 @@
-import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../services/settings_service.dart';
+import '../widgets/downscaled_blur.dart';
 
 class GlassCard extends StatelessWidget {
   final Widget child;
@@ -11,7 +11,6 @@ class GlassCard extends StatelessWidget {
   final Color? backgroundColor;
   final Color? borderColor;
   final EdgeInsetsGeometry? margin;
-  /// 可选覆盖是否启用毛玻璃
   final bool? frosted;
 
   const GlassCard({
@@ -30,10 +29,10 @@ class GlassCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final Color bg = backgroundColor ?? (isDark 
-        ? Colors.black.withAlpha(102) // ~40% 深色模式使用更深的黑色
-        : CupertinoColors.white.withAlpha(51)); // ~20% 浅色模式保持原样
+        ? Colors.black.withAlpha(102)
+        : CupertinoColors.white.withAlpha(51));
     final Color bd = borderColor ?? (isDark
-        ? Colors.white.withAlpha(38) // ~15% 深色模式边框稍微淡一些
+        ? Colors.white.withAlpha(38)
         : CupertinoColors.white.withAlpha(51));
     final ShapeBorder effectiveShape = shape ?? RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(borderRadius),
@@ -43,10 +42,8 @@ class GlassCard extends StatelessWidget {
     late final ShapeBorder paintShape;
     if (effectiveShape is OutlinedBorder) {
       if (useFrost) {
-        // 毛玻璃开启：添加边框
         paintShape = effectiveShape.copyWith(side: BorderSide(color: bd, width: 0.8));
       } else {
-        // 毛玻璃关闭：显式移除边框
         paintShape = effectiveShape.copyWith(side: BorderSide.none);
       }
     } else {
@@ -56,9 +53,12 @@ class GlassCard extends StatelessWidget {
     Widget baseChild;
     
     if (useFrost) {
-      // 毛玻璃模式：使用 BackdropFilter
-      baseChild = BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+      baseChild = DownscaledBackdropBlur(
+        sigma: blurSigma,
+        downscale: 0.3,
+        clipRadius: effectiveShape is RoundedRectangleBorder 
+            ? effectiveShape.borderRadius.resolve(TextDirection.ltr)
+            : null,
         child: Container(
           decoration: ShapeDecoration(
             color: bg,
@@ -69,10 +69,8 @@ class GlassCard extends StatelessWidget {
         ),
       );
     } else {
-      // 非毛玻璃模式：叠加遮罩提高不透明度
       baseChild = Stack(
         children: [
-          // 底层：基础背景
           Positioned.fill(
             child: Container(
               decoration: ShapeDecoration(
@@ -81,7 +79,6 @@ class GlassCard extends StatelessWidget {
               ),
             ),
           ),
-          // 中层：遮罩层
           Positioned.fill(
             child: Container(
               decoration: ShapeDecoration(
@@ -92,7 +89,6 @@ class GlassCard extends StatelessWidget {
               ),
             ),
           ),
-          // 顶层：内容
           child,
         ],
       );

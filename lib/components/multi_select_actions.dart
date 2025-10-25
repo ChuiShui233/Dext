@@ -253,7 +253,6 @@ class _MultiSelectActionsState extends State<MultiSelectActions> {
   }
 }
 
-// 多选项目组件 - 现代化圆形复选框
 class MultiSelectItem extends StatefulWidget {
   final int id;
   final bool isSelected;
@@ -320,7 +319,7 @@ class _MultiSelectItemState extends State<MultiSelectItem>
 
     return Stack(
       children: [
-        // 为卡片添加左侧内边距，为多选按钮留出空间
+
         Padding(
           padding: const EdgeInsets.only(left: 52),
           child: widget.child,

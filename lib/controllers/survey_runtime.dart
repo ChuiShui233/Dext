@@ -11,14 +11,9 @@ enum MultiJumpStrategy { first, last, none }
 class SurveyRuntimeController {
   final List<Question> questions;
   final MultiJumpStrategy multiJumpStrategy;
-
-  // 答案：questionId -> 选中的文本列表（单选用第一项，多选多项）
   final Map<int, List<String>> answers = {};
-
-  // 可见题集合（按路径计算）
   final Set<int> visibleQuestionIds = <int>{};
 
-  // 是否命中“结束问卷”
   bool ended = false;
 
   SurveyRuntimeController({
@@ -61,12 +56,6 @@ class SurveyRuntimeController {
     }
   }
 
-  /// 按当前答案重算可见题路径。
-  /// 规则：
-  /// - 从第一题开始依次扩展可见集合
-  /// - 遇到未作答的题停止（只显示到当前题）
-  /// - 单/多选根据策略选择 pivot 选项，若选项 destination==-1 则结束问卷
-  /// - destination 指向有效题则跳转，否则顺序下一题
   void recomputeVisible() {
     final ordered = [...questions]..sort((a, b) => a.order.compareTo(b.order));
     visibleQuestionIds.clear();

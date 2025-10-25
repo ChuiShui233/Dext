@@ -96,72 +96,71 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
 
       final data = await _apiService.getPublicSurvey(widget.surveyUID);
       
-      setState(() {
-        surveyName = data['surveyName'] ?? '';
-        description = data['description'] ?? '';
-        _desktopBackground = data['desktopBackground'] as String?;
-        _mobileBackground = data['mobileBackground'] as String?;
-        autoSubmit = data['autoSubmit'] ?? false;
-        allowAnonymous = data['allowAnonymous'] ?? false;
-        
-        final questionsData = data['questions'] as List? ?? [];
-        questions = questionsData.map((q) {
-          List<QuestionOption> options = [];
-          try {
-            final optionsData = q['options'];
-            if (optionsData is List) {
-              options = optionsData.map((o) => QuestionOption.fromJson(o)).toList();
-            } else if (optionsData is String) {
-              // JSON字符串格式
-              final optionsList = json.decode(optionsData) as List;
-              options = optionsList.map((o) => QuestionOption.fromJson(o)).toList();
-            }
-          } catch (e) {
-            if (kDebugMode) {
-              print('解析选项失败: $e');
-            }
-          }
-
-          // 解析媒体URLs
-          List<String> mediaUrls = [];
-          try {
-            final mediaUrlsData = q['mediaUrls'];
-            if (mediaUrlsData is List) {
-              mediaUrls = mediaUrlsData.cast<String>();
-            }
-          } catch (e) {
-            // 解析媒体URL失败，使用空列表
-            if (kDebugMode) {
-              print('解析媒体URL失败: $e');
-            }
-          }
-
-          return Question(
-            id: q['id'] ?? 0,
-            title: q['title'] ?? '',
-            type: _parseQuestionType(q['questionType'] ?? 1),
-            options: options,
-            required: q['required'] ?? true,
-            order: q['order'] ?? 0,
-            mediaUrls: mediaUrls,
-            imageScale: (q['imageScale'] as num?)?.toDouble() ?? 1.0,
-          );
-        }).toList();
-        
-        questions.sort((a, b) => a.order.compareTo(b.order));
-        
-        _runtime = SurveyRuntimeController(
-          questions: questions,
-          multiJumpStrategy: MultiJumpStrategy.first,
-        );
-        _runtime!.recomputeVisible();
-        
-        isLoading = false;
-      });
+      surveyName = data['surveyName'] ?? '';
+      description = data['description'] ?? '';
+      _desktopBackground = data['desktopBackground'] as String?;
+      _mobileBackground = data['mobileBackground'] as String?;
+      autoSubmit = data['autoSubmit'] ?? false;
+      allowAnonymous = data['allowAnonymous'] ?? false;
       
-      await Future.delayed(const Duration(milliseconds: 50));
+      final questionsData = data['questions'] as List? ?? [];
+      questions = questionsData.map((q) {
+        List<QuestionOption> options = [];
+        try {
+          final optionsData = q['options'];
+          if (optionsData is List) {
+            options = optionsData.map((o) => QuestionOption.fromJson(o)).toList();
+          } else if (optionsData is String) {
+            // JSON字符串格式
+            final optionsList = json.decode(optionsData) as List;
+            options = optionsList.map((o) => QuestionOption.fromJson(o)).toList();
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('解析选项失败: $e');
+          }
+        }
+
+        // 解析媒体URLs
+        List<String> mediaUrls = [];
+        try {
+          final mediaUrlsData = q['mediaUrls'];
+          if (mediaUrlsData is List) {
+            mediaUrls = mediaUrlsData.cast<String>();
+          }
+        } catch (e) {
+          // 解析媒体URL失败，使用空列表
+          if (kDebugMode) {
+            print('解析媒体URL失败: $e');
+          }
+        }
+
+        return Question(
+          id: q['id'] ?? 0,
+          title: q['title'] ?? '',
+          type: _parseQuestionType(q['questionType'] ?? 1),
+          options: options,
+          required: q['required'] ?? true,
+          order: q['order'] ?? 0,
+          mediaUrls: mediaUrls,
+          imageScale: (q['imageScale'] as num?)?.toDouble() ?? 1.0,
+        );
+      }).toList();
+      
+      questions.sort((a, b) => a.order.compareTo(b.order));
+      
+      _runtime = SurveyRuntimeController(
+        questions: questions,
+        multiJumpStrategy: MultiJumpStrategy.first,
+      );
+      _runtime!.recomputeVisible();
+      
+      // 预加载背景图片
+      await _preloadBackground();
+      
       if (!mounted) return;
       setState(() {
+        isLoading = false;
         _backgroundLoaded = true;
       });
     } on TokenExpired catch (_) {
@@ -179,6 +178,28 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
         errorMessage = ErrorFormatter.format(e);
         _backgroundLoaded = true;
       });
+    }
+  }
+
+  /// 预加载背景图片
+  Future<void> _preloadBackground() async {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWide = screenWidth > 800;
+    final backgroundUrl = isWide ? _desktopBackground : _mobileBackground;
+    
+    if (backgroundUrl == null || backgroundUrl.isEmpty) {
+      // 没有背景图片，直接返回
+      return;
+    }
+    
+    try {
+      final imageProvider = NetworkImage(toAbsoluteUrl(backgroundUrl));
+      await precacheImage(imageProvider, context);
+    } catch (e) {
+      // 背景加载失败不影响问卷显示
+      if (kDebugMode) {
+        print('背景图片预加载失败: $e');
+      }
     }
   }
 
@@ -255,7 +276,6 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
       _runtime?.setAnswerSingle(questionId, value);
       _runtime?.recomputeVisible();
     });
-    _checkAutoSubmit();
   }
 
   void _scrollToBottom() {
@@ -325,6 +345,52 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
           ),
         );
         return;
+      }
+      
+      // 检查输入题字数限制
+      if (question.type == QuestionType.textInput && a != null && a.isNotEmpty) {
+        final answer = a.first;
+        int maxLength = 500;
+        
+        // 从选项中解析 maxLength 配置
+        if (question.options.isNotEmpty) {
+          try {
+            final configText = question.options.first.text;
+            final parts = configText.split('|');
+            for (final part in parts) {
+              if (part.startsWith('maxLength:')) {
+                maxLength = int.tryParse(part.substring('maxLength:'.length).trim()) ?? 500;
+                break;
+              }
+            }
+          } catch (e) {
+            // 忽略解析错误
+          }
+        }
+        
+        if (answer.length > maxLength) {
+          showFToast(
+            context: context,
+            alignment: FToastAlignment.bottomRight,
+            title: const Text('提示'),
+            description: Text('某题目的答案超过字数限制（当前 ${answer.length}，最多 $maxLength 字）'),
+            suffixBuilder: (context, entry, _) => IntrinsicHeight(
+              child: FButton(
+                style: context.theme.buttonStyles.primary.copyWith(
+                  contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                    textStyle: FWidgetStateMap.all(
+                      context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
+                    ),
+                  ),
+                ),
+                onPress: entry.dismiss,
+                child: const Text('关闭'),
+              ),
+            ),
+          );
+          return;
+        }
       }
     }
 
@@ -481,10 +547,16 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: AnimatedOpacity(
-              opacity: _backgroundLoaded ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 600),
-              curve: Curves.easeInOut,
+            child: TweenAnimationBuilder<double>(
+              duration: const Duration(milliseconds: 800),
+              curve: Curves.easeOutCubic,
+              tween: Tween(begin: _backgroundLoaded ? 0.0 : 1.0, end: 0.0),
+              builder: (context, value, child) {
+                return Transform.translate(
+                  offset: Offset(MediaQuery.of(context).size.width * value, 0),
+                  child: child,
+                );
+              },
               child: (_desktopBackground != null && _desktopBackground!.isNotEmpty) ||
                      (_mobileBackground != null && _mobileBackground!.isNotEmpty)
                   ? Container(

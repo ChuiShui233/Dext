@@ -1,16 +1,10 @@
 name: dext
 description: "问卷调查"
-# 以下行防止包意外发布到 pub.dev 使用 `flutter pub publish`。对于私有包，建议保留此行。
 publish_to: 'none' # 如果您希望发布到 pub.dev，请移除此行
 version: 1.0.6+1020
 
 environment:
   sdk: ^3.7.2
-
-# 依赖项指定了您的包在工作时需要的其他包。
-# 考虑运行 `flutter pub upgrade --major-versions` 以自动将包依赖项升级到最新版本。
-# 手动更新依赖项可以通过将版本号更改为 pub.dev 上的最新版本。
-# 运行 `flutter pub outdated` 可以查看哪些依赖项有可用的新版本。
 dependencies:
   basic_utils: ^5.8.2
   crypto: ^3.0.6
@@ -65,10 +59,7 @@ dependencies:
       url: https://github.com/ChuiShui233/crop_image_plus.git
       ref: master
   shimmer: ^3.0.0
-
-  # 以下 "flutter_lints" 包包含一组建议的 lints 以鼓励良好的编码实践。
-  # 在 `analysis_options.yaml` 文件中激活了包提供的 lint 集。
-  # 查看该文件以了解如何停用特定的 lint 规则以及激活其他 lint 规则。
+  photo_view: ^0.15.0
   flutter_lints: ^5.0.0
 
 flutter:

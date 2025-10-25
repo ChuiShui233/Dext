@@ -2,12 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
 import 'package:forui/forui.dart';
 
-/// 统一的下拉刷新包装组件
-/// 
-/// 封装了SmartRefresher的通用配置，包括：
-/// - 无滚动条
-/// - Forui风格刷新图标
-/// - 弹性滚动物理效果
 class PullToRefreshWrapper extends StatelessWidget {
   final RefreshController controller;
   final VoidCallback onRefresh;
