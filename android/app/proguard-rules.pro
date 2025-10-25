@@ -50,8 +50,8 @@
 -dontnote kotlinx.coroutines.debug.**
 
 -assumenosideeffects class kotlin.jvm.internal.Intrinsics {
-    public static void check*(...) return;
-    public static void throw*(...) return;
+    public static void check*(...);
+    public static void throw*(...);
 }
 
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
