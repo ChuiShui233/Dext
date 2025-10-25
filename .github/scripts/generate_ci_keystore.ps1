@@ -2,7 +2,7 @@
 
 Write-Host "🔑 Generating temporary CI signing keystore..." -ForegroundColor Cyan
 
-# 生成随机密码
+# Generate random password (use same for both store and key to avoid issues)
 function Generate-RandomPassword {
     param([int]$Length = 25)
     $bytes = New-Object byte[] 32
@@ -12,8 +12,7 @@ function Generate-RandomPassword {
     return $base64 -replace '[=+/]', '' | Select-Object -First 1 | ForEach-Object { $_.Substring(0, [Math]::Min($Length, $_.Length)) }
 }
 
-$KEYSTORE_PASSWORD = Generate-RandomPassword
-$KEY_PASSWORD = Generate-RandomPassword
+$CI_PASSWORD = Generate-RandomPassword
 $KEY_ALIAS = "ci_key_$(Get-Date -Format 'yyyyMMddHHmmss')"
 
 Write-Host "Key alias: $KEY_ALIAS"
@@ -25,38 +24,51 @@ if (-not $keytoolPath) {
     exit 1
 }
 
+# Ensure the directory exists
+New-Item -ItemType Directory -Force -Path "android\app" | Out-Null
+
 # Generate keystore
 $keystorePath = "android\app\ci-release.keystore"
 $dname = "CN=CI Build, OU=CI, O=Dext, L=GitHub, ST=Actions, C=US"
 
-& keytool -genkey -v `
+& keytool -genkeypair -v `
+  -storetype PKCS12 `
   -keystore $keystorePath `
   -alias $KEY_ALIAS `
   -keyalg RSA `
   -keysize 2048 `
   -validity 365 `
-  -storepass $KEYSTORE_PASSWORD `
-  -keypass $KEY_PASSWORD `
+  -storepass $CI_PASSWORD `
+  -keypass $CI_PASSWORD `
   -dname $dname
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Keystore generation failed" -ForegroundColor Red
+    Write-Host "❌ Keystore generation failed" -ForegroundColor Red
     exit 1
 }
 
 Write-Host ""
-Write-Host "Keystore generated successfully" -ForegroundColor Green
+Write-Host "✅ Keystore generated successfully" -ForegroundColor Green
+
+# Verify keystore
+Write-Host "Verifying keystore..."
+& keytool -list -v -keystore $keystorePath -storepass $CI_PASSWORD > $null 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "❌ Keystore verification failed" -ForegroundColor Red
+    exit 1
+}
+Write-Host "✅ Keystore verified" -ForegroundColor Green
 
 # Create key.properties file
 $keyPropertiesContent = @"
-storePassword=$KEYSTORE_PASSWORD
-keyPassword=$KEY_PASSWORD
+storePassword=$CI_PASSWORD
+keyPassword=$CI_PASSWORD
 keyAlias=$KEY_ALIAS
 storeFile=ci-release.keystore
 "@
 
 $keyPropertiesContent | Out-File -FilePath "android\key.properties" -Encoding ASCII
 
-Write-Host "key.properties file created" -ForegroundColor Green
+Write-Host "✅ key.properties file created" -ForegroundColor Green
 Write-Host ""
-Write-Host "CI signing setup complete!" -ForegroundColor Green
+Write-Host "🎉 CI signing setup complete!" -ForegroundColor Green
