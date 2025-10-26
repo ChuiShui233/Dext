@@ -22,6 +22,9 @@ import 'public_survey_page.dart';
 import '../utils/error_formatter.dart';
 import '../services/config.dart';
 
+// 全局：移动布局下侧边栏是否处于打开（或正在展开）状态
+final ValueNotifier<bool> mobileSidebarOpen = ValueNotifier<bool>(false);
+
 final showSidebarInDrawer = LayoutValue(xs: true, md: false);
 final showSidebarInline = LayoutValue(xs: false, md: true);
 
@@ -131,6 +134,7 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
   void dispose() {
     widget.userNotifier?.removeListener(_handleUserUpdate);
     _menuController.dispose();
+    if (mobileSidebarOpen.value) mobileSidebarOpen.value = false;
     // _backdropImage?.dispose(); // 可选：某些平台需要显式释放
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -164,9 +168,11 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
         if (_menuController.value > 0.01) {
           _scheduleBackdropUpdate();
           _ensureBackdropLoop();
+          if (!mobileSidebarOpen.value) mobileSidebarOpen.value = true;
         } else {
           // 侧边栏关闭：停止帧循环
           _backdropLoopActive = false;
+          if (mobileSidebarOpen.value) mobileSidebarOpen.value = false;
         }
       });
       // 首次渲染后截一次图
@@ -199,22 +205,9 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
       return 1.0;
     }
 
-    // 扩大从屏幕左缘开始的拖拽触发范围，适配不同宽度与DPR
+    // 从用户设置中获取侧滑触发范围
     double _edgeDragWidth(BuildContext context) {
-      final mq = MediaQuery.of(context);
-      final w = mq.size.width;
-      final dpr = mq.devicePixelRatio;
-      // 基础 24px，窄屏或高DPR增加到 32~44px
-      double base = 24.0;
-      if (w < 360) {
-        base = 44.0;
-      } else if (w < 400) {
-        base = 36.0;
-      }
-      if (dpr >= 3.0 && base < 40.0) {
-        base = 40.0;
-      }
-      return base;
+      return SettingsService().edgeDragWidth;
     }
 
     // 根据屏幕宽度/方向/DPI 计算侧边栏宽度，保持在合理范围
@@ -365,6 +358,7 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
     // 进入桌面布局时，强制收起移动侧栏动画，避免残留聚焦背景/圆角
     if (showDesktopLayout && _menuController.value != 0.0) {
       _menuController.value = 0.0;
+      if (mobileSidebarOpen.value) mobileSidebarOpen.value = false;
     }
 
     // 统一采用嵌套 Navigator 承载右侧内容区域，避免切换桌面/移动布局时丢失栈

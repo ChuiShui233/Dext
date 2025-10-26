@@ -282,7 +282,8 @@ class _CreateSurveyPageState extends State<CreateSurveyPage> with TickerProvider
 
       await apiService.createSurvey(survey);
       if (!mounted) return;
-      Navigator.pop(context, true);
+      // 返回新建问卷名称，便于上级页面展示“创建成功：名称”提示
+      Navigator.pop(context, _titleController.text.trim());
     } catch (e) {
       if (!mounted) return;
       showFToast(

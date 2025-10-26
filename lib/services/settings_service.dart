@@ -14,12 +14,14 @@ class SettingsService {
   late String _windowCloseDefaultAction;
   late String _themeMode;
   late bool _glassCardEnabled;
+  late double _edgeDragWidth;
 
   // 设置键名常量
   static const String keyWindowCloseDontAsk = 'window_close_dont_ask';
   static const String keyWindowCloseDefaultAction = 'window_close_default_action';
   static const String keyThemeMode = 'theme_mode';
   static const String keyGlassCardEnabled = 'glass_card_enabled';
+  static const String keyEdgeDragWidth = 'edge_drag_width';
 
   /// 初始化设置服务（在 main 函数中调用）
   Future<void> initialize() async {
@@ -31,6 +33,7 @@ class SettingsService {
     _windowCloseDefaultAction = _prefs!.getString(keyWindowCloseDefaultAction) ?? 'ask';
     _themeMode = _prefs!.getString(keyThemeMode) ?? 'system';
     _glassCardEnabled = _prefs!.getBool(keyGlassCardEnabled) ?? true;
+    _edgeDragWidth = _prefs!.getDouble(keyEdgeDragWidth) ?? 24.0;
     
     _isInitialized = true;
   }
@@ -91,6 +94,18 @@ class SettingsService {
     await _prefs!.setBool(keyGlassCardEnabled, value);
   }
 
+  // === 侧滑触发范围设置 ===
+  double get edgeDragWidth {
+    _ensureInitialized();
+    return _edgeDragWidth;
+  }
+
+  Future<void> setEdgeDragWidth(double value) async {
+    _ensureInitialized();
+    _edgeDragWidth = value;
+    await _prefs!.setDouble(keyEdgeDragWidth, value);
+  }
+
   // === 通用方法 ===
   
   Future<void> clear() async {
@@ -106,5 +121,6 @@ class SettingsService {
     _windowCloseDefaultAction = _prefs!.getString(keyWindowCloseDefaultAction) ?? 'ask';
     _themeMode = _prefs!.getString(keyThemeMode) ?? 'system';
     _glassCardEnabled = _prefs!.getBool(keyGlassCardEnabled) ?? true;
+    _edgeDragWidth = _prefs!.getDouble(keyEdgeDragWidth) ?? 24.0;
   }
 }

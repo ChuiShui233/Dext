@@ -612,68 +612,102 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
 
   Widget _buildErrorView() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return AdaptiveMessageCard(
-      cardWrapper: (content) => _buildGlassCard(child: content),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset(
-            'assets/images/loading.gif',
-            width: 64,
-            height: 64,
-            color: Colors.red[400],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            errorMessage!,
-            style: TextStyle(
-              fontSize: 16,
-              color: isDark ? Colors.white : Colors.black87,
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeOutCubic,
+      tween: Tween(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
+        return Transform.translate(
+          offset: Offset(0, 50 * (1 - value)),
+          child: Transform.scale(
+            scale: 0.8 + (0.2 * value),
+            child: Opacity(
+              opacity: value,
+              child: child,
             ),
-            textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 24),
-          GlassButton(
-            text: '返回主界面',
-            color: Colors.blue,
-            onPressed: () => Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false),
-          ),
-        ],
+        );
+      },
+      child: AdaptiveMessageCard(
+        cardWrapper: (content) => _buildGlassCard(child: content),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(
+              'assets/images/loading.gif',
+              width: 64,
+              height: 64,
+              color: Colors.red[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              errorMessage!,
+              style: TextStyle(
+                fontSize: 16,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            GlassButton(
+              text: '返回主界面',
+              color: Colors.blue,
+              onPressed: () => Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildSuccessView() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return AdaptiveMessageCard(
-      cardWrapper: (content) => _buildGlassCard(child: content),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.check_circle, size: 64, color: Colors.green[400]),
-          const SizedBox(height: 16),
-          Text(
-            '问卷提交成功！',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : Colors.black87,
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeOutCubic,
+      tween: Tween(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
+        return Transform.translate(
+          offset: Offset(0, 50 * (1 - value)),
+          child: Transform.scale(
+            scale: 0.8 + (0.2 * value),
+            child: Opacity(
+              opacity: value,
+              child: child,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            '感谢您的参与！',
-            style: TextStyle(
-              color: isDark ? Colors.white70 : Colors.black54,
+        );
+      },
+      child: AdaptiveMessageCard(
+        cardWrapper: (content) => _buildGlassCard(child: content),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check_circle, size: 64, color: Colors.green[400]),
+            const SizedBox(height: 16),
+            Text(
+              '问卷提交成功！',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
-          GlassButton(
-            text: '返回',
-            color: Colors.green,
-            onPressed: () => _navigateToPublicAccess(),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              '感谢您的参与！',
+              style: TextStyle(
+                color: isDark ? Colors.white70 : Colors.black54,
+              ),
+            ),
+            const SizedBox(height: 24),
+            GlassButton(
+              text: '返回',
+              color: Colors.green,
+              onPressed: () => _navigateToPublicAccess(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -798,39 +832,22 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
         
         // 提交按钮
         if (_areAllRequiredQuestionsAnswered())
-          _buildGlassCard(
-            child: Padding(
-              padding: const EdgeInsets.all(4),
-              child: Opacity(
-                opacity: 0.77,
-                child: ElevatedButton(
-                  onPressed: isSubmitting ? null : _submitAnswers,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isDark ? Colors.blue[600] : Colors.blue[700],
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            child: isSubmitting
+                ? Opacity(
+                    opacity: 0.6,
+                    child: GlassButton(
+                      text: '提交中...',
+                      color: Colors.blue,
+                      onPressed: () {},
                     ),
-                    elevation: 0,
+                  )
+                : GlassButton(
+                    text: '提交问卷',
+                    color: Colors.blue,
+                    onPressed: _submitAnswers,
                   ),
-                  child: isSubmitting
-                      ? const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            LoadingIndicator.button(
-                            ),
-                            SizedBox(width: 12),
-                            Text('提交中...', style: TextStyle(fontSize: 16)),
-                          ],
-                        )
-                      : const Text(
-                          '提交问卷',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
-                ),
-              ),
-            ),
           ),
             ]),
           ),

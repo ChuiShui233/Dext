@@ -78,11 +78,11 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
   }
 
   void _onRefresh() async {
-    await _loadSurveys(silent: false);
+    await _loadSurveys(silent: false, skipCache: true);
     _refreshController.refreshCompleted();
   }
 
-  Future<void> _loadSurveys({bool silent = false}) async {
+  Future<void> _loadSurveys({bool silent = false, bool skipCache = false}) async {
     if (!mounted) return;
     
     if (!silent) {
@@ -90,7 +90,7 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
     }
     
     try {
-      final surveys = await _apiService.getSurveys();
+      final surveys = await _apiService.getSurveys(skipCache: skipCache);
       if (!mounted) return;
       
       setState(() {

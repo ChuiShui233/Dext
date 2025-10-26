@@ -114,8 +114,8 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
     await Future.delayed(const Duration(seconds: 1));
     
     try {
-      // 使用分页加载，避免一次性加载全部列表
-      await _loadProjects(silent: true);
+      // 使用分页加载，避免一次性加载全部列表；手动刷新时跳过缓存，强制获取最新数据
+      await _loadProjects(silent: true, skipCache: true);
       if (!mounted) {
         _refreshController.refreshCompleted();
         return;
@@ -322,9 +322,21 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                 if (!mounted) return;
                 if (!context.mounted) return;
                 Navigator.pop(context);
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _refreshController.requestRefresh();
-                });
+                // 创建成功后，重置到第1页并强制跳过缓存拉取最新数据
+                if (mounted) {
+                  // 成功提示
+                  showFToast(
+                    context: context,
+                    alignment: FToastAlignment.bottomRight,
+                    title: const Text('创建成功'),
+                    description: Text('项目 “${nameController.text.trim()}” 已创建，正在刷新列表...'),
+                    duration: const Duration(milliseconds: 1800),
+                  );
+                  setState(() {
+                    _currentPage = 1;
+                  });
+                  await _loadProjects(silent: false, skipCache: true);
+                }
               } catch (e) {
                 if (!mounted) return;
                 if (!context.mounted) return;

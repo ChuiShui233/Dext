@@ -177,8 +177,8 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     await Future.delayed(const Duration(seconds: 1));
     
     try {
-      // 使用分页加载，避免一次性加载全部列表；同时刷新项目缓存
-      await _loadData(silent: true, refreshProjects: true);
+      // 使用分页加载，避免一次性加载全部列表；同时刷新项目缓存。手动刷新时跳过缓存，强制获取最新数据
+      await _loadData(silent: true, refreshProjects: true, skipCache: true);
       if (!mounted) {
         _refreshController.refreshCompleted();
         return;
@@ -610,7 +610,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                         final projects = await _apiService.getProjects();
                         if (!mounted) return;
                         
-                        final result = context.mounted ? await Navigator.push<bool>(
+                        final result = context.mounted ? await Navigator.push<dynamic>(
                           context,
                           MaterialPageRoute(
                             builder: (context) => CreateSurveyPage(
@@ -620,10 +620,26 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                           ),
                         ) : null;
                         
-                        if (result == true) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            _refreshController.requestRefresh();
-                          });
+                        if (result == true || (result is String && result.trim().isNotEmpty)) {
+                          // 成功提示
+                          if (context.mounted) {
+                            showFToast(
+                              context: context,
+                              alignment: FToastAlignment.bottomRight,
+                              title: const Text('创建成功'),
+                              description: Text(result is String && result.trim().isNotEmpty
+                                  ? '问卷 “${result.trim()}” 已创建，正在刷新列表...'
+                                  : '问卷已创建，正在刷新列表...'),
+                              duration: const Duration(milliseconds: 1800),
+                            );
+                          }
+                          // 创建成功后，回到第1页并强制跳过缓存拉取最新数据
+                          if (mounted) {
+                            setState(() {
+                              _currentPage = 1;
+                            });
+                            await _loadData(silent: false, refreshProjects: true, skipCache: true);
+                          }
                         }
                       },
                     ),
@@ -733,7 +749,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                           final projects = await _apiService.getProjects();
                                           if (!mounted) return;
                                           
-                                          final result = context.mounted ? await Navigator.push<bool>(
+                                          final result = context.mounted ? await Navigator.push<dynamic>(
                                             context,
                                             MaterialPageRoute(
                                               builder: (context) => CreateSurveyPage(
@@ -743,10 +759,26 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                             ),
                                           ) : null;
                                           
-                                          if (result == true) {
-                                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                                              _refreshController.requestRefresh();
-                                            });
+                                          if (result == true || (result is String && result.trim().isNotEmpty)) {
+                                            // 成功提示
+                                            if (context.mounted) {
+                                              showFToast(
+                                                context: context,
+                                                alignment: FToastAlignment.bottomRight,
+                                                title: const Text('创建成功'),
+                                                description: Text(result is String && result.trim().isNotEmpty
+                                                    ? '问卷 “${result.trim()}” 已创建，正在刷新列表...'
+                                                    : '问卷已创建，正在刷新列表...'),
+                                                duration: const Duration(milliseconds: 1800),
+                                              );
+                                            }
+                                            // 创建成功后，回到第1页并强制跳过缓存拉取最新数据
+                                            if (mounted) {
+                                              setState(() {
+                                                _currentPage = 1;
+                                              });
+                                              await _loadData(silent: false, refreshProjects: true, skipCache: true);
+                                            }
                                           }
                                         },
                                         child: const Text('创建新问卷'),

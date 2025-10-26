@@ -44,6 +44,11 @@ final ThemeData lightTheme = ThemeData(
   highlightColor: Colors.transparent,
   hoverColor: Colors.transparent,
   splashFactory: NoSplash.splashFactory,
+  checkboxTheme: const CheckboxThemeData(
+    overlayColor: WidgetStatePropertyAll(Colors.transparent),
+    splashRadius: 0,
+    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  ),
   textButtonTheme: TextButtonThemeData(
     style: ButtonStyle(
       overlayColor: const WidgetStatePropertyAll(Colors.transparent),
@@ -107,6 +112,11 @@ final ThemeData darkTheme = ThemeData(
   highlightColor: Colors.transparent,
   hoverColor: Colors.transparent,
   splashFactory: NoSplash.splashFactory,
+  checkboxTheme: const CheckboxThemeData(
+    overlayColor: WidgetStatePropertyAll(Colors.transparent),
+    splashRadius: 0,
+    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  ),
   textButtonTheme: TextButtonThemeData(
     style: ButtonStyle(
       overlayColor: const WidgetStatePropertyAll(Colors.transparent),

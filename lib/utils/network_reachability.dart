@@ -39,10 +39,6 @@ class NetworkReachability {
         print('网络已断开');
       }
       haveNetBlock?.call('none');
-    } else {
-      if (kDebugMode) {
-        print('网络已连接，类型：$result');
-      }
       haveNetBlock?.call('connected');
     }
   }

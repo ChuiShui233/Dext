@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:dext/services/api_service.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:layout/layout.dart';
@@ -157,9 +156,6 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
         onLogout: widget.onLogout,
         onThemeModeChange: widget.onThemeModeChange,
         onChangeAvatar: () {
-    if (kDebugMode) {
-      print('修改头像');
-    }
   },
         apiService: widget.apiService,
         userNotifier: widget.userNotifier,
@@ -194,14 +190,18 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
             ) : null,
             body: LayoutBuilder(
               builder: (context, constraints) {
+                final Widget current = AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  switchInCurve: Curves.fastOutSlowIn,
+                  switchOutCurve: Curves.fastOutSlowIn.flipped,
+                  child: contents[widget.currentIndex],
+                );
+                if (widget.currentIndex == 2) {
+                  return current;
+                }
                 return Padding(
                   padding: padding,
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    switchInCurve: Curves.fastOutSlowIn,
-                    switchOutCurve: Curves.fastOutSlowIn.flipped,
-                    child: contents[widget.currentIndex],
-                  ),
+                  child: current,
                 );
               },
             ),

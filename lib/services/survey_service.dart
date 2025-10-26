@@ -12,11 +12,11 @@ class SurveyService {
   SurveyService(this.core);
 
   // ===== Surveys =====
-  Future<List<Survey>> getSurveys({StatusCallback? onStatus}) async {
+  Future<List<Survey>> getSurveys({StatusCallback? onStatus, bool skipCache = false}) async {
     final prefs = await core.prefs();
     const cacheKey = 'surveys_cache';
     final cached = prefs.getString(cacheKey);
-    if (cached != null) {
+    if (cached != null && !skipCache) {
       try {
         onStatus?.call(RequestStatus.loading, '正在加载缓存数据...');
         core.updateStatus(RequestStatus.loading, '正在加载缓存数据...');

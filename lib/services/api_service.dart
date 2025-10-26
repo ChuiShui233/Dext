@@ -1830,8 +1830,8 @@ class ApiService {
   }
 
   // 问卷相关API（带实时响应）
-  Future<List<Survey>> getSurveys({StatusCallback? onStatus}) async {
-    return await _surveyService.getSurveys(onStatus: onStatus);
+  Future<List<Survey>> getSurveys({StatusCallback? onStatus, bool skipCache = false}) async {
+    return await _surveyService.getSurveys(onStatus: onStatus, skipCache: skipCache);
   }
 
   Future<PaginatedResponse<Survey>> getSurveysPaginated({

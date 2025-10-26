@@ -7,8 +7,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../models/user.dart';
 import 'package:file_picker/file_picker.dart';
+import 'dart:async';
 import 'dart:io';
 import '../services/config.dart';
+import 'frame_page.dart' show mobileSidebarOpen;
 import '../widgets/crop_image_dialog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'account_security_page.dart';
@@ -285,23 +287,26 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        centerTitle: true,
+        elevation: 0,
+        title: const Text('设置'),
+      ),
       body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(horizontalPadding, 4, horizontalPadding, 4),
+        padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 8),
         child: Column(
           children: [
-            const SizedBox(height: 20),
+            const SizedBox(height: 8),
             _buildUserInfoCard(theme),
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
             _buildThemeCard(context),
-            const SizedBox(height: 18),
-            if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) ...[
-              _buildDesktopSettingsCard(context, theme),
-              const SizedBox(height: 18),
-            ],
+            const SizedBox(height: 8),
+            _buildClientSettingsCard(context, theme),
+            const SizedBox(height: 8),
             _buildAccountCard(context, theme),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
             _buildAppearanceEffectsCard(context),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
             _buildAppInfoCard(context, theme),
             if (isMobile || isCompactWidth) const SizedBox(height: 50),
           ],
@@ -401,15 +406,18 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
   }
 
   // ==================== 桌面端设置卡片 ====================
-  Widget _buildDesktopSettingsCard(BuildContext context, ThemeData theme) {
+  Widget _buildClientSettingsCard(BuildContext context, ThemeData theme) {
+    final settingsService = SettingsService();
+    final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+    
     return FutureBuilder<Map<String, dynamic>>(
-      future: _loadDesktopSettings(),
+      future: _loadClientSettings(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return _buildSectionCard(
             context,
-            title: '桌面端设置',
-            icon: Icons.desktop_windows_outlined,
+            title: '客户端设置',
+            icon: Icons.tune_outlined,
             children: const [
               Padding(
                 padding: EdgeInsets.all(20),
@@ -420,28 +428,43 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
         }
         
         final settings = snapshot.data!;
-        final currentAction = settings['window_close_default_action'] as String;
-        String currentDisplayValue;
+        final currentEdgeDragWidth = settings['edge_drag_width'] as double;
         
-        switch (currentAction) {
-          case 'hide':
-            currentDisplayValue = '隐藏到托盘';
-            break;
-          case 'close':
-            currentDisplayValue = '直接关闭';
-            break;
-          case 'ask':
-          default:
-            currentDisplayValue = '每次询问';
-        }
+        final List<Widget> children = [];
         
-        return _buildSectionCard(
-          context,
-          title: '桌面端设置',
-          icon: Icons.desktop_windows_outlined,
-          children: [
+        // 侧滑触发范围设置（所有端可见）
+        children.add(
+          _EdgeDragWidgetCard(
+            key: ValueKey(currentEdgeDragWidth),
+            initialValue: currentEdgeDragWidth,
+            theme: theme,
+            onChanged: (value) {
+              settingsService.setEdgeDragWidth(value);
+              // 不需要立即 setState，避免频繁重建
+            },
+          ),
+        );
+        
+        // 窗口关闭行为设置（仅桌面端显示）
+        if (isDesktop) {
+          final currentAction = settings['window_close_default_action'] as String;
+          String currentDisplayValue;
+          
+          switch (currentAction) {
+            case 'hide':
+              currentDisplayValue = '隐藏到托盘';
+              break;
+            case 'close':
+              currentDisplayValue = '直接关闭';
+              break;
+            case 'ask':
+            default:
+              currentDisplayValue = '每次询问';
+          }
+          
+          children.add(
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -505,15 +528,23 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
                 ],
               ),
             ),
-          ],
+          );
+        }
+        
+        return _buildSectionCard(
+          context,
+          title: '客户端设置',
+          icon: Icons.tune_outlined,
+          children: children,
         );
       },
     );
   }
 
-  Future<Map<String, dynamic>> _loadDesktopSettings() async {
+  Future<Map<String, dynamic>> _loadClientSettings() async {
     final settings = SettingsService();
     return {
+      'edge_drag_width': settings.edgeDragWidth,
       'window_close_dont_ask': settings.windowCloseDontAsk,
       'window_close_default_action': settings.windowCloseDefaultAction,
     };
@@ -723,6 +754,17 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
           color: theme.dividerColor.withValues(alpha: 0.1),
         ),
         _buildNoHighlightListTile(
+          title: const Text('恢复默认设置'),
+          trailing: Icon(Icons.arrow_forward_ios,
+              size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
+          onTap: () => _resetToDefaults(context),
+        ),
+        Divider(
+          height: 1,
+          thickness: 1,
+          color: theme.dividerColor.withValues(alpha: 0.1),
+        ),
+        _buildNoHighlightListTile(
           title: const Text('隐私政策'),
           trailing: Icon(Icons.arrow_forward_ios,
               size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
@@ -792,6 +834,69 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
     }
   }
 
+    Future<void> _resetToDefaults(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => FDialog(
+        direction: Axis.horizontal,
+        title: const Text('恢复默认设置'),
+        body: const Text('确定要将所有设置恢复为默认值吗？\n这将包括主题、侧滑范围、窗口行为等所有设置。'),
+        actions: [
+          FButton(
+            style: FButtonStyle.ghost,
+            onPress: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FButton(
+            onPress: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('确认'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final localContext = context;
+      try {
+        final settings = SettingsService();
+        
+        // 恢复主题为系统默认
+        await settings.setThemeMode('system');
+        widget.onThemeModeChange(ThemeMode.system);
+        
+        // 恢复侧滑触发范围为 24px
+        await settings.setEdgeDragWidth(24.0);
+        
+        // 恢复窗口关闭行为为每次询问
+        await settings.setWindowCloseDontAsk(false);
+        await settings.setWindowCloseDefaultAction('ask');
+        
+        // 恢复毛玻璃卡片为开启
+        await settings.setGlassCardEnabled(true);
+        
+        if (mounted && localContext.mounted) {
+          setState(() {}); // 刷新UI
+          
+          showFToast(
+            context: localContext,
+            alignment: FToastAlignment.bottomRight,
+            title: const Text('恢复成功'),
+            description: const Text('所有设置已恢复为默认值'),
+          );
+        }
+      } catch (e) {
+        if (mounted && localContext.mounted) {
+          showFToast(
+            context: localContext,
+            alignment: FToastAlignment.bottomRight,
+            title: const Text('恢复失败'),
+            description: Text('恢复默认设置失败: $e'),
+          );
+        }
+      }
+    }
+  }
+
   // ==================== 工具方法 ====================
   Widget _buildSectionCard(BuildContext context,
       {required String title,
@@ -799,39 +904,28 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
       required List<Widget> children}) {
     final theme = Theme.of(context);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.cardColor.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-            child: Row(
-              children: [
-                Icon(icon, size: 20, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface),
-                ),
-              ],
+    return Theme(
+      data: theme.copyWith(dividerColor: Colors.transparent),
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        decoration: const BoxDecoration(
+          color: Colors.transparent,
+        ),
+        child: ExpansionTile(
+          leading: Icon(icon, size: 20, color: theme.colorScheme.primary),
+          title: Text(
+            title,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface,
             ),
           ),
-          ...children,
-        ],
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          initiallyExpanded: false,
+          children: children,
+        ),
       ),
     );
   }
@@ -948,6 +1042,234 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
     );
   }
 
+}
+
+// 独立的侧滑触发范围卡片小部件
+class _EdgeDragWidgetCard extends StatefulWidget {
+  final double initialValue;
+  final ThemeData theme;
+  final ValueChanged<double> onChanged;
+
+  const _EdgeDragWidgetCard({
+    super.key,
+    required this.initialValue,
+    required this.theme,
+    required this.onChanged,
+  });
+
+  @override
+  State<_EdgeDragWidgetCard> createState() => _EdgeDragWidgetCardState();
+}
+
+class _EdgeDragWidgetCardState extends State<_EdgeDragWidgetCard> {
+  late FDiscreteSliderController _controller;
+  late double _currentValue;
+  // 全局覆盖层（页面最左侧）
+  OverlayEntry? _previewOverlay;
+  final ValueNotifier<double> _overlayWidth = ValueNotifier<double>(0);
+  final ValueNotifier<double> _overlayOpacity = ValueNotifier<double>(0);
+  Timer? _hidePreviewTimer;
+  Timer? _deferredShowTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentValue = widget.initialValue;
+    _controller = FDiscreteSliderController(
+      selection: FSliderSelection(
+        max: (_currentValue - 16) / 48,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _hidePreviewTimer?.cancel();
+    _deferredShowTimer?.cancel();
+    _removeOverlay();
+    _overlayWidth.dispose();
+    _overlayOpacity.dispose();
+    super.dispose();
+  }
+
+  void _ensureOverlay() {
+    if (_previewOverlay != null) return;
+    _previewOverlay = OverlayEntry(
+      builder: (context) {
+        // 全屏遮罩，左侧淡蓝色区域根据 _overlayWidth 变化
+        return IgnorePointer(
+          ignoring: true,
+          child: SafeArea(
+            left: false,
+            right: false,
+            top: false,
+            bottom: false,
+            child: Stack(
+              children: [
+                ValueListenableBuilder<double>(
+                  valueListenable: _overlayOpacity,
+                  builder: (context, opacity, child) {
+                    return AnimatedOpacity(
+                      duration: const Duration(milliseconds: 180),
+                      opacity: opacity.clamp(0.0, 1.0),
+                      child: child,
+                    );
+                  },
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: ValueListenableBuilder<double>(
+                      valueListenable: _overlayWidth,
+                      builder: (context, width, _) {
+                        return Container(
+                          width: width,
+                          height: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.lightBlueAccent.withValues(alpha: 0.18),
+                            border: Border(
+                              right: BorderSide(
+                                color: Colors.lightBlueAccent.withValues(alpha: 0.35),
+                                width: 1,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    Overlay.of(context, rootOverlay: true).insert(_previewOverlay!);
+  }
+
+  void _removeOverlay() {
+    _previewOverlay?.remove();
+    _previewOverlay = null;
+    _deferredShowTimer?.cancel();
+  }
+
+  void _showGlobalPreview(double pixels) {
+    // 以“移动布局”判定（窄屏）而非“移动端平台”
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bool isCompactLayout = screenWidth < 1025;
+    final scaffoldState = Scaffold.maybeOf(context);
+    final bool isDrawerOpen = scaffoldState?.isDrawerOpen ?? false;
+    if (!isCompactLayout) {
+      // 非移动布局时隐藏
+      _overlayOpacity.value = 0;
+      _hidePreviewTimer?.cancel();
+      _deferredShowTimer?.cancel();
+      Future.delayed(const Duration(milliseconds: 200), _removeOverlay);
+      return;
+    }
+    // 抽屉或移动侧边栏处于打开/展开中：直接不显示（并移除已有预览）
+    if (isDrawerOpen || mobileSidebarOpen.value) {
+      _overlayOpacity.value = 0;
+      _hidePreviewTimer?.cancel();
+      _deferredShowTimer?.cancel();
+      Future.delayed(const Duration(milliseconds: 150), () {
+        if (mounted) _removeOverlay();
+      });
+      return;
+    }
+
+    // 延迟一点再创建预览，期间若侧边栏开始打开则不显示，避免“先显后隐”的闪烁
+    _deferredShowTimer?.cancel();
+    _deferredShowTimer = Timer(const Duration(milliseconds: 80), () {
+      if (!mounted) return;
+      final s = Scaffold.maybeOf(context);
+      final bool drawerNow = s?.isDrawerOpen ?? false;
+      if (drawerNow || mobileSidebarOpen.value) {
+        // 期间侧边栏打开：不显示
+        return;
+      }
+      // 创建并更新覆盖层
+      _ensureOverlay();
+      _overlayWidth.value = pixels.clamp(0, screenWidth);
+      _overlayOpacity.value = 1.0;
+
+      // 延时自动隐藏
+      _hidePreviewTimer?.cancel();
+      _hidePreviewTimer = Timer(const Duration(milliseconds: 800), () {
+        _overlayOpacity.value = 0.0;
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (mounted) {
+            _removeOverlay();
+          }
+        });
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                '侧滑触发范围',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              ),
+              Text(
+                '${_currentValue.toInt()}px',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: widget.theme.colorScheme.primary.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '调整从屏幕左侧边缘触发侧边栏的距离',
+            style: TextStyle(
+              fontSize: 12,
+              color: widget.theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 8),
+          FSlider(
+            tooltipBuilder: (style, value) {
+              final pixels = (16 + value * 48).round();
+              return Text('${pixels}px');
+            },
+            controller: _controller,
+            onChange: (selection) {
+              // 对于离散滑块，应该读取 offset.max 而不是 extent.max
+              final normalizedValue = _controller.selection.offset.max;
+              final pixels = 16 + normalizedValue * 48;
+              // 避免在构建阶段直接 setState，延迟到下一帧
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                setState(() {
+                  _currentValue = pixels;
+                });
+                _showGlobalPreview(pixels);
+                widget.onChanged(pixels);
+              });
+            },
+            marks: const [
+              FSliderMark(value: 0, label: Text('16px')),
+              FSliderMark(value: 0.25, tick: false),
+              FSliderMark(value: 0.5, label: Text('40px')),
+              FSliderMark(value: 0.75, tick: false),
+              FSliderMark(value: 1, label: Text('64px')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // 独立小部件以便保持 trailing 尺寸合适并读取当前设置值
