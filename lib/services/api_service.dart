@@ -508,6 +508,11 @@ class ApiService {
         
         final token = responseData['token'];
         final expires = DateTime.parse(responseData['expires']);
+        final refreshToken = responseData['refresh_token'];
+        final refreshExpiresStr = responseData['refresh_expires'];
+        final DateTime? refreshExpires = refreshExpiresStr != null && refreshExpiresStr.toString().isNotEmpty
+            ? DateTime.tryParse(refreshExpiresStr.toString())
+            : null;
         
         authToken = token?.toString();
         _core.updateAuthToken(authToken);
@@ -515,6 +520,16 @@ class ApiService {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('auth_token', authToken ?? '');
           await prefs.setString('auth_token_expires', expires.toIso8601String());
+          if (refreshToken != null && refreshToken.toString().isNotEmpty) {
+            await prefs.setString('refresh_token', refreshToken.toString());
+            if (refreshExpires != null) {
+              await prefs.setString('refresh_token_expires', refreshExpires.toIso8601String());
+            }
+            try {
+              const storage = FlutterSecureStorage();
+              await storage.write(key: 'refresh_token', value: refreshToken.toString());
+            } catch (_) {}
+          }
         } catch (_) {}
         
         onStatus?.call(RequestStatus.success, '登录成功');
@@ -1359,10 +1374,9 @@ class ApiService {
 
       // 仅对有请求体的方法（POST/PUT/DELETE）尝试AES加密；GET保持原样
       final upperMethod = method.toUpperCase();
-      final canEncryptBody = (upperMethod == 'POST' || upperMethod == 'PUT' || upperMethod == 'DELETE')
-          && data != null
-          && _cryptoService.currentSessionKey != null
-          && !_isMediaUrl(url);
+      final isBodyMethod = (upperMethod == 'POST' || upperMethod == 'PUT' || upperMethod == 'DELETE');
+      final needsEncryption = isBodyMethod && data != null && !_isMediaUrl(url);
+      final canEncryptBody = needsEncryption && _cryptoService.currentSessionKey != null;
 
       if (canEncryptBody) {
         // 使用AES-GCM加密请求体
@@ -1396,8 +1410,11 @@ class ApiService {
           default:
             throw '不支持的HTTP方法: $method';
         }
+      } else if (needsEncryption) {
+        // 需要加密但当前没有会话密钥时，回退到 RSA 加密，避免被后端拒绝为未加密请求
+        return await _encryptedRequest(method, url, data, onStatus: onStatus, allowRetry: allowRetry);
       } else {
-        // 非加密路径（GET、无数据、媒体相关或无会话密钥时）保持原逻辑
+        // 非加密路径（GET、无数据、媒体相关）保持原逻辑
         final headers = _headers;
         switch (upperMethod) {
           case 'GET':
@@ -1466,68 +1483,27 @@ class ApiService {
         print('[RefreshToken] 当前内存 token: ${authToken?.substring(0, min(20, authToken?.length ?? 0))}...');
       }
       
-      // 优先使用当前内存 token
-      String? token = authToken;
-      // 如无内存token，尝试从本地取
-      if (token == null || token.isEmpty) {
-        if (kDebugMode) print('[RefreshToken] 内存 token 为空，从本地存储读取...');
+      // 读取刷新令牌（优先内存，其次本地安全存储/SharedPreferences）
+      String? rToken;
+      try {
         final prefs = await SharedPreferences.getInstance();
-        token = prefs.getString('auth_token');
-        if (token != null && token.isNotEmpty) {
-          authToken = token;
-          // 同步到核心层，确保headers中包含Authorization
-          _core.updateAuthToken(authToken);
-          if (kDebugMode) print('[RefreshToken] 从SharedPreferences恢复 token: ${token.substring(0, min(20, token.length))}...');
-        } else {
-          // 尝试从FlutterSecureStorage读取
-          if (kDebugMode) print('[RefreshToken] SharedPreferences没有 token，尝试从FlutterSecureStorage读取...');
-          try {
-            const storage = FlutterSecureStorage();
-            token = await storage.read(key: 'auth_token');
-            if (token != null && token.isNotEmpty) {
-              authToken = token;
-              _core.updateAuthToken(authToken);
-              // 同步回SharedPreferences
-              await prefs.setString('auth_token', token);
-              if (kDebugMode) print('[RefreshToken] 从FlutterSecureStorage恢复 token: ${token.substring(0, min(20, token.length))}...');
-            } else {
-              if (kDebugMode) print('[RefreshToken] FlutterSecureStorage也没有 token');
-            }
-          } catch (e) {
-            if (kDebugMode) print('[RefreshToken] 从FlutterSecureStorage读取失败: $e');
-          }
-        }
-      }
-      
-      // 检查是否有有效的token
-      if (authToken == null || authToken!.isEmpty) {
-        if (kDebugMode) print('[RefreshToken] ❌ 所有存储位置都没有有效的 token，无法刷新，需要重新登录');
+        rToken = await const FlutterSecureStorage().read(key: 'refresh_token');
+        rToken ??= prefs.getString('refresh_token');
+      } catch (_) {}
+      if (rToken == null || rToken.isEmpty) {
+        if (kDebugMode) print('[RefreshToken] ❌ 没有 refresh_token，无法刷新');
         return false;
       }
-      
-      // 再次确保token已同步到核心层
-      _core.updateAuthToken(authToken);
-      if (kDebugMode) {
-        print('[RefreshToken] Token 已同步到核心层');
-        print('[RefreshToken] 核心层 token: ${_core.authToken?.substring(0, min(20, _core.authToken?.length ?? 0))}...');
-      }
-      
-      // 最终检查：确保token不为空再发送请求
-      if (authToken == null || authToken!.isEmpty) {
-        if (kDebugMode) print('[RefreshToken] ❌ 发送前最终检查失败：token为空，取消请求');
-        return false;
-      }
-      
-      // 使用普通HTTP请求（不加密），因为后端已将refresh端点加入白名单
+
+      // 使用普通HTTP请求（不加密），请求体包含 refresh_token
       http.Response resp;
       final refreshUrl = '$baseUrl/api/auth/refresh';
-      final refreshData = {'refresh': true};
+      final refreshData = {'refresh_token': rToken};
       try {
-        // 使用普通HTTP请求，携带Authorization header
+        // 使用普通HTTP请求，无需Authorization
         final uri = Uri.parse(refreshUrl);
         final headers = {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer $authToken',  // 不使用if条件，直接添加（已确保authToken不为空）
         };
         
         if (kDebugMode) {
@@ -1556,17 +1532,24 @@ class ApiService {
         final body = json.decode(resp.body) as Map<String, dynamic>;
         final newToken = body['token']?.toString();
         final expiresStr = body['expires']?.toString();
+        final newRefresh = body['refresh_token']?.toString();
+        final newRefreshExpires = body['refresh_expires']?.toString();
         if (newToken != null && newToken.isNotEmpty) {
           authToken = newToken;
-          // 同步到核心请求层
           _core.updateAuthToken(authToken);
-          // 清空 AES 会话密钥，促使后续请求重新协商
           _cryptoService.clearSessionKey();
           try {
             final prefs = await SharedPreferences.getInstance();
             await prefs.setString('auth_token', newToken);
-            if (expiresStr != null) {
+            if (expiresStr != null && expiresStr.isNotEmpty) {
               await prefs.setString('auth_token_expires', expiresStr);
+            }
+            if (newRefresh != null && newRefresh.isNotEmpty) {
+              await prefs.setString('refresh_token', newRefresh);
+              try { await const FlutterSecureStorage().write(key: 'refresh_token', value: newRefresh); } catch (_){ }
+            }
+            if (newRefreshExpires != null && newRefreshExpires.isNotEmpty) {
+              await prefs.setString('refresh_token_expires', newRefreshExpires);
             }
           } catch (_) {}
           return true;
@@ -1578,8 +1561,11 @@ class ApiService {
           final prefs = await SharedPreferences.getInstance();
           await prefs.remove('auth_token');
           await prefs.remove('auth_token_expires');
+          await prefs.remove('refresh_token');
+          await prefs.remove('refresh_token_expires');
           const storage = FlutterSecureStorage();
           await storage.delete(key: 'auth_token');
+          await storage.delete(key: 'refresh_token');
         } catch (_) {}
         authToken = null;
         _core.updateAuthToken(null);

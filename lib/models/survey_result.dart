@@ -56,14 +56,37 @@ class AnswerDetail {
   });
 
   factory AnswerDetail.fromJson(Map<String, dynamic> json) {
+    // 兼容后端新旧字段：
+    // - 选项索引：优先 selectedOptions，其次 indices
+    // - 文本答案：优先 selectChoices，其次 answer（可能是字符串或字符串数组）
+    List<int> parseSelectedOptions(dynamic value) {
+      final list = (value as List<dynamic>?) ?? const [];
+      return list.map((e) {
+        if (e is int) return e;
+        final parsed = int.tryParse(e.toString());
+        return parsed ?? 0;
+      }).toList();
+    }
+
+    String parseSelectChoices(Map<String, dynamic> j) {
+      final direct = j['selectChoices'] as String?;
+      if (direct != null && direct.isNotEmpty) return direct;
+      final ans = j['answer'];
+      if (ans is String && ans.isNotEmpty) return ans;
+      if (ans is List && ans.isNotEmpty) return ans.first.toString();
+      return '';
+    }
+
+    final selected = json.containsKey('selectedOptions')
+        ? parseSelectedOptions(json['selectedOptions'])
+        : parseSelectedOptions(json['indices']);
+
     return AnswerDetail(
       id: json['id'] as int? ?? 0,
       answerId: json['answerId'] as int? ?? 0,
       questionId: json['questionId'] as int? ?? 0,
-      selectedOptions: (json['selectedOptions'] as List<dynamic>?)
-          ?.map((option) => option as int)
-          .toList() ?? [],
-      selectChoices: json['selectChoices'] as String? ?? '',
+      selectedOptions: selected,
+      selectChoices: parseSelectChoices(json),
     );
   }
 
