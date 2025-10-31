@@ -132,14 +132,6 @@ function IsDextRunning: Boolean;
 var
   hWnd: HWND;
 begin
-
-  hWnd := FindWindowByClassName('FLUTTER_RUNNER_WIN32_WINDOW', '');
-  if hWnd <> 0 then
-  begin
-    Result := True;
-    Exit;
-  end;
-  
   hWnd := FindWindowByClassName('', 'Dext');
   Result := hWnd <> 0;
 end;
@@ -157,9 +149,7 @@ begin
   RetryCount := 0;
   while IsDextRunning and (RetryCount < 3) do
   begin
-    hWnd := FindWindowByClassName('FLUTTER_RUNNER_WIN32_WINDOW', '');
-    if hWnd = 0 then
-      hWnd := FindWindowByClassName('', 'Dext');
+    hWnd := FindWindowByClassName('', 'Dext');
     
     if hWnd <> 0 then
     begin
@@ -186,7 +176,7 @@ begin
   
   hWnd := FindWindowByClassName('FLUTTER_RUNNER_WIN32_WINDOW', '');
   if hWnd = 0 then
-    hWnd := FindWindowByClassName('', 'Dext');
+  hWnd := FindWindowByClassName('', 'Dext');
   
   if hWnd <> 0 then
   begin
@@ -490,6 +480,43 @@ begin
       Result := False;
       Exit;
     end;
+  end;
+end;
+
+procedure CleanSharedPreferencesCache;
+var
+  ResultCode: Integer;
+begin
+  // 1. 清理 Windows 注册表中的 SharedPreferences (auth_token, refresh_token)
+  RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\dext');
+  RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\com.chuishui.Dext');
+  RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\ChuiShui233\Dext');
+  
+  // 2. 清理 FlutterSecureStorage 凭据 (auth_token, refresh_token, session_key)
+  Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "cmdkey /list | Out-String | ForEach-Object { if ($_ -match ''LegacyGeneric:target=key_Dext_\S+'') { $target = $matches[0]; cmdkey /delete:$target 2>$null } }"',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  
+  // 3. 清理应用数据目录
+  Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "Remove-Item $env:APPDATA\\dext -Recurse -Force -ErrorAction SilentlyContinue"',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  
+  Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "Remove-Item $env:LOCALAPPDATA\\dext -Recurse -Force -ErrorAction SilentlyContinue"',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+  begin
+    CleanSharedPreferencesCache;
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    CleanSharedPreferencesCache;
   end;
 end;
 

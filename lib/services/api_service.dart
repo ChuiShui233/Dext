@@ -3323,16 +3323,26 @@ Future<Question> addQuestion(
         onStatus?.call(RequestStatus.loading, '正在加载缓存数据...');
         _updateStatus(RequestStatus.loading, '正在加载缓存数据...');
         
-        final userData = json.decode(cached) as Map<String, dynamic>;
-        final user = User.fromJson(userData);
-        
-        onStatus?.call(RequestStatus.success, '缓存数据加载成功');
-        _updateStatus(RequestStatus.success, '缓存数据加载成功');
-        
-        // 静默刷新
-        _refreshCurrentUserSilently(prefs, cacheKey, user);
-        return user;
-      } catch (_) {
+        // 防御性检查：空字符串或非 JSON
+        if (cached.isEmpty || !cached.trim().startsWith('{')) {
+          debugPrint('[getCurrentUserHandler] 缓存格式异常，长度=${cached.length}，前100字符: ${cached.substring(0, cached.length > 100 ? 100 : cached.length)}');
+          await prefs.remove(cacheKey);
+          // 直接跳到网络获取
+        } else {
+          final userData = json.decode(cached) as Map<String, dynamic>;
+          final user = User.fromJson(userData);
+          
+          onStatus?.call(RequestStatus.success, '缓存数据加载成功');
+          _updateStatus(RequestStatus.success, '缓存数据加载成功');
+          
+          // 静默刷新
+          _refreshCurrentUserSilently(prefs, cacheKey, user);
+          return user;
+        }
+      } catch (e, st) {
+        debugPrint('[getCurrentUserHandler] 缓存解析失败: $e');
+        debugPrint('堆栈: $st');
+        await prefs.remove(cacheKey);
         onStatus?.call(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
         _updateStatus(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
       }
@@ -3397,13 +3407,78 @@ Future<Question> addQuestion(
       );
       
       if (response.statusCode == 200) {
-        final userData = json.decode(response.body) as Map<String, dynamic>;
-        prefs.setString(cacheKey, json.encode(userData));
-        final user = User.fromJson(userData);
-        onStatus?.call(RequestStatus.success, '用户信息获取成功');
-        _updateStatus(RequestStatus.success, '用户信息获取成功');
-        return user;
+        try {
+          // ignore: avoid_print
+          print('✅ [_refreshCurrentUser] HTTP 200 响应成功');
+          // ignore: avoid_print
+          print('响应头 x-encrypted: ${response.headers['x-encrypted']}');
+          // ignore: avoid_print
+          print('响应体原始长度: ${response.body.length}');
+          
+          String body;
+          
+          // 检查是否为加密响应
+          if (response.headers['x-encrypted'] == 'aes') {
+            // ignore: avoid_print
+            print('🔐 检测到加密响应，正在解密...');
+            try {
+              final sessionKey = _cryptoService.currentSessionKey;
+              if (sessionKey == null) {
+                throw '没有会话密钥，无法解密响应';
+              }
+              final encryptedBytes = response.bodyBytes;
+              final decryptedBytes = _cryptoService.decryptWithAES(encryptedBytes, sessionKey);
+              body = utf8.decode(decryptedBytes);
+              // ignore: avoid_print
+              print('✅ 解密成功，解密后长度: ${body.length}');
+            } catch (e) {
+              // ignore: avoid_print
+              print('❌ 解密失败: $e');
+              throw '响应解密失败: $e';
+            }
+          } else {
+            body = response.body;
+          }
+          
+          // 防御性检查：验证响应体
+          if (body.isEmpty) {
+            // ignore: avoid_print
+            print('❌ 响应体为空');
+            throw FormatException('服务器返回空响应');
+          }
+          if (!body.trim().startsWith('{') && !body.trim().startsWith('[')) {
+            // ignore: avoid_print
+            print('❌ 响应体非JSON，长度=${body.length}');
+            // ignore: avoid_print
+            print('前200字符: ${body.substring(0, body.length > 200 ? 200 : body.length)}');
+            throw FormatException('服务器返回非JSON响应');
+          }
+          
+          final userData = json.decode(body) as Map<String, dynamic>;
+          prefs.setString(cacheKey, json.encode(userData));
+          final user = User.fromJson(userData);
+          onStatus?.call(RequestStatus.success, '用户信息获取成功');
+          _updateStatus(RequestStatus.success, '用户信息获取成功');
+          return user;
+        } catch (e, st) {
+          // 使用 print 确保输出不被过滤
+          // ignore: avoid_print
+          print('❌❌❌ [_refreshCurrentUser] JSON解析失败 ❌❌❌');
+          // ignore: avoid_print
+          print('错误: $e');
+          // ignore: avoid_print
+          print('堆栈: $st');
+          // ignore: avoid_print
+          print('响应体长度: ${response.body.length}');
+          // ignore: avoid_print
+          print('响应体内容(前500字符): ${response.body.substring(0, response.body.length > 500 ? 500 : response.body.length)}');
+          rethrow;
+        }
       } else {
+        // ignore: avoid_print
+        print('❌ [_refreshCurrentUser] HTTP错误: ${response.statusCode}');
+        // ignore: avoid_print
+        print('响应体: ${response.body}');
         throw '获取用户信息失败: ${response.statusCode}';
       }
     } catch (e) {

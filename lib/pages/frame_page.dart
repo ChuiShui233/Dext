@@ -4,7 +4,6 @@ import 'dart:ui' as ui;
 import 'package:dext/widgets/frosted_glass_background.dart';
 import 'package:dext/widgets/downscaled_blur.dart';
 import 'package:dext/widgets/glass_sidebar_card.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -268,15 +267,14 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
             });
           }
         }
-      } catch (e) {
+      } catch (e, st) {
         if (mounted) {
           setState(() {
             _hasLoadedUser = true;
           });
         }
-        if (kDebugMode) {
-          print('获取用户数据失败: $e');
-        }
+        debugPrint('❌ [FramePage._fetchUserData] 获取用户数据失败: $e');
+        debugPrint('堆栈跟踪: $st');
       }
     }
 

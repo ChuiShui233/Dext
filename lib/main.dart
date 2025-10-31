@@ -138,6 +138,8 @@ Future<void> _initDesktopWindowAndTray() async {
 }
 
 void main(List<String> args) async {
+  // Run inside a zone to catch any uncaught async errors and print stacks
+  runZonedGuarded(() async {
   if (kDebugMode) {
     // 设置日志过滤器
     debugPrint = (String? message, {int? wrapWidth}) {
@@ -240,10 +242,24 @@ void main(List<String> args) async {
   SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(statusBarColor: Colors.transparent));
 
-  // 初始化设置服务
-  await SettingsService().initialize();
+  // 初始化设置服务（防御性处理，避免异常导致启动中断）
+  try {
+    await SettingsService().initialize();
+  } catch (e, st) {
+    debugPrint('SettingsService.initialize() 失败: $e');
+    debugPrint('$st');
+  }
 
   runApp(const YuMeng233App());
+  }, (error, stack) {
+    // 打印未捕获异常，避免静默失败
+    // 不做过滤，完整输出便于定位
+    // 注意：仍然会在控制台可见
+    // 如果需要上报，可在此处集成上报逻辑
+    // ignore: avoid_print
+    debugPrint('未捕获异常: $error');
+    debugPrint('$stack');
+  });
 }
 
 class YuMeng233App extends StatefulWidget {
@@ -414,7 +430,24 @@ class _YuMeng233AppState extends State<YuMeng233App>
     final expiry = await _storage.read(key: 'token_expiry');
 
     if (token != null && expiry != null) {
-      final expiryDate = DateTime.parse(expiry);
+      DateTime? expiryDate;
+      try {
+        expiryDate = DateTime.tryParse(expiry);
+      } catch (_) {
+        expiryDate = null;
+      }
+
+      if (expiryDate == null) {
+        // 存储中的过期时间异常，清理并回到登录
+        await _storage.delete(key: 'auth_token');
+        await _storage.delete(key: 'token_expiry');
+        setState(() {
+          _token = null;
+          _tokenExpiry = null;
+        });
+        return;
+      }
+
       if (expiryDate.isAfter(DateTime.now())) {
         setState(() {
           _token = token;
