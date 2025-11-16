@@ -18,6 +18,7 @@ import '../widgets/question_display_widget.dart';
 import 'edit_question/edit_question_page.dart';
 import 'survey_preview_page.dart';
 import '../services/config.dart';
+import '../services/settings_service.dart';
 
 
 class EditSurveyContentPage extends StatefulWidget {
@@ -35,11 +36,56 @@ class EditSurveyContentPage extends StatefulWidget {
   State<EditSurveyContentPage> createState() => _EditSurveyContentPageState();
 }
 
+class _InteractiveScale extends StatefulWidget {
+  final Widget child;
+
+  const _InteractiveScale({
+    required this.child,
+  });
+
+  @override
+  State<_InteractiveScale> createState() => _InteractiveScaleState();
+}
+
+class _InteractiveScaleState extends State<_InteractiveScale> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  double get _scale {
+    if (_pressed) return 0.98;
+    if (_hovered) return 1.02;
+    return 1.0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => setState(() => _pressed = true),
+        onPointerUp: (_) => setState(() => _pressed = false),
+        onPointerCancel: (_) => setState(() => _pressed = false),
+        child: AnimatedScale(
+          scale: _scale,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+
 class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
   late final ApiService _apiService;
   List<Question> _questions = [];
   bool _isLoading = false;
+  bool _isBgLoading = false;
+  static const double _bottomButtonHeight = 44.0;
   bool _isDragOver = false;
+  bool _showDragHandle = false;
   String? _desktopBackground;
   String? _mobileBackground;
   bool _isDesktopPreview = true;
@@ -48,7 +94,11 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
   String? _lastMeasuredUrl;
   double? _bgNaturalWidth;
   double? _bgNaturalHeight;
-  bool _isBgLoading = true;
+  
+  // 上传进度相关
+  bool _isUploadingBackground = false;
+  double _uploadProgress = 0.0;
+  String _uploadStatus = '';
 
   @override
   void initState() {
@@ -175,13 +225,11 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
         body: const Text('确定要删除这个问题吗？此操作不可恢复。'),
         actions: [
           FButton(
-            style: FButtonStyle.outline,
-            intrinsicWidth: true,
+            style: context.theme.buttonStyles.outline.call,
             child: const Text('取消'),
             onPress: () => Navigator.pop(context),
           ),
           FButton(
-            intrinsicWidth: true,
             child: const Text('删除'),
             onPress: () => Navigator.pop(context, true),
           ),
@@ -218,6 +266,12 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
   }
 
   Future<void> _processUploadedFile(PlatformFile file, bool isDesktop) async {
+    setState(() {
+      _isUploadingBackground = true;
+      _uploadProgress = 0.0;
+      _uploadStatus = '正在准备上传...';
+    });
+    
     try {
       String url;
       
@@ -228,6 +282,20 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
             widget.survey.id,
             fileBytes: file.bytes!,
             fileName: file.name,
+            onProgress: (sent, total) {
+              if (mounted) {
+                setState(() {
+                  _uploadProgress = sent / total;
+                });
+              }
+            },
+            onStatus: (status, message) {
+              if (mounted && message != null) {
+                setState(() {
+                  _uploadStatus = message;
+                });
+              }
+            },
           );
         } else {
           throw '无法获取文件数据';
@@ -239,11 +307,39 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
             widget.survey.id,
             fileBytes: file.bytes!,
             fileName: file.name,
+            onProgress: (sent, total) {
+              if (mounted) {
+                setState(() {
+                  _uploadProgress = sent / total;
+                });
+              }
+            },
+            onStatus: (status, message) {
+              if (mounted && message != null) {
+                setState(() {
+                  _uploadStatus = message;
+                });
+              }
+            },
           );
         } else if (file.path != null && file.path!.isNotEmpty) {
           url = await _apiService.uploadMediaUniversal(
             widget.survey.id,
             filePath: file.path!,
+            onProgress: (sent, total) {
+              if (mounted) {
+                setState(() {
+                  _uploadProgress = sent / total;
+                });
+              }
+            },
+            onStatus: (status, message) {
+              if (mounted && message != null) {
+                setState(() {
+                  _uploadStatus = message;
+                });
+              }
+            },
           );
         } else {
           throw '无法获取文件数据';
@@ -256,15 +352,30 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
         } else {
           _mobileBackground = url;
         }
+        _uploadStatus = '正在保存背景设置...';
       });
+      
       await _apiService.updateSurveyBackground(
         widget.survey.id,
         desktopBackground: _desktopBackground,
         mobileBackground: _mobileBackground,
       );
+      
+      if (mounted) {
+        setState(() {
+          _isUploadingBackground = false;
+          _uploadStatus = '';
+        });
+        _showSuccessToast('上传成功', '背景图片已更新');
+      }
     } catch (e) {
-      if (!mounted) return;
-      _showErrorToast('上传背景图片失败', e.toString());
+      if (mounted) {
+        setState(() {
+          _isUploadingBackground = false;
+          _uploadStatus = '';
+        });
+        _showErrorToast('上传背景图片失败', e.toString());
+      }
     }
   }
 
@@ -337,16 +448,9 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
       alignment: FToastAlignment.bottomRight,
       title: Text(title),
       description: Text(message),
-      suffixBuilder: (context, entry, _) => IntrinsicHeight(
+      suffixBuilder: (context, entry) => IntrinsicHeight(
         child: FButton(
-          style: context.theme.buttonStyles.primary.copyWith(
-            contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-              textStyle: FWidgetStateMap.all(
-                context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-              ),
-            ),
-          ),
+          style: context.theme.buttonStyles.outline.call,
           onPress: entry.dismiss,
           child: const Text('关闭'),
         ),
@@ -360,20 +464,15 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
       alignment: FToastAlignment.bottomRight,
       title: Text(title),
       description: Text(message),
-      suffixBuilder: (context, entry, _) => IntrinsicHeight(
+      suffixBuilder: (context, entry) => IntrinsicHeight(
         child: FButton(
-          style: context.theme.buttonStyles.secondary.copyWith(
-            contentStyle: context.theme.buttonStyles.secondary.contentStyle.copyWith(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-              textStyle: FWidgetStateMap.all(
-                context.theme.typography.xs.copyWith(color: context.theme.colors.secondaryForeground),
-              ),
-            ),
-          ),
-          onPress: canUndo ? () {
-            entry.dismiss();
-            _undoQuestionReorder();
-          } : entry.dismiss,
+          style: context.theme.buttonStyles.secondary.call,
+          onPress: canUndo
+              ? () {
+                  entry.dismiss();
+                  _undoQuestionReorder();
+                }
+              : entry.dismiss,
           child: Text(canUndo ? '撤回' : '关闭'),
         ),
       ),
@@ -404,6 +503,64 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
       
       _previousQuestionOrder = null; // 清除撤回状态
     }
+  }
+
+  // 按钮整体缩放：屏宽分档 × DPI（SettingsService.dpiScale）
+  double _buttonBaseScale(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    double base;
+    if (width <= 360) {
+      base = 0.78;
+    } else if (width <= 480) {
+      base = 0.84;
+    } else if (width <= 600) {
+      base = 0.90;
+    } else if (width <= 760) {
+      base = 0.96;
+    } else {
+      base = 1.00;
+    }
+    final dpi = SettingsService().dpiScale;
+    final scaled = base * dpi;
+    return scaled.clamp(0.70, 1.15);
+  }
+
+  double _buttonTextScale(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    double widthFactor = 1.0;
+    if (width <= 360) {
+      widthFactor = 0.90;
+    } else if (width <= 480) {
+      widthFactor = 0.94;
+    } else if (width <= 600) {
+      widthFactor = 0.97;
+    }
+
+    final dpi = SettingsService().dpiScale;
+    final dpiFactor = (1 / dpi).clamp(0.70, 1.0);
+    return (widthFactor * dpiFactor).clamp(0.55, 1.0);
+  }
+
+  Widget _buildScaledButtonText(BuildContext context, String text, {Color? color}) {
+    final theme = Theme.of(context);
+    final baseStyle = theme.textTheme.labelLarge ?? theme.textTheme.titleMedium ?? const TextStyle(fontSize: 14);
+    final scale = _buttonTextScale(context);
+    final targetFontSize = (baseStyle.fontSize ?? 14.0) * scale;
+
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.center,
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.visible,
+        softWrap: false,
+        style: baseStyle.copyWith(
+          fontSize: targetFontSize,
+          color: color ?? baseStyle.color,
+        ),
+      ),
+    );
   }
 
   @override
@@ -446,105 +603,105 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                         ),
                       ],
               ),
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : isWide
-                    ? Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            flex: 2,
-                            child: ScrollConfiguration(
-                              behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-                              child: CustomScrollView(
-                                slivers: [
-                                  SliverToBoxAdapter(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(24),
-                                      child: Column(
-                                        children: [
-                                          _buildBackgroundCard(),
-                                          const SizedBox(height: 16),
-                                        ],
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : isWide
+                        ? Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                flex: 2,
+                                child: ScrollConfiguration(
+                                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                                  child: CustomScrollView(
+                                    slivers: [
+                                      SliverToBoxAdapter(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(24),
+                                          child: Column(
+                                            children: [
+                                              _buildBackgroundCard(),
+                                              const SizedBox(height: 16),
+                                            ],
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                  SliverReorderableList(
-                                    itemCount: _questions.length,
-                                    onReorder: _onReorderQuestions,
-                                    itemBuilder: (context, index) {
-                                      final question = _questions[index];
-                                      return _buildQuestionListItem(question, index);
-                                    },
-                                  ),
-                                  const SliverToBoxAdapter(child: SizedBox(height: 48)),
-                                ],
-                              ),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 360,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: theme.cardColor.withValues(alpha: 0.5),
-                                border: Border(
-                                  left: BorderSide(
-                                    color: theme.dividerColor.withValues(alpha: 0.08),
-                                    width: 1,
+                                      SliverReorderableList(
+                                        itemCount: _questions.length,
+                                        onReorder: _onReorderQuestions,
+                                        itemBuilder: (context, index) {
+                                          final question = _questions[index];
+                                          return _buildQuestionListItem(question, index);
+                                        },
+                                      ),
+                                      const SliverToBoxAdapter(child: SizedBox(height: 48)),
+                                    ],
                                   ),
                                 ),
                               ),
-                              child: Column(
-                                children: [
-                                  Expanded(
-                                    child: ScrollConfiguration(
-                                      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-                                      child: SingleChildScrollView(
-                                        padding: const EdgeInsets.all(24),
-                                        child: _buildActionPanel(theme),
+                              SizedBox(
+                                width: 360,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: theme.cardColor.withValues(alpha: 0.5),
+                                    border: Border(
+                                      left: BorderSide(
+                                        color: theme.dividerColor.withValues(alpha: 0.08),
+                                        width: 1,
                                       ),
                                     ),
                                   ),
-                                ],
+                                  child: Column(
+                                    children: [
+                                      Expanded(
+                                        child: ScrollConfiguration(
+                                          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                                          child: SingleChildScrollView(
+                                            padding: const EdgeInsets.all(24),
+                                            child: _buildActionPanel(theme),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                        ],
-                      )
-                    : CustomScrollView(
-                        slivers: [
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                children: [
-                                  _buildBackgroundCard(),
-                                  const SizedBox(height: 16),
-                                ],
+                            ],
+                          )
+                        : CustomScrollView(
+                            slivers: [
+                              SliverToBoxAdapter(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Column(
+                                    children: [
+                                      _buildBackgroundCard(),
+                                      const SizedBox(height: 16),
+                                    ],
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                          SliverReorderableList(
-                            itemCount: _questions.length,
-                            onReorder: _onReorderQuestions,
-                            itemBuilder: (context, index) {
-                              final question = _questions[index];
-                              return _buildQuestionListItem(question, index);
-                            },
-                          ),
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: FButton(
-                                onPress: _addQuestion,
-                                child: const Text('添加问题'),
+                              SliverReorderableList(
+                                itemCount: _questions.length,
+                                onReorder: _onReorderQuestions,
+                                itemBuilder: (context, index) {
+                                  final question = _questions[index];
+                                  return _buildQuestionListItem(question, index);
+                                },
                               ),
-                            ),
+                              SliverToBoxAdapter(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: FButton(
+                                    onPress: _addQuestion,
+                                    child: const Text('添加问题'),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-          ),
+              ),
             ],
           ),
         ],
@@ -666,15 +823,33 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(12),
                             child: (currentImage != null && currentImage.isNotEmpty)
-                                ? CachedNetworkImage(
-                                    imageUrl: absImage,
-                                    fit: BoxFit.contain,
-                                    fadeInDuration: Duration.zero,
-                                    fadeOutDuration: Duration.zero,
-                                    progressIndicatorBuilder: (context, url, progress) =>
-                                        Center(child: CircularProgressIndicator(value: progress.progress)),
-                                    errorWidget: (context, url, error) =>
-                                        Container(color: Colors.grey.shade200, child: const Icon(Icons.error)),
+                                ? AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 450),
+                                    switchInCurve: Curves.easeOutCubic,
+                                    switchOutCurve: Curves.easeInCubic,
+                                    transitionBuilder: (child, animation) {
+                                      final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+                                      return FadeTransition(
+                                        opacity: animation,
+                                        child: Align(
+                                          alignment: Alignment.topCenter,
+                                          child: ScaleTransition(
+                                            alignment: Alignment.topCenter,
+                                            scale: Tween<double>(begin: 0.96, end: 1.0).animate(curved),
+                                            child: child,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    child: CachedNetworkImage(
+                                      key: ValueKey('${_isDesktopPreview}_$currentImage'),
+                                      imageUrl: absImage,
+                                      fit: BoxFit.cover,
+                                      alignment: Alignment.topCenter,
+                                      errorWidget: (context, url, error) => const Center(
+                                        child: Icon(Icons.broken_image_outlined, size: 40),
+                                      ),
+                                    ),
                                   )
                                 : Center(
                                     child: _isBgLoading
@@ -760,75 +935,69 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Expanded(
-                                  child: FButton(
-                                    style: FButtonStyle(
-                                      decoration: FWidgetStateMap.all(
-                                        BoxDecoration(
-                                          color: const Color.fromARGB(144, 255, 227, 134),
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                      ),
-                                      contentStyle: FButtonContentStyle(
-                                        textStyle: FWidgetStateMap.all(
-                                          const TextStyle(
-                                            color: Color.fromARGB(255, 0, 0, 0),
-                                            fontWeight: FontWeight.w500,
-                                            fontSize: 14,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: const Color.fromARGB(144, 255, 227, 134),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Transform.scale(
+                                      scale: _buttonBaseScale(context),
+                                      alignment: Alignment.center,
+                                      child: _InteractiveScale(
+                                        child: SizedBox(
+                                          width: double.infinity,
+                                          height: _bottomButtonHeight,
+                                          child: FButton.raw(
+                                            style: (_) => context.theme.buttonStyles.ghost,
+                                            onPress: () => _uploadBackground(isCurrentDesktop),
+                                            child: Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                              child: Center(
+                                                child: _buildScaledButtonText(
+                                                  context,
+                                                  '上传背景',
+                                                  color: Colors.black,
+                                                ),
+                                              ),
+                                            ),
                                           ),
                                         ),
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                                        iconStyle: FWidgetStateMap.all(const IconThemeData(color: Colors.transparent, size: 20)),
-                                      ),
-                                      iconContentStyle: FButtonIconContentStyle(
-                                        iconStyle: FWidgetStateMap.all(const IconThemeData(color: Colors.transparent, size: 20)),
-                                      ),
-                                      tappableStyle: FTappableStyle(),
-                                      focusedOutlineStyle: FFocusedOutlineStyle(
-                                        color: Colors.transparent,
-                                        width: 0.01,
-                                        borderRadius: BorderRadius.circular(8),
                                       ),
                                     ),
-                                    onPress: () => _uploadBackground(isCurrentDesktop),
-                                    child: const Text('上传背景', overflow: TextOverflow.ellipsis, maxLines: 1),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
-                                  child: FButton(
-                                    style: FButtonStyle(
-                                      decoration: FWidgetStateMap.all(
-                                        BoxDecoration(
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                      ),
-                                      contentStyle: FButtonContentStyle(
-                                        textStyle: FWidgetStateMap.all(
-                                          TextStyle(
-                                            fontSize: 14,
-                                            color: (currentImage != null && currentImage.isNotEmpty)
-                                                ? Colors.white
-                                                : (isDark ? Colors.white : Colors.black),
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? Colors.white.withValues(alpha: 0.14)
+                                          : Colors.black.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Transform.scale(
+                                      scale: _buttonBaseScale(context),
+                                      alignment: Alignment.center,
+                                      child: _InteractiveScale(
+                                        child: SizedBox(
+                                          width: double.infinity,
+                                          height: _bottomButtonHeight,
+                                          child: FButton.raw(
+                                            style: (_) => context.theme.buttonStyles.ghost,
+                                            onPress: () => setState(() => _isDesktopPreview = !_isDesktopPreview),
+                                            child: Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                              child: Center(
+                                                child: _buildScaledButtonText(
+                                                  context,
+                                                  isCurrentDesktop ? '切换移动端' : '切换桌面端',
+                                                  color: isDark ? Colors.black : Theme.of(context).colorScheme.onSurface,
+                                                ),
+                                              ),
+                                            ),
                                           ),
                                         ),
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                                        iconStyle: FWidgetStateMap.all(const IconThemeData(color: Colors.transparent, size: 20)),
                                       ),
-                                      iconContentStyle: FButtonIconContentStyle(
-                                        iconStyle: FWidgetStateMap.all(const IconThemeData(color: Colors.transparent, size: 20)),
-                                      ),
-                                      tappableStyle: FTappableStyle(),
-                                      focusedOutlineStyle: FFocusedOutlineStyle(
-                                        color: Colors.transparent,
-                                        width: 0.01,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                    onPress: () => setState(() => _isDesktopPreview = !_isDesktopPreview),
-                                    child: Text(
-                                      isCurrentDesktop ? '切换移动端' : '切换桌面端',
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
                                     ),
                                   ),
                                 ),
@@ -836,6 +1005,64 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
                             ),
                           ),
                         ),
+                        // 上传进度显示（放在Stack最后，确保在最上层）
+                        if (_isUploadingBackground)
+                          Positioned.fill(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.7),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const SizedBox(
+                                    width: 40,
+                                    height: 40,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 3,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    _uploadStatus,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  if (_uploadProgress > 0 && _uploadProgress < 1)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+                                      child: Column(
+                                        children: [
+                                          ClipRRect(
+                                            borderRadius: BorderRadius.circular(4),
+                                            child: LinearProgressIndicator(
+                                              value: _uploadProgress,
+                                              minHeight: 8,
+                                              backgroundColor: Colors.white.withValues(alpha: 0.3),
+                                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            '${(_uploadProgress * 100).toInt()}%',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -857,77 +1084,85 @@ class _EditSurveyContentPageState extends State<EditSurveyContentPage> {
       margin: const EdgeInsets.only(bottom: 8, left: 16, right: 16),
       child: GlassCard(
         margin: EdgeInsets.zero,
-        child: Column(
-          children: [
-            // 拖动条
-            ReorderableDragStartListener(
-              index: index,
-              child: Container(
-                width: double.infinity,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: isDark 
-                      ? Colors.white.withAlpha(26)
-                      : Colors.black.withAlpha(13),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(12),
-                    topRight: Radius.circular(12),
-                  ),
-                ),
-                child: Center(
+        child: GestureDetector(
+          onLongPress: () {
+            setState(() {
+              _showDragHandle = !_showDragHandle;
+            });
+          },
+          child: Column(
+            children: [
+              // 拖动条（长按卡片显示/隐藏）
+              if (_showDragHandle)
+                ReorderableDragStartListener(
+                  index: index,
                   child: Container(
-                    width: 40,
-                    height: 4,
+                    width: double.infinity,
+                    height: 24,
                     decoration: BoxDecoration(
                       color: isDark 
-                          ? Colors.grey.shade600
-                          : Colors.grey.shade400,
-                      borderRadius: BorderRadius.circular(2),
+                          ? Colors.white.withAlpha(26)
+                          : Colors.black.withAlpha(13),
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(12),
+                        topRight: Radius.circular(12),
+                      ),
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: isDark 
+                              ? Colors.grey.shade600
+                              : Colors.grey.shade400,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
-            ListTile(
-              title: QuestionDisplayWidget(
-                question: question,
-                mode: QuestionDisplayMode.preview,
-                optionStates: const {},
-                authToken: widget.token,
-                titleOnly: true,
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(_getQuestionTypeText(question.type)),
-                  if (question.mediaUrls.isNotEmpty)
-                    Text(
-                      '${question.mediaUrls.length} 个媒体文件',
-                      style: TextStyle(
-                        fontSize: 12, 
-                        color: isDark 
-                            ? Colors.grey.shade400
-                            : Colors.grey.shade600,
+              ListTile(
+                title: QuestionDisplayWidget(
+                  question: question,
+                  mode: QuestionDisplayMode.preview,
+                  optionStates: const {},
+                  authToken: widget.token,
+                  titleOnly: true,
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_getQuestionTypeText(question.type)),
+                    if (question.mediaUrls.isNotEmpty)
+                      Text(
+                        '${question.mediaUrls.length} 个媒体文件',
+                        style: TextStyle(
+                          fontSize: 12, 
+                          color: isDark 
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade600,
+                        ),
                       ),
+                  ],
+                ),
+                isThreeLine: question.mediaUrls.isNotEmpty,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit),
+                      onPressed: () => _editQuestion(question),
                     ),
-                ],
+                    IconButton(
+                      icon: const Icon(Icons.delete),
+                      onPressed: () => _deleteQuestion(question),
+                    ),
+                  ],
+                ),
               ),
-              isThreeLine: question.mediaUrls.isNotEmpty,
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit),
-                    onPressed: () => _editQuestion(question),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete),
-                    onPressed: () => _deleteQuestion(question),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

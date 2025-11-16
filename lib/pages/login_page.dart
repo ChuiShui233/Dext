@@ -195,12 +195,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Future<void> _fetchCaptcha() async {
     try {
       final captcha = await ApiService().getTextCaptcha();
-      final String data = captcha['data'];
+      final String data = captcha.originalImageBase64;
       final String raw = data.startsWith('data:image') ? data.split(',').last : data;
       final decoded = base64Decode(raw);
       if (!mounted) return;
       setState(() {
-        _captchaId = captcha['captchaId'];
+        _captchaId = captcha.token;
         _captchaImage = data;
         _captchaBytes = decoded;
         _captchaController.clear();
@@ -550,15 +550,17 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         });
       });
       
-      showAdaptiveDialog(
+      showFDialog(
         context: context,
-        builder: (context) => FDialog(
+        builder: (context, style, animation) => FDialog(
+          style: style.call,
+          animation: animation,
           direction: Axis.horizontal,
           title: const Text('验证码已发送'),
           body: const Text('请查收邮件并输入6位验证码'),
           actions: [
             FButton(
-              style: FButtonStyle.outline,
+              style: context.theme.buttonStyles.outline.call,
               child: const Text('确定'),
               onPress: () => Navigator.of(context).pop(),
             ),
@@ -637,15 +639,17 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       
       if (!mounted) return;
       
-      showAdaptiveDialog(
+      showFDialog(
         context: context, 
-        builder: (context) => FDialog(
+        builder: (context, style, animation) => FDialog(
+          style: style.call,
+          animation: animation,
           direction: Axis.horizontal,
           title: const Text('注册成功'),
           body: const Text('你现在可以登录了'),
           actions: [
             FButton(
-              style: FButtonStyle.outline,
+              style: context.theme.buttonStyles.outline.call,
               child: const Text('确定'),
               onPress: () {
                 Navigator.of(context).pop();
@@ -726,15 +730,17 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       
       if (!mounted) return;
       
-      showAdaptiveDialog(
+      showFDialog(
         context: context,
-        builder: (context) => FDialog(
+        builder: (context, style, animation) => FDialog(
+          style: style.call,
+          animation: animation,
           direction: Axis.horizontal,
           title: const Text('密码重置成功'),
           body: const Text('请使用新密码登录'),
           actions: [
             FButton(
-              style: FButtonStyle.outline,
+              style: context.theme.buttonStyles.outline.call,
               child: const Text('确定'),
               onPress: () {
                 Navigator.of(context).pop();
@@ -785,15 +791,17 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   void showErrorDialog(String message) {
     if (!mounted) return;
-    showAdaptiveDialog(
+    showFDialog(
       context: context,
-      builder: (context) => FDialog(
+      builder: (context, style, animation) => FDialog(
+        style: style.call,
+        animation: animation,
         direction: Axis.horizontal,
         title: const Text('错误'),
         body: Text(message),
         actions: [
           FButton(
-            style: FButtonStyle.outline,
+            style: context.theme.buttonStyles.outline.call,
             child: const Text('确定'),
             onPress: () => Navigator.of(context).pop(),
           ),

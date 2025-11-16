@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
-
 import 'package:flutter/foundation.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:http/http.dart' as http;
@@ -10,6 +8,18 @@ import 'package:dio/dio.dart' as dio;
 import 'config.dart';
 import '/services/crypto_service.dart';
 import 'core/api_core.dart' as core;
+import 'core/analytics_service.dart' as core;
+import 'core/auth_service.dart' as core;
+import 'core/email_service.dart' as core;
+import 'core/password_service.dart' as core;
+import 'core/user_service.dart' as core;
+import 'core/captcha_service.dart' as core;
+import 'core/question_service.dart' as core;
+import 'core/survey_stats_service.dart' as core;
+import 'core/cache_service.dart' as core;
+import 'core/token_service.dart' as core;
+import 'core/result_service.dart' as core;
+import 'core/image_service.dart' as core;
 import 'auth_service.dart';
 import 'project_service.dart';
 import 'survey_service.dart';
@@ -46,6 +56,18 @@ class ApiService {
   late final AuthService _authService;
   late final ProjectService _projectService;
   late final SurveyService _surveyService;
+  late final core.AnalyticsService _analyticsService;
+  late final core.AuthService _coreAuthService;
+  late final core.EmailService _emailService;
+  late final core.PasswordService _passwordService;
+  late final core.UserService _userService;
+  late final core.CaptchaService _captchaService;
+  // late final core.FileService _fileService;  // NOTE: 现有上传逻辑已在 api_service 中直接实现
+  late final core.QuestionService _questionService;
+  late final core.SurveyStatsService _statsService;
+  late final core.CacheService _cacheService;
+  late final core.TokenService _tokenService;
+  late final core.ResultService _resultService;
   StreamSubscription<String>? _coreMsgSub;
   StreamSubscription<Map<String, dynamic>>? _coreDataSub;
   
@@ -71,6 +93,73 @@ class ApiService {
     _authService = AuthService(_core);
     _projectService = ProjectService(_core);
     _surveyService = SurveyService(_core);
+    
+    // Initialize new services with wrapper functions
+    _analyticsService = core.AnalyticsService(
+      baseUrl: baseUrl,
+      httpRequest: (method, url, {onStatus}) => _httpRequest(method, url, onStatus: onStatus),
+    );
+    _coreAuthService = core.AuthService(
+      baseUrl: baseUrl,
+      cryptoService: _cryptoService,
+      encryptedRequest: (method, url, data, {onStatus}) => _encryptedRequest(method, url, data, onStatus: onStatus),
+      hybridRequest: (method, url, data, {onStatus}) => _hybridEncryptedRequest(
+        method, 
+        url, 
+        data, 
+        sessionKey: _cryptoService.generateSessionKey(),
+        onStatus: onStatus,
+      ),
+    );
+    _emailService = core.EmailService(
+      baseUrl: baseUrl,
+      httpRequest: (method, url, data, {onStatus}) => _httpRequest(method, url, data: data, onStatus: onStatus),
+      encryptedRequest: (method, url, data, {onStatus}) => _encryptedRequest(method, url, data, onStatus: onStatus),
+    );
+    _passwordService = core.PasswordService(
+      baseUrl: baseUrl,
+      encryptedRequest: (method, url, data, {onStatus}) => _encryptedRequest(method, url, data, onStatus: onStatus),
+      hybridRequest: (method, url, data, {onStatus}) => _hybridEncryptedRequest(
+        method, 
+        url, 
+        data, 
+        sessionKey: _cryptoService.generateSessionKey(),
+        onStatus: onStatus,
+      ),
+    );
+    _userService = core.UserService(
+      baseUrl: baseUrl,
+      cryptoService: _cryptoService,
+      httpRequest: (method, url, {onStatus}) => _httpRequest(method, url, onStatus: onStatus),
+      encryptedRequest: (method, url, data, {onStatus}) => _encryptedRequest(method, url, data, onStatus: onStatus),
+    );
+    _captchaService = core.CaptchaService(
+      baseUrl: baseUrl,
+      httpRequest: (method, url, {onStatus}) => _httpRequest(method, url, onStatus: onStatus),
+    );
+    // _fileService = core.FileService(
+    //   baseUrl: baseUrl,
+    //   httpRequest: (method, url, {onStatus}) => _httpRequest(method, url, onStatus: onStatus),
+    // );
+    _questionService = core.QuestionService(
+      baseUrl: baseUrl,
+      httpRequest: (method, url, {onStatus}) => _httpRequest(method, url, onStatus: onStatus),
+      encryptedRequest: (method, url, data, {onStatus}) => _encryptedRequest(method, url, data, onStatus: onStatus),
+    );
+    _statsService = core.SurveyStatsService(
+      baseUrl: baseUrl,
+      httpRequest: (method, url, {onStatus}) => _httpRequest(method, url, onStatus: onStatus),
+    );
+    _cacheService = core.CacheService();
+    _tokenService = core.TokenService(
+      baseUrl: baseUrl,
+      cryptoService: _cryptoService,
+      authToken: authToken,
+    );
+    _resultService = core.ResultService(
+      baseUrl: baseUrl,
+      httpRequest: (method, url, {onStatus}) => _httpRequest(method, url, onStatus: onStatus),
+    );
 
     // Pipe core message/data streams to maintain compatibility with existing listeners
     _coreMsgSub = _core.messageStream.listen((m) => _messageController.add(m));
@@ -85,6 +174,16 @@ class ApiService {
         if (t != null && t.isNotEmpty) {
           authToken = t;
           _core.updateAuthToken(authToken);
+          _tokenService.updateAuthToken(t);
+          
+          // 加载令牌过期时间
+          final expiresStr = prefs.getString('auth_token_expires');
+          if (expiresStr != null) {
+            final expires = DateTime.tryParse(expiresStr);
+            if (expires != null) {
+              _tokenService.setTokenExpires(expires);
+            }
+          }
         }
         if ((authToken == null || authToken!.isEmpty)) {
           try {
@@ -94,288 +193,39 @@ class ApiService {
               authToken = st;
               await prefs.setString('auth_token', st);
               _core.updateAuthToken(authToken);
+              _tokenService.updateAuthToken(st);
             }
           } catch (_) {}
         }
       } catch (_) {}
     }
+    
+    // 检查是否需要主动刷新令牌
+    if (authToken != null && _tokenService.shouldRefreshToken()) {
+      try {
+        await _refreshToken();
+      } catch (e) {
+        // 预刷新失败，继续使用当前令牌，等待API调用时再处理
+        if (kDebugMode) print('[ApiService] 主动刷新失败: $e');
+      }
+    }
   }
 
   Future<List<Map<String, dynamic>>> getRecentSubmissions({StatusCallback? onStatus}) async {
-    final prefs = await SharedPreferences.getInstance();
-    const cacheKey = 'recent_submissions';
-    final cached = prefs.getString(cacheKey);
-    
-    if (cached != null) {
-      try {
-        onStatus?.call(RequestStatus.loading, '正在加载缓存数据...');
-        _updateStatus(RequestStatus.loading, '正在加载缓存数据...');
-        
-        final data = json.decode(cached) as Map<String, dynamic>;
-        final submissions = (data['submissions'] as List<dynamic>? ?? [])
-            .whereType<Map<String, dynamic>>()
-            .toList();
-        
-        onStatus?.call(RequestStatus.success, '缓存数据加载成功');
-        _updateStatus(RequestStatus.success, '缓存数据加载成功');
-        
-        // 静默刷新
-        _refreshRecentSubmissionsSilently(prefs, cacheKey);
-        return submissions;
-      } catch (_) {
-        onStatus?.call(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
-        _updateStatus(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
-      }
-    }
-    
-    return _refreshRecentSubmissions(prefs, cacheKey, onStatus: onStatus);
-  }
-  
-  Future<void> _refreshRecentSubmissionsSilently(
-    SharedPreferences prefs,
-    String cacheKey,
-  ) async {
-    try {
-      final url = '$baseUrl/api/survey/recent-submissions';
-      final response = await _httpRequest('GET', url);
-      if (response.statusCode == 200) {
-        prefs.setString(cacheKey, response.body);
-        _updateStatus(RequestStatus.success, '最近提交数据已更新');
-      }
-    } catch (_) {}
-  }
-  
-  Future<List<Map<String, dynamic>>> _refreshRecentSubmissions(
-    SharedPreferences prefs,
-    String cacheKey, {
-    StatusCallback? onStatus,
-  }) async {
-    try {
-      final url = '$baseUrl/api/survey/recent-submissions';
-      final response = await _httpRequest('GET', url, onStatus: onStatus);
-      if (response.statusCode == 200) {
-        prefs.setString(cacheKey, response.body);
-        final data = json.decode(response.body) as Map<String, dynamic>;
-        final submissions = (data['submissions'] as List<dynamic>? ?? [])
-            .whereType<Map<String, dynamic>>()
-            .toList();
-        return submissions;
-      } else if (response.statusCode == 401) {
-        throw response;
-      } else {
-        throw '获取最近提交失败: ${response.statusCode}';
-      }
-    } catch (e) {
-      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
-        throw '请求超时，请检查您的网络连接。';
-      }
-      rethrow;
-    }
+    return await _analyticsService.getRecentSubmissions(onStatus: onStatus);
   }
 
-  // 分析概览：总浏览数 / 总提交数（带缓存）
   Future<Map<String, int>> getAnalyticsOverview({StatusCallback? onStatus}) async {
-    final prefs = await SharedPreferences.getInstance();
-    const cacheKey = 'analytics_overview';
-    final cached = prefs.getString(cacheKey);
-    
-    if (cached != null) {
-      try {
-        onStatus?.call(RequestStatus.loading, '正在加载缓存数据...');
-        _updateStatus(RequestStatus.loading, '正在加载缓存数据...');
-        
-        final data = json.decode(cached) as Map<String, dynamic>;
-        final overview = {
-          'totalViews': (data['totalViews'] as num?)?.toInt() ?? 0,
-          'totalSubmits': (data['totalSubmits'] as num?)?.toInt() ?? 0,
-          'totalSurveys': (data['totalSurveys'] as num?)?.toInt() ?? 0,
-          'activeSurveys': (data['activeSurveys'] as num?)?.toInt() ?? 0,
-        };
-        
-        onStatus?.call(RequestStatus.success, '缓存数据加载成功');
-        _updateStatus(RequestStatus.success, '缓存数据加载成功');
-        
-        // 静默刷新
-        _refreshAnalyticsOverviewSilently(prefs, cacheKey, overview);
-        return overview;
-      } catch (_) {
-        onStatus?.call(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
-        _updateStatus(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
-      }
-    }
-    
-    return _refreshAnalyticsOverview(prefs, cacheKey, onStatus: onStatus);
-  }
-  
-  Future<void> _refreshAnalyticsOverviewSilently(
-    SharedPreferences prefs,
-    String cacheKey,
-    Map<String, int> cached,
-  ) async {
-    try {
-      final response = await _httpRequest('GET', '$baseUrl/api/analytics/overview');
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body) as Map<String, dynamic>;
-        final newOverview = {
-          'totalViews': (data['totalViews'] as num?)?.toInt() ?? 0,
-          'totalSubmits': (data['totalSubmits'] as num?)?.toInt() ?? 0,
-          'totalSurveys': (data['totalSurveys'] as num?)?.toInt() ?? 0,
-          'activeSurveys': (data['activeSurveys'] as num?)?.toInt() ?? 0,
-        };
-        
-        if (cached['totalViews'] != newOverview['totalViews'] ||
-            cached['totalSubmits'] != newOverview['totalSubmits'] ||
-            cached['totalSurveys'] != newOverview['totalSurveys'] ||
-            cached['activeSurveys'] != newOverview['activeSurveys']) {
-          prefs.setString(cacheKey, json.encode(data));
-          _notifyDataUpdate('analytics_overview', newOverview);
-          _updateStatus(RequestStatus.success, '统计数据已更新');
-        }
-      }
-    } catch (_) {}
-  }
-  
-  Future<Map<String, int>> _refreshAnalyticsOverview(
-    SharedPreferences prefs,
-    String cacheKey, {
-    StatusCallback? onStatus,
-  }) async {
-    try {
-      final response = await _httpRequest('GET', '$baseUrl/api/analytics/overview', onStatus: onStatus);
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body) as Map<String, dynamic>;
-        prefs.setString(cacheKey, json.encode(data));
-        return {
-          'totalViews': (data['totalViews'] as num?)?.toInt() ?? 0,
-          'totalSubmits': (data['totalSubmits'] as num?)?.toInt() ?? 0,
-          'totalSurveys': (data['totalSurveys'] as num?)?.toInt() ?? 0,
-          'activeSurveys': (data['activeSurveys'] as num?)?.toInt() ?? 0,
-        };
-      } else if (response.statusCode == 401) {
-        throw response;
-      } else {
-        throw '获取统计概览失败: ${response.statusCode}';
-      }
-    } catch (e) {
-      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
-        throw '请求超时，请检查您的网络连接。';
-      }
-      rethrow;
-    }
+    return await _analyticsService.getAnalyticsOverview(onStatus: onStatus);
   }
 
-  // 判定是否为媒体相关或应排除AES加密的URL
-  bool _isMediaUrl(String url) {
-    // 排除真正的媒体相关（二进制/表单）接口，避免破坏上传/下载
-    if (url.contains('/openassets/')) return true; // 统一的文件存储服务
-    if (url.contains('/images/')) return true;     // 图像管理上传/删除
-    if (url.contains('/uploads')) return true;     // 静态上传目录
-    // 仅排除问卷媒体文件接口：/survey/:surveyId/media
-    if (url.contains('/survey/') && url.contains('/media')) return true;
-    return false;
-  }
-
-  // 提交趋势：range = '7d' | 'month'，默认 '7d'（带缓存）
   Future<Map<String, dynamic>> getSubmitTrend({String range = '7d', StatusCallback? onStatus}) async {
-    final prefs = await SharedPreferences.getInstance();
-    final cacheKey = 'submit_trend_$range';
-    final cached = prefs.getString(cacheKey);
-    
-    if (cached != null) {
-      try {
-        onStatus?.call(RequestStatus.loading, '正在加载缓存数据...');
-        _updateStatus(RequestStatus.loading, '正在加载缓存数据...');
-        
-        final trendData = json.decode(cached) as Map<String, dynamic>;
-        
-        onStatus?.call(RequestStatus.success, '缓存数据加载成功');
-        _updateStatus(RequestStatus.success, '缓存数据加载成功');
-        
-        // 静默刷新
-        _refreshSubmitTrendSilently(prefs, cacheKey, range, trendData);
-        return trendData;
-      } catch (_) {
-        onStatus?.call(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
-        _updateStatus(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
-      }
-    }
-    
-    return _refreshSubmitTrend(prefs, cacheKey, range, onStatus: onStatus);
-  }
-  
-  Future<void> _refreshSubmitTrendSilently(
-    SharedPreferences prefs,
-    String cacheKey,
-    String range,
-    Map<String, dynamic> cached,
-  ) async {
-    try {
-      final uri = Uri.parse('$baseUrl/api/analytics/submit-trend').replace(queryParameters: {'range': range});
-      final response = await _httpRequest('GET', uri.toString());
-      if (response.statusCode == 200) {
-        final newData = json.decode(response.body) as Map<String, dynamic>;
-        
-        if (_trendDataHasChanged(cached, newData)) {
-          prefs.setString(cacheKey, json.encode(newData));
-          _notifyDataUpdate('submit_trend', newData);
-          _updateStatus(RequestStatus.success, '趋势数据已更新');
-        }
-      }
-    } catch (_) {}
-  }
-  
-  bool _trendDataHasChanged(Map<String, dynamic> a, Map<String, dynamic> b) {
-    final labelsA = (a['labels'] as List?)?.toString();
-    final labelsB = (b['labels'] as List?)?.toString();
-    final countsA = (a['counts'] as List?)?.toString();
-    final countsB = (b['counts'] as List?)?.toString();
-    return labelsA != labelsB || countsA != countsB;
-  }
-  
-  Future<Map<String, dynamic>> _refreshSubmitTrend(
-    SharedPreferences prefs,
-    String cacheKey,
-    String range, {
-    StatusCallback? onStatus,
-  }) async {
-    try {
-      final uri = Uri.parse('$baseUrl/api/analytics/submit-trend').replace(queryParameters: {'range': range});
-      final response = await _httpRequest('GET', uri.toString(), onStatus: onStatus);
-      if (response.statusCode == 200) {
-        final trendData = json.decode(response.body) as Map<String, dynamic>;
-        prefs.setString(cacheKey, json.encode(trendData));
-        return trendData;
-      } else if (response.statusCode == 401) {
-        throw response;
-      } else {
-        throw '获取提交趋势失败: ${response.statusCode}';
-      }
-    } catch (e) {
-      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
-        throw '请求超时，请检查您的网络连接。';
-      }
-      rethrow;
-    }
+    return await _analyticsService.getSubmitTrend(range: range, onStatus: onStatus);
   }
 
   // 提交详情：返回题目、选项与我的作答
   Future<Map<String, dynamic>> getSubmissionDetail(int answerId, {StatusCallback? onStatus}) async {
-    try {
-      final url = '$baseUrl/api/survey/submissions/$answerId/detail';
-      final response = await _httpRequest('GET', url, onStatus: onStatus);
-      if (response.statusCode == 200) {
-        return json.decode(response.body) as Map<String, dynamic>;
-      } else if (response.statusCode == 401) {
-        throw response;
-      } else {
-        throw '获取提交详情失败: ${response.statusCode}';
-      }
-    } catch (e) {
-      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
-        throw '请求超时，请检查您的网络连接。';
-      }
-      rethrow;
-    }
+    return await _analyticsService.getSubmissionDetail(answerId, onStatus: onStatus);
   }
 
   Future<Map<String, dynamic>> getSubmissionHistory({
@@ -385,30 +235,13 @@ class ApiService {
     int pageSize = 20,
     StatusCallback? onStatus,
   }) async {
-    try {
-      final params = <String, String>{
-        'page': page.toString(),
-        'pageSize': pageSize.toString(),
-      };
-      if (query != null && query.trim().isNotEmpty) params['query'] = query.trim();
-      if (type != null) params['type'] = type.toString();
-
-      final uri = Uri.parse('$baseUrl/api/survey/submissions/history').replace(queryParameters: params);
-      final response = await _httpRequest('GET', uri.toString(), onStatus: onStatus);
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body) as Map<String, dynamic>;
-        return data;
-      } else if (response.statusCode == 401) {
-        throw response;
-      } else {
-        throw '获取提交记录失败: ${response.statusCode}';
-      }
-    } catch (e) {
-      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
-        throw '请求超时，请检查您的网络连接。';
-      }
-      rethrow;
-    }
+    return await _analyticsService.getSubmissionHistory(
+      query: query,
+      type: type,
+      page: page,
+      pageSize: pageSize,
+      onStatus: onStatus,
+    );
   }
 
   // 更新状态并通知监听者
@@ -420,6 +253,13 @@ class ApiService {
       _messageController.add(message);
     }
   }
+
+  // 判断URL是否是媒体URL（不需要加密请求体）
+  bool _isMediaUrl(String url) {
+    return url.contains('/assets/') || 
+           url.contains('/upload') || 
+           url.contains('/files/');
+  }
   
   // 通知数据更新
   void _notifyDataUpdate(String dataType, dynamic data) {
@@ -430,6 +270,32 @@ class ApiService {
     });
   }
 
+  /// 获取令牌状态信息
+  Map<String, dynamic> getTokenStatus() {
+    final remainingTime = _tokenService.getTokenRemainingTime();
+    return {
+      'hasToken': authToken != null && authToken!.isNotEmpty,
+      'shouldRefresh': _tokenService.shouldRefreshToken(),
+      'remainingTime': remainingTime?.inMinutes,
+      'remainingTimeFormatted': remainingTime != null 
+          ? '${remainingTime.inHours}h ${remainingTime.inMinutes % 60}m'
+          : null,
+    };
+  }
+
+  /// 主动刷新令牌（公共方法）
+  Future<bool> refreshTokenIfNeeded() async {
+    if (!_tokenService.shouldRefreshToken()) return true;
+    
+    try {
+      await _refreshToken();
+      return true;
+    } catch (e) {
+      if (kDebugMode) print('[ApiService] 主动刷新令牌失败: $e');
+      return false;
+    }
+  }
+
   // 释放资源
   void dispose() {
     _statusController.close();
@@ -437,6 +303,7 @@ class ApiService {
     _dataUpdateController.close();
     _coreMsgSub?.cancel();
     _coreDataSub?.cancel();
+    _tokenService.dispose();
     _core.dispose();
   }
 
@@ -516,6 +383,9 @@ class ApiService {
         
         authToken = token?.toString();
         _core.updateAuthToken(authToken);
+        _tokenService.updateAuthToken(authToken ?? '');
+        _tokenService.setTokenExpires(expires);
+        
         try {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('auth_token', authToken ?? '');
@@ -540,8 +410,27 @@ class ApiService {
           'expires': expires,
         };
       } else {
-        Map<String, dynamic> responseData;
+        // 登录失败，清除所有本地认证信息，防止使用旧 token
+        authToken = null;
+        _core.updateAuthToken(null);
+        _cryptoService.clearSessionKey();
         
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove('auth_token');
+          await prefs.remove('auth_token_expires');
+          await prefs.remove('refresh_token');
+          await prefs.remove('refresh_token_expires');
+          
+          const storage = FlutterSecureStorage();
+          await storage.delete(key: 'auth_token');
+          await storage.delete(key: 'refresh_token');
+          await storage.delete(key: 'session_key');
+        } catch (e) {
+          if (kDebugMode) print('[Login] 清理本地存储失败: $e');
+        }
+        
+        Map<String, dynamic> responseData;
         
         if (response.headers['x-encrypted'] == 'aes') {
           try {
@@ -569,6 +458,8 @@ class ApiService {
         onStatus?.call(RequestStatus.error, errorMessage);
         _updateStatus(RequestStatus.error, errorMessage);
         
+        if (kDebugMode) print('[Login] ❌ 登录失败，已清除所有本地认证信息: $errorMessage');
+        
         throw errorMessage;
       }
     } catch (e) {
@@ -583,405 +474,128 @@ class ApiService {
   // 发送邮箱验证码（注册/重置密码，无需登录）
   Future<void> sendEmailVerificationCode({
     required String email,
-    required String purpose, // 'register', 'reset_password'
+    required String purpose,
     required String captchaId,
     required String captchaValue,
     StatusCallback? onStatus,
   }) async {
-    try {
-      onStatus?.call(RequestStatus.loading, '正在发送验证码...');
-      _updateStatus(RequestStatus.loading, '正在发送验证码...');
-
-      final requestData = {
-        'email': email,
-        'purpose': purpose,
-        'captchaId': captchaId,
-        'captchaValue': captchaValue,
-      };
-
-      final response = await _encryptedRequest(
-        'POST',
-        '$baseUrl/api/auth/email/send-code',
-        requestData,
-        onStatus: onStatus,
-      );
-
-      if (response.statusCode == 200) {
-        onStatus?.call(RequestStatus.success, '验证码已发送');
-        _updateStatus(RequestStatus.success, '验证码已发送');
-      } else {
-        final responseData = json.decode(response.body);
-        final errorMessage = responseData['message'] ?? responseData['error'] ?? '发送验证码失败';
-        
-        onStatus?.call(RequestStatus.error, errorMessage);
-        _updateStatus(RequestStatus.error, errorMessage);
-        
-        throw errorMessage;
-      }
-    } catch (e) {
-      final errorMsg = e.toString();
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      rethrow;
-    }
+    return await _emailService.sendEmailVerificationCode(
+      email: email,
+      purpose: purpose,
+      captchaId: captchaId,
+      captchaValue: captchaValue,
+      onStatus: onStatus,
+    );
   }
 
-  // OAuth绑定
   Future<Map<String, dynamic>> bindOAuth({
     required String provider,
     required String accessToken,
   }) async {
     await _ensureAuthTokenLoaded();
-    
-    final response = await _encryptedRequest(
-      'POST',
-      '$baseUrl/api/oauth/$provider/bind',
-      {'access_token': accessToken},
-    );
-
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    } else {
-      final responseData = json.decode(response.body);
-      final errorMessage = responseData['message'] ?? responseData['error'] ?? 'OAuth绑定失败';
-      throw errorMessage;
-    }
+    return await _coreAuthService.bindOAuth(provider: provider, accessToken: accessToken);
   }
 
-  // OAuth解绑
   Future<Map<String, dynamic>> unbindOAuth({
     required String provider,
   }) async {
     await _ensureAuthTokenLoaded();
-    
-    final response = await _encryptedRequest(
-      'DELETE',
-      '$baseUrl/api/oauth/$provider/unbind',
-      null,
-    );
-
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    } else {
-      final responseData = json.decode(response.body);
-      final errorMessage = responseData['message'] ?? responseData['error'] ?? 'OAuth解绑失败';
-      throw errorMessage;
-    }
+    return await _coreAuthService.unbindOAuth(provider: provider);
   }
 
-  // 发送更换邮箱验证码（需要登录）
+
   Future<void> sendChangeEmailCode({
     required String email,
     required String captchaId,
     required String captchaValue,
     StatusCallback? onStatus,
   }) async {
-    try {
-      await _ensureAuthTokenLoaded();
-      
-      onStatus?.call(RequestStatus.loading, '正在发送验证码...');
-      _updateStatus(RequestStatus.loading, '正在发送验证码...');
-
-      final requestData = {
-        'email': email,
-        'captchaId': captchaId,
-        'captchaValue': captchaValue,
-      };
-
-      final response = await _encryptedRequest(
-        'POST',
-        '$baseUrl/api/user/send-email-code',
-        requestData,
-        onStatus: onStatus,
-      );
-
-      if (response.statusCode == 200) {
-        onStatus?.call(RequestStatus.success, '验证码已发送');
-        _updateStatus(RequestStatus.success, '验证码已发送');
-      } else {
-        final responseData = json.decode(response.body);
-        final errorMessage = responseData['message'] ?? responseData['error'] ?? '发送验证码失败';
-        
-        onStatus?.call(RequestStatus.error, errorMessage);
-        _updateStatus(RequestStatus.error, errorMessage);
-        
-        throw errorMessage;
-      }
-    } catch (e) {
-      final errorMsg = e.toString();
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      rethrow;
-    }
+    await _ensureAuthTokenLoaded();
+    return await _emailService.sendChangeEmailCode(
+      email: email,
+      captchaId: captchaId,
+      captchaValue: captchaValue,
+      onStatus: onStatus,
+    );
   }
 
-  // 验证邮箱验证码
   Future<bool> verifyEmailCode({
     required String email,
     required String code,
     required String purpose,
     StatusCallback? onStatus,
   }) async {
-    try {
-      onStatus?.call(RequestStatus.loading, '正在验证...');
-      _updateStatus(RequestStatus.loading, '正在验证...');
-
-      final requestData = {
-        'email': email,
-        'code': code,
-        'purpose': purpose,
-      };
-
-      final response = await _encryptedRequest(
-        'POST',
-        '$baseUrl/api/auth/email/verify-code',
-        requestData,
-        onStatus: onStatus,
-      );
-
-      if (response.statusCode == 200) {
-        onStatus?.call(RequestStatus.success, '验证成功');
-        _updateStatus(RequestStatus.success, '验证成功');
-        return true;
-      } else {
-        final responseData = json.decode(response.body);
-        final errorMessage = responseData['message'] ?? responseData['error'] ?? '验证失败';
-        
-        onStatus?.call(RequestStatus.error, errorMessage);
-        _updateStatus(RequestStatus.error, errorMessage);
-        
-        throw errorMessage;
-      }
-    } catch (e) {
-      final errorMsg = e.toString();
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      return false;
-    }
+    return await _emailService.verifyEmailCode(
+      email: email,
+      code: code,
+      purpose: purpose,
+      onStatus: onStatus,
+    );
   }
 
-  // 重置密码
   Future<void> resetPassword({
     required String email,
     required String code,
     required String newPassword,
     StatusCallback? onStatus,
   }) async {
-    try {
-      onStatus?.call(RequestStatus.loading, '正在重置密码...');
-      _updateStatus(RequestStatus.loading, '正在重置密码...');
-
-      final requestData = {
-        'email': email,
-        'code': code,
-        'newPassword': newPassword,
-      };
-
-      final response = await _encryptedRequest(
-        'POST',
-        '$baseUrl/api/auth/email/reset-password',
-        requestData,
-        onStatus: onStatus,
-      );
-
-      if (response.statusCode == 200) {
-        onStatus?.call(RequestStatus.success, '密码重置成功');
-        _updateStatus(RequestStatus.success, '密码重置成功');
-      } else {
-        final responseData = json.decode(response.body);
-        final errorMessage = responseData['message'] ?? responseData['error'] ?? '重置密码失败';
-        
-        onStatus?.call(RequestStatus.error, errorMessage);
-        _updateStatus(RequestStatus.error, errorMessage);
-        
-        throw errorMessage;
-      }
-    } catch (e) {
-      final errorMsg = e.toString();
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      rethrow;
-    }
+    return await _passwordService.resetPassword(
+      email: email,
+      code: code,
+      newPassword: newPassword,
+      onStatus: onStatus,
+    );
   }
 
-  // 更换邮箱
   Future<void> changeEmail({
     required String newEmail,
     required String password,
     required String code,
     StatusCallback? onStatus,
   }) async {
-    try {
-      await _ensureAuthTokenLoaded();
-      
-      onStatus?.call(RequestStatus.loading, '正在更换邮箱...');
-      _updateStatus(RequestStatus.loading, '正在更换邮箱...');
-
-      final requestData = {
-        'newEmail': newEmail,
-        'password': password,
-        'code': code,
-      };
-
-      final response = await _encryptedRequest(
-        'POST',
-        '$baseUrl/api/user/change-email',
-        requestData,
-        onStatus: onStatus,
-      );
-
-      if (response.statusCode == 200) {
-        onStatus?.call(RequestStatus.success, '邮箱更换成功');
-        _updateStatus(RequestStatus.success, '邮箱更换成功');
-      } else {
-        final responseData = json.decode(response.body);
-        final errorMessage = responseData['message'] ?? responseData['error'] ?? '更换邮箱失败';
-        
-        onStatus?.call(RequestStatus.error, errorMessage);
-        _updateStatus(RequestStatus.error, errorMessage);
-        
-        throw errorMessage;
-      }
-    } catch (e) {
-      final errorMsg = e.toString();
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      rethrow;
-    }
+    await _ensureAuthTokenLoaded();
+    return await _emailService.changeEmail(
+      newEmail: newEmail,
+      password: password,
+      code: code,
+      onStatus: onStatus,
+    );
   }
 
-  // 修改密码
   Future<void> changePassword({
     required String oldPassword,
     required String newPassword,
     StatusCallback? onStatus,
   }) async {
-    try {
-      await _ensureAuthTokenLoaded();
-      
-      onStatus?.call(RequestStatus.loading, '正在修改密码...');
-      _updateStatus(RequestStatus.loading, '正在修改密码...');
-
-      final requestData = {
-        'oldPassword': oldPassword,
-        'newPassword': newPassword,
-      };
-
-      final response = await _encryptedRequest(
-        'POST',
-        '$baseUrl/api/user/change-password',
-        requestData,
-        onStatus: onStatus,
-      );
-
-      if (response.statusCode == 200) {
-        onStatus?.call(RequestStatus.success, '密码修改成功');
-        _updateStatus(RequestStatus.success, '密码修改成功');
-      } else {
-        final responseData = json.decode(response.body);
-        final errorMessage = responseData['message'] ?? responseData['error'] ?? '修改密码失败';
-        
-        onStatus?.call(RequestStatus.error, errorMessage);
-        _updateStatus(RequestStatus.error, errorMessage);
-        
-        throw errorMessage;
-      }
-    } catch (e) {
-      final errorMsg = e.toString();
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      rethrow;
-    }
+    await _ensureAuthTokenLoaded();
+    return await _passwordService.changePassword(
+      oldPassword: oldPassword,
+      newPassword: newPassword,
+      onStatus: onStatus,
+    );
   }
 
-  // 发送邮箱验证码（已登录用户，用于修改密码）
   Future<void> sendEmailCodeForPasswordChange({
     StatusCallback? onStatus,
   }) async {
-    try {
-      await _ensureAuthTokenLoaded();
-      
-      onStatus?.call(RequestStatus.loading, '正在发送验证码...');
-      _updateStatus(RequestStatus.loading, '正在发送验证码...');
-
-      final requestData = {
-        'purpose': 'reset_password',
-        'captchaId': '',
-        'captchaValue': '',
-      };
-
-      final response = await _encryptedRequest(
-        'POST',
-        '$baseUrl/api/user/send-email-code',
-        requestData,
-        onStatus: onStatus,
-      );
-
-      if (response.statusCode == 200) {
-        onStatus?.call(RequestStatus.success, '验证码已发送');
-        _updateStatus(RequestStatus.success, '验证码已发送');
-      } else {
-        final responseData = json.decode(response.body);
-        final errorMessage = responseData['message'] ?? responseData['error'] ?? '发送验证码失败';
-        
-        onStatus?.call(RequestStatus.error, errorMessage);
-        _updateStatus(RequestStatus.error, errorMessage);
-        
-        throw errorMessage;
-      }
-    } catch (e) {
-      final errorMsg = e.toString();
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      rethrow;
-    }
+    await _ensureAuthTokenLoaded();
+    return await _emailService.sendEmailCodeForPasswordChange(onStatus: onStatus);
   }
 
-  // 使用邮箱验证码修改密码（需要登录）
+
   Future<void> changePasswordWithEmail({
     required String code,
     required String newPassword,
     StatusCallback? onStatus,
   }) async {
-    try {
-      await _ensureAuthTokenLoaded();
-      
-      onStatus?.call(RequestStatus.loading, '正在修改密码...');
-      _updateStatus(RequestStatus.loading, '正在修改密码...');
-
-      final requestData = {
-        'code': code,
-        'newPassword': newPassword,
-      };
-
-      final response = await _encryptedRequest(
-        'POST',
-        '$baseUrl/api/user/change-password-with-email',
-        requestData,
-        onStatus: onStatus,
-      );
-
-      if (response.statusCode == 200) {
-        onStatus?.call(RequestStatus.success, '密码修改成功');
-        _updateStatus(RequestStatus.success, '密码修改成功');
-      } else {
-        final responseData = json.decode(response.body);
-        final errorMessage = responseData['message'] ?? responseData['error'] ?? '修改密码失败';
-        
-        onStatus?.call(RequestStatus.error, errorMessage);
-        _updateStatus(RequestStatus.error, errorMessage);
-        
-        throw errorMessage;
-      }
-    } catch (e) {
-      final errorMsg = e.toString();
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      rethrow;
-    }
+    await _ensureAuthTokenLoaded();
+    return await _passwordService.changePasswordWithEmail(
+      code: code,
+      newPassword: newPassword,
+      onStatus: onStatus,
+    );
   }
 
-  // 注册方法
   Future<void> register({
     required String username,
     required String password,
@@ -991,71 +605,20 @@ class ApiService {
     String? emailCode,
     StatusCallback? onStatus,
   }) async {
-    try {
-      onStatus?.call(RequestStatus.loading, '正在注册...');
-      _updateStatus(RequestStatus.loading, '正在注册...');
-
-      final requestData = {
-        'username': username,
-        'password': password,
-        'captchaId': captchaId,
-        'captchaValue': captchaValue,
-      };
-      
-      if (email != null && email.isNotEmpty) {
-        requestData['email'] = email;
-        if (emailCode != null && emailCode.isNotEmpty) {
-          requestData['emailCode'] = emailCode;
-        }
-      }
-
-      final response = await _encryptedRequest(
-        'POST',
-        '$baseUrl/api/auth/register',
-        requestData,
-        onStatus: onStatus,
-      );
-
-      if (response.statusCode == 201) {
-        onStatus?.call(RequestStatus.success, '注册成功');
-        _updateStatus(RequestStatus.success, '注册成功');
-      } else {
-        final responseData = json.decode(response.body);
-        final errorMessage = responseData['message'] ?? responseData['error'] ?? '注册失败';
-        
-        onStatus?.call(RequestStatus.error, errorMessage);
-        _updateStatus(RequestStatus.error, errorMessage);
-        
-        throw errorMessage;
-      }
-    } catch (e) {
-      final errorMsg = e.toString();
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      rethrow;
-    }
+    return await _coreAuthService.register(
+      username: username,
+      password: password,
+      captchaId: captchaId,
+      captchaValue: captchaValue,
+      email: email,
+      emailCode: emailCode,
+      onStatus: onStatus,
+    );
   }
 
   // 缓存管理方法
   Future<void> clearCache({String? specificKey}) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (specificKey != null) {
-      await prefs.remove(specificKey);
-      _updateStatus(RequestStatus.success, '指定缓存已清除');
-    } else {
-      // 清除所有相关缓存
-      await prefs.remove('projects_cache');
-      await prefs.remove('surveys_cache');
-      await prefs.remove('survey_stats_cache');
-      // 清除所有问题缓存
-      final keys = prefs.getKeys();
-      for (final key in keys) {
-        if (key.startsWith('questions_')) {
-          await prefs.remove(key);
-        }
-      }
-      _updateStatus(RequestStatus.success, '所有缓存已清除');
-    }
+    return await _cacheService.clearCache(specificKey: specificKey);
   }
 
   // 强制刷新数据（忽略缓存）
@@ -1074,10 +637,8 @@ class ApiService {
   }
 
   Future<List<SurveyStats>> forceRefreshSurveyStats({StatusCallback? onStatus}) async {
-    final prefs = await SharedPreferences.getInstance();
-    const cacheKey = 'survey_stats_cache';
-    await prefs.remove(cacheKey);
-    return await _refreshAllSurveyStats(prefs, cacheKey, onStatus: onStatus);
+    await _cacheService.clearCache(specificKey: 'survey_stats_cache');
+    return await _statsService.getSurveyStats(onStatus: onStatus);
   }
 
   // 格式化错误消息
@@ -1478,105 +1039,19 @@ class ApiService {
   // 自动刷新token并重试的通用方法
   Future<bool> _refreshToken() async {
     try {
-      if (kDebugMode) {
-        print('[RefreshToken] 开始刷新令牌...');
-        print('[RefreshToken] 当前内存 token: ${authToken?.substring(0, min(20, authToken?.length ?? 0))}...');
-      }
-      
-      // 读取刷新令牌（优先内存，其次本地安全存储/SharedPreferences）
-      String? rToken;
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        rToken = await const FlutterSecureStorage().read(key: 'refresh_token');
-        rToken ??= prefs.getString('refresh_token');
-      } catch (_) {}
-      if (rToken == null || rToken.isEmpty) {
-        if (kDebugMode) print('[RefreshToken] ❌ 没有 refresh_token，无法刷新');
-        return false;
-      }
-
-      // 使用普通HTTP请求（不加密），请求体包含 refresh_token
-      http.Response resp;
-      final refreshUrl = '$baseUrl/api/auth/refresh';
-      final refreshData = {'refresh_token': rToken};
-      try {
-        // 使用普通HTTP请求，无需Authorization
-        final uri = Uri.parse(refreshUrl);
-        final headers = {
-          'Content-Type': 'application/json',
-        };
-        
-        if (kDebugMode) {
-          print('[RefreshToken] 发送刷新请求到: $refreshUrl');
-          print('[RefreshToken] ✓ Token: ${authToken!.substring(0, min(20, authToken!.length))}...');
-          print('[RefreshToken] Headers: ${headers.keys.join(", ")}');
-        }
-        
-        resp = await http
-            .post(
-              uri,
-              headers: headers,
-              body: json.encode(refreshData),
-            )
-            .timeout(timeoutDuration);
-            
-        if (kDebugMode) {
-          print('[RefreshToken] 响应状态码: ${resp.statusCode}');
-        }
-      } catch (e) {
-        if (kDebugMode) print('[RefreshToken] 请求失败: $e');
-        return false;
-      }
-
-      if (resp.statusCode == 200) {
-        final body = json.decode(resp.body) as Map<String, dynamic>;
-        final newToken = body['token']?.toString();
-        final expiresStr = body['expires']?.toString();
-        final newRefresh = body['refresh_token']?.toString();
-        final newRefreshExpires = body['refresh_expires']?.toString();
-        if (newToken != null && newToken.isNotEmpty) {
-          authToken = newToken;
-          _core.updateAuthToken(authToken);
-          _cryptoService.clearSessionKey();
-          try {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('auth_token', newToken);
-            if (expiresStr != null && expiresStr.isNotEmpty) {
-              await prefs.setString('auth_token_expires', expiresStr);
-            }
-            if (newRefresh != null && newRefresh.isNotEmpty) {
-              await prefs.setString('refresh_token', newRefresh);
-              try { await const FlutterSecureStorage().write(key: 'refresh_token', value: newRefresh); } catch (_){ }
-            }
-            if (newRefreshExpires != null && newRefreshExpires.isNotEmpty) {
-              await prefs.setString('refresh_token_expires', newRefreshExpires);
-            }
-          } catch (_) {}
-          return true;
-        }
-      } else if (resp.statusCode == 401) {
-        // Token 签名无效或已完全过期，清除本地存储
-        if (kDebugMode) print('[RefreshToken] Token 无效（401），清除本地存储');
-        try {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.remove('auth_token');
-          await prefs.remove('auth_token_expires');
-          await prefs.remove('refresh_token');
-          await prefs.remove('refresh_token_expires');
-          const storage = FlutterSecureStorage();
-          await storage.delete(key: 'auth_token');
-          await storage.delete(key: 'refresh_token');
-        } catch (_) {}
-        authToken = null;
-        _core.updateAuthToken(null);
-        _cryptoService.clearSessionKey();
+      final newToken = await _tokenService.refreshToken();
+      if (newToken != null && newToken.isNotEmpty) {
+        authToken = newToken;
+        _core.updateAuthToken(authToken);
+        return true;
       }
       return false;
     } catch (e) {
-      if (kDebugMode) print('[RefreshToken] 异常: $e');
+      if (kDebugMode) print('[RefreshToken] 刷新失败: $e');
       return false;
     }
   }
+
 
   // 退出登录并清除本地令牌
   Future<void> logoutAndClear({StatusCallback? onStatus}) async {
@@ -1595,83 +1070,7 @@ class ApiService {
 
   /// 严格注销：先调用服务端注销，成功后清理所有本地令牌和会话数据
   Future<void> logoutStrict({StatusCallback? onStatus}) async {
-    try {
-      onStatus?.call(RequestStatus.loading, '正在退出登录...');
-      _updateStatus(RequestStatus.loading, '正在退出登录...');
-      
-      // 在有会话密钥时使用 AES，否则回退到 RSA 加密
-      http.Response resp;
-      if (_cryptoService.currentSessionKey != null) {
-        resp = await _httpRequest(
-          'POST',
-          '$baseUrl/api/auth/logout',
-          data: const {},
-          onStatus: onStatus,
-          allowRetry: false,
-        );
-      } else {
-        resp = await _encryptedRequest(
-          'POST',
-          '$baseUrl/api/auth/logout',
-          const {},
-          onStatus: onStatus,
-          allowRetry: false,
-        );
-      }
-      
-      if (resp.statusCode != 200) {
-        throw '注销失败: ${resp.body}';
-      }
-      
-      await _clearAllLocalData();
-      
-      onStatus?.call(RequestStatus.success, '退出登录成功');
-      _updateStatus(RequestStatus.success, '退出登录成功');
-    } catch (e) {
-      final msg = e.toString();
-      onStatus?.call(RequestStatus.error, msg);
-      _updateStatus(RequestStatus.error, msg);
-      rethrow;
-    }
-  }
-  
-  Future<void> _clearAllLocalData() async {
-    try {
-      authToken = null;
-      _core.updateAuthToken(null);
-      
-      _cryptoService.clearSessionKey();
-      
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('auth_token');
-      await prefs.remove('auth_token_expires');
-      await prefs.remove('refresh_token');
-      await prefs.remove('current_user_cache');
-      
-      const storage = FlutterSecureStorage();
-      await storage.delete(key: 'auth_token');
-      await storage.delete(key: 'refresh_token');
-      await storage.delete(key: 'session_key');
-      
-      final keys = prefs.getKeys();
-      for (final key in keys) {
-
-        if (!key.startsWith('auth_') && 
-            !key.startsWith('refresh_') && 
-            key != 'session_key') {
-          await prefs.remove(key);
-        }
-      }
-      _dataUpdateController.add({
-        'type': 'logout',
-        'data': null,
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-      });
-      _updateStatus(RequestStatus.idle, '已清空所有缓存');
-    } catch (e) {
-
-      debugPrint('清理本地数据时出错: $e');
-    }
+    return await _userService.logout(onStatus: onStatus);
   }
 
   Future<List<Project>> getProjects({StatusCallback? onStatus}) async {
@@ -2113,175 +1512,15 @@ class ApiService {
     int surveyId, {
     StatusCallback? onStatus,
   }) async {
-    try {
-      onStatus?.call(RequestStatus.loading, '正在获取问卷统计...');
-      _updateStatus(RequestStatus.loading, '正在获取问卷统计...');
-      
-      final response = await _httpRequest(
-        'GET',
-        '$baseUrl/api/survey/stats/$surveyId',
-        onStatus: onStatus,
-      );
-      
-      if (response.statusCode == 200) {
-        final stats = SurveyStats.fromJson(json.decode(response.body));
-        onStatus?.call(RequestStatus.success, '问卷统计获取成功');
-        _updateStatus(RequestStatus.success, '问卷统计获取成功');
-        return stats;
-      } else {
-        throw '获取问卷统计信息失败: ${response.statusCode}';
-      }
-    } catch (e) {
-      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
-        throw '请求超时，请检查您的网络连接。';
-      }
-      rethrow;
-    }
+    return await _statsService.getSingleSurveyStats(
+      surveyId: surveyId,
+      onStatus: onStatus,
+    );
   }
-
   Future<List<SurveyStats>> getAllSurveyStats({StatusCallback? onStatus}) async {
-    final prefs = await SharedPreferences.getInstance();
-    const cacheKey = 'survey_stats_cache';
-    final cached = prefs.getString(cacheKey);
-    if (cached != null) {
-      try {
-        onStatus?.call(RequestStatus.loading, '正在加载缓存数据...');
-        _updateStatus(RequestStatus.loading, '正在加载缓存数据...');
-        
-        final List<dynamic> jsonList = json.decode(cached);
-        final List<SurveyStats> stats = jsonList.map((e) => SurveyStats.fromJson(e)).toList();
-        
-        onStatus?.call(RequestStatus.success, '缓存数据加载成功');
-        _updateStatus(RequestStatus.success, '缓存数据加载成功');
-        
-        // 异步刷新网络数据，使用独立的回调避免状态混乱
-        _refreshAllSurveyStatsSilently(prefs, cacheKey, stats);
-        return stats;
-      } catch (e) {
-        onStatus?.call(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
-        _updateStatus(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
-      }
-    }
-    return await _refreshAllSurveyStats(prefs, cacheKey, onStatus: onStatus);
+    return await _statsService.getSurveyStats(onStatus: onStatus);
   }
 
-  // 静默刷新问卷统计数据（用于异步更新）
-  Future<void> _refreshAllSurveyStatsSilently(
-    SharedPreferences prefs, 
-    String cacheKey,
-    List<SurveyStats> cachedStats,
-  ) async {
-    try {
-      final response = await _httpRequest(
-        'GET',
-        '$baseUrl/api/survey/stats',
-        onStatus: null, // 不使用回调，避免状态混乱
-      );
-      
-      if (response.statusCode == 200) {
-        final dynamic body = json.decode(response.body);
-        if (body is List) {
-          final newStats = body.map<SurveyStats>((jsonItem) {
-            if (jsonItem is Map<String, dynamic>) {
-              return SurveyStats.fromJson(jsonItem);
-            } else {
-              return SurveyStats(
-                surveyId: 0,
-                surveyName: '无效数据',
-                viewCount: 0,
-                submitCount: 0,
-                submittedUsers: [],
-                lastViewTime: DateTime(1970),
-                lastSubmitTime: DateTime(1970),
-              );
-            }
-          }).toList();
-          
-          // 检查数据是否有变化
-          if (_hasSurveyStatsChanged(cachedStats, newStats)) {
-            prefs.setString(cacheKey, json.encode(body));
-            
-            // 通知UI数据已更新
-            _notifyDataUpdate('survey_stats', newStats);
-            _updateStatus(RequestStatus.success, '问卷统计数据已更新');
-          }
-        }
-      }
-    } catch (e) {
-      // 静默处理错误，不影响主流程
-    }
-  }
-  
-  // 检查问卷统计数据是否有变化
-  bool _hasSurveyStatsChanged(List<SurveyStats> oldStats, List<SurveyStats> newStats) {
-    if (oldStats.length != newStats.length) return true;
-    
-    for (int i = 0; i < oldStats.length; i++) {
-      if (oldStats[i].surveyId != newStats[i].surveyId ||
-          oldStats[i].viewCount != newStats[i].viewCount ||
-          oldStats[i].submitCount != newStats[i].submitCount ||
-          oldStats[i].lastViewTime != newStats[i].lastViewTime ||
-          oldStats[i].lastSubmitTime != newStats[i].lastSubmitTime) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  Future<List<SurveyStats>> _refreshAllSurveyStats(
-    SharedPreferences prefs, 
-    String cacheKey, {
-    StatusCallback? onStatus,
-  }) async {
-    try {
-      onStatus?.call(RequestStatus.loading, '正在获取问卷统计列表...');
-      _updateStatus(RequestStatus.loading, '正在获取问卷统计列表...');
-      
-      final response = await _httpRequest(
-        'GET',
-        '$baseUrl/api/survey/stats',
-        onStatus: onStatus,
-      );
-      
-      if (response.statusCode == 200) {
-        final dynamic body = json.decode(response.body);
-        if (body is List) {
-          prefs.setString(cacheKey, json.encode(body));
-          final stats = body.map<SurveyStats>((jsonItem) {
-            if (jsonItem is Map<String, dynamic>) {
-              return SurveyStats.fromJson(jsonItem);
-            } else {
-              return SurveyStats(
-                surveyId: 0,
-                surveyName: '无效数据',
-                viewCount: 0,
-                submitCount: 0,
-                submittedUsers: [],
-                lastViewTime: DateTime(1970),
-                lastSubmitTime: DateTime(1970),
-              );
-            }
-          }).toList();
-          
-          onStatus?.call(RequestStatus.success, '问卷统计列表获取成功');
-          _updateStatus(RequestStatus.success, '问卷统计列表获取成功');
-          
-          return stats;
-        } else {
-          onStatus?.call(RequestStatus.success, '问卷统计列表为空');
-          _updateStatus(RequestStatus.success, '问卷统计列表为空');
-          return [];
-        }
-      } else {
-        throw '获取问卷统计信息失败: ${response.statusCode}';
-      }
-    } catch (e) {
-      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
-        throw '请求超时，请检查您的网络连接。';
-      }
-      rethrow;
-    }
-  }
 
   // 刷新认证token（带实时响应）
   Future<String> refreshToken({StatusCallback? onStatus}) async {
@@ -2378,82 +1617,7 @@ class ApiService {
     int surveyId, {
     StatusCallback? onStatus,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final cacheKey = 'questions_$surveyId';
-    // 先尝试读取缓存
-    final cached = prefs.getString(cacheKey);
-    if (cached != null) {
-      try {
-        onStatus?.call(RequestStatus.loading, '正在加载缓存数据...');
-        _updateStatus(RequestStatus.loading, '正在加载缓存数据...');
-        
-        final List<dynamic> jsonList = json.decode(cached);
-        final List<Question> questions = jsonList.map((e) => Question.fromJson(e)).toList();
-        
-        onStatus?.call(RequestStatus.success, '缓存数据加载成功');
-        _updateStatus(RequestStatus.success, '缓存数据加载成功');
-        
-        // 异步刷新网络数据，使用独立的回调避免状态混乱
-        _refreshSurveyQuestionsSilently(surveyId, prefs, cacheKey, questions);
-        return questions;
-      } catch (e) {
-        onStatus?.call(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
-        _updateStatus(RequestStatus.error, '缓存数据解析失败，正在从网络获取...');
-      }
-    }
-    // 没有缓存或解析失败，走网络
-    return await _refreshSurveyQuestions(surveyId, prefs, cacheKey, onStatus: onStatus);
-  }
-
-  // 静默刷新问卷问题数据（用于异步更新）
-  Future<void> _refreshSurveyQuestionsSilently(
-    int surveyId, 
-    SharedPreferences prefs, 
-    String cacheKey,
-    List<Question> cachedQuestions,
-  ) async {
-    try {
-      final response = await _httpRequest(
-        'GET',
-        '$baseUrl/api/survey/$surveyId/questions',
-        onStatus: null, // 不使用回调，避免状态混乱
-      );
-      
-      if (response.statusCode == 200) {
-        final dynamic body = json.decode(response.body);
-        if (body == null || body is! List) {
-          return;
-        }
-        
-        final newQuestions = body.map<Question>((json) => Question.fromJson(json)).toList();
-        
-        // 检查数据是否有变化
-        if (_hasQuestionsChanged(cachedQuestions, newQuestions)) {
-          prefs.setString(cacheKey, json.encode(body));
-          
-          // 通知UI数据已更新
-          _notifyDataUpdate('questions_$surveyId', newQuestions);
-          _updateStatus(RequestStatus.success, '问卷问题数据已更新');
-        }
-      }
-    } catch (e) {
-      // 静默处理错误，不影响主流程
-    }
-  }
-  
-  // 检查问卷问题数据是否有变化
-  bool _hasQuestionsChanged(List<Question> oldQuestions, List<Question> newQuestions) {
-    if (oldQuestions.length != newQuestions.length) return true;
-    
-    for (int i = 0; i < oldQuestions.length; i++) {
-      if (oldQuestions[i].id != newQuestions[i].id ||
-          oldQuestions[i].title != newQuestions[i].title ||
-          oldQuestions[i].type != newQuestions[i].type ||
-          oldQuestions[i].order != newQuestions[i].order) {
-        return true;
-      }
-    }
-    return false;
+    return await _questionService.getSurveyQuestions(surveyId, onStatus: onStatus);
   }
 
   Future<List<Question>> _refreshSurveyQuestions(
@@ -2673,6 +1837,8 @@ Future<Question> addQuestion(
       dioClient.options.receiveTimeout = null; // 无接收超时
       dioClient.options.connectTimeout = const Duration(seconds: 30); // 仅保留连接超时
       
+      // Web平台仍然使用fromBytes，因为Stream方式会导致Dio无法追踪进度
+      // Dio的onSendProgress需要知道总大小，fromBytes可以正确计算进度
       final formData = dio.FormData.fromMap({
         'file': dio.MultipartFile.fromBytes(
           fileBytes,
@@ -2873,6 +2039,7 @@ Future<Question> addQuestion(
       dioClient.options.connectTimeout = const Duration(seconds: 30); // 仅保留连接超时
       
       final fileName = filePath.split(Platform.pathSeparator).last;
+      // 使用fromFile实现流式传输，不会一次性加载整个文件到内存
       final formData = dio.FormData.fromMap({
         'file': await dio.MultipartFile.fromFile(
           filePath,
@@ -3261,49 +2428,8 @@ Future<Question> addQuestion(
     }
   }
 
-  // 获取文字验证码图片（带实时响应）
-  Future<Map<String, dynamic>> getTextCaptcha({StatusCallback? onStatus}) async {
-    try {
-      onStatus?.call(RequestStatus.loading, '正在获取验证码...');
-      _updateStatus(RequestStatus.loading, '正在获取验证码...');
-      
-      final response = await _httpRequest(
-        'POST',
-        '$baseUrl/api/getCaptcha',
-        onStatus: onStatus,
-      );
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['code'] == 1) {
-          onStatus?.call(RequestStatus.success, '验证码获取成功');
-          _updateStatus(RequestStatus.success, '验证码获取成功');
-          return data;
-        } else {
-          final errorMsg = data['msg'] ?? '验证码获取失败';
-          onStatus?.call(RequestStatus.error, errorMsg);
-          _updateStatus(RequestStatus.error, errorMsg);
-          throw errorMsg;
-        }
-      } else {
-        final errorMsg = '验证码获取失败: ${response.statusCode}';
-        onStatus?.call(RequestStatus.error, errorMsg);
-        _updateStatus(RequestStatus.error, errorMsg);
-        throw errorMsg;
-      }
-    } catch (e) {
-      if (e.toString().contains('Timeout') || e.toString().contains('超时')) {
-        final errorMsg = '请求超时，请检查网络后重试';
-        onStatus?.call(RequestStatus.error, errorMsg);
-        _updateStatus(RequestStatus.error, errorMsg);
-        return {
-          'code': -1,
-          'msg': errorMsg,
-        };
-      } else {
-        rethrow;
-      }
-    }
+  Future<CaptchaSession> getTextCaptcha({StatusCallback? onStatus}) async {
+    return await _captchaService.getCaptcha(onStatus: onStatus);
   }
 
   /// 清除用户信息缓存
@@ -3745,39 +2871,21 @@ Future<Question> addQuestion(
     }
   }
 
-  // 获取问卷作答结果
   Future<List<SurveyResult>> getSurveyResults(
     int surveyId, {
     StatusCallback? onStatus,
   }) async {
-    try {
-      onStatus?.call(RequestStatus.loading, '正在获取作答结果...');
-      _updateStatus(RequestStatus.loading, '正在获取作答结果...');
-      
-      final response = await _httpRequest(
-        'GET',
-        '$baseUrl/api/answer/list/$surveyId',
-        onStatus: onStatus,
-      );
-      
-      if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        final results = data.map((item) => SurveyResult.fromJson(item)).toList();
-        onStatus?.call(RequestStatus.success, '作答结果获取成功');
-        _updateStatus(RequestStatus.success, '作答结果获取成功');
-        return results;
-      } else if (response.statusCode == 401) {
-        throw TokenExpired('未登录或登录已过期');
-      } else {
-        throw '获取作答结果失败: ${response.statusCode}';
-      }
-    } catch (e) {
-      final errorMsg = e.toString();
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      rethrow;
-    }
+    // Note: ResultService.getSurveyResults returns paginated data
+    // This method may need adjustment based on actual usage
+    final response = await _resultService.getSurveyResults(
+      surveyId: surveyId,
+      page: 1,
+      pageSize: 1000,  // Large page size to get all results
+      onStatus: onStatus,
+    );
+    return response.items;
   }
+  
 
   // 删除单个答案
   Future<void> deleteAnswer(
@@ -3848,65 +2956,31 @@ Future<Question> addQuestion(
     }
   }
 
-  /// 更新用户名
   Future<Map<String, dynamic>> updateUsername({
     required String newUsername,
     StatusCallback? onStatus,
   }) async {
-    try {
-      onStatus?.call(RequestStatus.loading, '正在更新用户名...');
-      _updateStatus(RequestStatus.loading, '正在更新用户名...');
+    return await _userService.updateUsername(
+      newUsername: newUsername,
+      onStatus: onStatus,
+    );
+  }
 
-      // 使用加密请求，后端 DecryptMiddleware 要求 PUT 必须加密
-      final response = await _encryptedRequest(
-        'PUT',
-        '$baseUrl/api/user/username',
-        {
-          'newUsername': newUsername,
-        },
-        onStatus: onStatus,
-      );
+  // ==================== 图片 URL 工具方法 ====================
+  
+  static String getImageUrl(String? imageUrl, {String quality = 'medium'}) {
+    return core.ImageService.getImageUrl(imageUrl, quality: quality);
+  }
 
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-        onStatus?.call(RequestStatus.success, '用户名更新成功');
-        _updateStatus(RequestStatus.success, '用户名更新成功');
-        
-        // 如果返回了新的token，更新本地存储的token
-        if (responseData['token'] != null) {
-          final newToken = responseData['token'];
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('auth_token', newToken);
-          authToken = newToken;
-          
-          // 同步更新核心服务的token
-          _core.updateAuthToken(newToken);
-          
-          // 强制清除加密服务的会话密钥，确保使用新token重新建立会话
-          _cryptoService.clearSessionKey();
-          
-          // 通知数据更新，触发UI刷新
-          _dataUpdateController.add({
-            'type': 'token_updated',
-            'data': {'newUsername': responseData['newUsername']},
-            'timestamp': DateTime.now().millisecondsSinceEpoch,
-          });
-        }
-        
-        return responseData;
-      } else if (response.statusCode == 400) {
-        final errorData = json.decode(response.body);
-        throw errorData['error'] ?? '用户名格式错误';
-      } else if (response.statusCode == 401) {
-        throw TokenExpired('未登录或登录已过期');
-      } else {
-        throw '更新用户名失败: ${response.statusCode}';
-      }
-    } catch (e) {
-      final errorMsg = e.toString();
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      rethrow;
-    }
+  static String getThumbUrl(String? imageUrl) {
+    return core.ImageService.getThumbUrl(imageUrl);
+  }
+
+  static String getMediumUrl(String? imageUrl) {
+    return core.ImageService.getMediumUrl(imageUrl);
+  }
+
+  static String getOriginalUrl(String? imageUrl) {
+    return core.ImageService.getOriginalUrl(imageUrl);
   }
 }

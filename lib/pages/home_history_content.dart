@@ -30,6 +30,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
   int _total = 0;
   List<Map<String, dynamic>> _items = [];
   Timer? _debounce;
+  bool _isProgrammaticPageChange = false; // 防止程序化更新触发回调
   
   FPaginationController _paginationController = FPaginationController(pages: 1);
 
@@ -131,7 +132,10 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
         _paginationController = FPaginationController(pages: totalPages);
       }
       // 同步当前页码到分页控制器（转换为0-based）
+      // 使用标志位防止触发onChange回调
+      _isProgrammaticPageChange = true;
       _paginationController.page = (_page - 1).clamp(0, totalPages - 1);
+      _isProgrammaticPageChange = false;
     } catch (e) {
       loadingTimer.cancel();
       if (!mounted) return;
@@ -141,17 +145,10 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
         alignment: FToastAlignment.bottomRight,
         title: const Text('加载失败'),
         description: Text(ErrorFormatter.format(e)),
-        suffixBuilder: (context, entry, _) => IntrinsicHeight(
+        suffixBuilder: (context, entry) => IntrinsicHeight(
           child: FButton(
-            style: context.theme.buttonStyles.primary.copyWith(
-              contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                textStyle: FWidgetStateMap.all(
-                  context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                ),
-              ),
-            ),
-            onPress: entry.dismiss,
+            style: context.theme.buttonStyles.primary.call,
+            onPress: entry.dismiss.call,
             child: const Text('关闭'),
           ),
         ),
@@ -175,6 +172,9 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
   }
 
   void _handlePageChange(int page) {
+    // 忽略程序化更新触发的回调
+    if (_isProgrammaticPageChange) return;
+    
     setState(() {
       _page = page + 1; // FPagination 是 0-based，但 API 是 1-based
     });
@@ -331,17 +331,16 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
                   controller: _typeSelectController,
                   label: const Text('问卷类型'),
                   hint: _selectedType == null ? '全部类型' : _typeText(_selectedType!),
-                  format: (v) => _typeText(v),
                   onChange: (v) {
                     setState(() => _selectedType = v);
                     _fetch(resetPage: true);
                   },
-                  children: [
-                    FSelectItem('普通问卷', 0),
-                    FSelectItem('限时问卷', 1),
-                    FSelectItem('限次问卷', 2),
-                    FSelectItem('自选风格', 3),
-                  ],
+                  items: const {
+                    '普通问卷': 0,
+                    '限时问卷': 1,
+                    '限次问卷': 2,
+                    '自选风格': 3,
+                  },
                 ),
               ),
               Padding(
@@ -355,7 +354,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
                     ),
                     const SizedBox(width: 12),
                     FButton(
-                      style: FButtonStyle.ghost,
+                      style: context.theme.buttonStyles.ghost.call,
                       onPress: () {
                         _searchController.clear();
                         setState(() {
@@ -578,12 +577,6 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
   Widget _buildPagination(BuildContext context) {
     final totalPages = (_total / _pageSize).ceil();
     final bool isCompactWidth = MediaQuery.of(context).size.width < 1025;
-    // 同步 controller 的页码（0-based）
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_paginationController.page != _page - 1) {
-        _paginationController.page = (_page - 1).clamp(0, (totalPages - 1).clamp(0, double.infinity).toInt());
-      }
-    });
 
     return Column(
       children: [

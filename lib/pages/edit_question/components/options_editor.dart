@@ -50,7 +50,7 @@ class _OptionsEditorState extends State<OptionsEditor> {
             Row(children: [
               if (widget.selectedType == QuestionType.singleChoice)
                 FButton(
-                  style: FButtonStyle.outline,
+                  style: context.theme.buttonStyles.outline.call,
                   onPress: widget.onBatchSetJump,
                   child: const Text('批量设置跳转'),
                 ),
@@ -171,14 +171,14 @@ class _OptionsEditorState extends State<OptionsEditor> {
           );
         }),
         FButton(
-          style: FButtonStyle.outline,
+          style: context.theme.buttonStyles.outline.call,
           onPress: widget.onAddOption,
           child: const Text('添加选项'),
         ),
         if (widget.selectedType == QuestionType.singleChoice || widget.selectedType == QuestionType.multipleChoice) ...[
           const SizedBox(height: 8),
           FButton(
-            style: FButtonStyle.outline,
+            style: context.theme.buttonStyles.outline.call,
             onPress: widget.onAddCustomOption,
             child: const Text('添加自定义填写选项'),
           ),

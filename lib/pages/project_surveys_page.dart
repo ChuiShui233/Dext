@@ -108,17 +108,10 @@ class _ProjectSurveysPageState extends State<ProjectSurveysPage> with WidgetsBin
           alignment:FToastAlignment.bottomRight,
           title: const Text('加载失败'),
           description: Text(ErrorFormatter.format(e)),
-          suffixBuilder: (context, entry, _) => IntrinsicHeight(
+          suffixBuilder: (context, entry) => IntrinsicHeight(
             child: FButton(
-              style: context.theme.buttonStyles.primary.copyWith(
-                contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                  textStyle: FWidgetStateMap.all(
-                    context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                  ),
-                ),
-              ),
-              onPress: entry.dismiss,
+              style: context.theme.buttonStyles.primary.call,
+              onPress: entry.dismiss.call,
               child: const Text('关闭'),
             ),
           ),

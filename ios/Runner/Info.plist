@@ -67,5 +67,12 @@
 		<string>applinks:wucode.xyz</string>
 	</array>
 
+	<!-- 个推后台运行模式 -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+		<string>audio</string>
+	</array>
+
 </dict>
 </plist>

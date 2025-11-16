@@ -7,6 +7,7 @@ import '../components/media_gallery.dart';
 import '../models/question.dart';
 import '../pages/fullscreen_media_viewer.dart';
 import '../services/config.dart';
+import '../services/api_service.dart';
 import 'markdown_text_widget.dart';
 
 /// 问题显示模式
@@ -352,7 +353,7 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
             fit: StackFit.passthrough,
             children: [
               CachedNetworkImage(
-                imageUrl: absUrl,
+                imageUrl: ApiService.getThumbUrl(mediaUrl),
                 httpHeaders: (widget.authToken != null && widget.authToken!.isNotEmpty)
                     ? { 'Authorization': 'Bearer ${widget.authToken!}' }
                     : null,

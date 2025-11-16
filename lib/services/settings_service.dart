@@ -15,6 +15,7 @@ class SettingsService {
   late String _themeMode;
   late bool _glassCardEnabled;
   late double _edgeDragWidth;
+  late double _dpiScale;
 
   // 设置键名常量
   static const String keyWindowCloseDontAsk = 'window_close_dont_ask';
@@ -22,6 +23,7 @@ class SettingsService {
   static const String keyThemeMode = 'theme_mode';
   static const String keyGlassCardEnabled = 'glass_card_enabled';
   static const String keyEdgeDragWidth = 'edge_drag_width';
+  static const String keyDpiScale = 'dpi_scale';
 
   /// 初始化设置服务（在 main 函数中调用）
   Future<void> initialize() async {
@@ -40,6 +42,7 @@ class SettingsService {
     _themeMode = _prefs?.getString(keyThemeMode) ?? 'system';
     _glassCardEnabled = _prefs?.getBool(keyGlassCardEnabled) ?? true;
     _edgeDragWidth = _prefs?.getDouble(keyEdgeDragWidth) ?? 24.0;
+    _dpiScale = _prefs?.getDouble(keyDpiScale) ?? 1.0;
 
     _isInitialized = true;
   }
@@ -53,6 +56,7 @@ class SettingsService {
       _themeMode = 'system';
       _glassCardEnabled = true;
       _edgeDragWidth = 24.0;
+      _dpiScale = 1.0;
       _isInitialized = true;
       // 异步尝试真正初始化（不阻塞当前读取）
       // ignore: discarded_futures
@@ -132,6 +136,20 @@ class SettingsService {
     }
   }
 
+  // === DPI 缩放设置 ===
+  double get dpiScale {
+    _ensureInitialized();
+    return _dpiScale;
+  }
+
+  Future<void> setDpiScale(double value) async {
+    _ensureInitialized();
+    _dpiScale = value;
+    if (_prefs != null) {
+      await _prefs!.setDouble(keyDpiScale, value);
+    }
+  }
+
   // === 通用方法 ===
   
   Future<void> clear() async {
@@ -145,6 +163,7 @@ class SettingsService {
     _themeMode = 'system';
     _glassCardEnabled = true;
     _edgeDragWidth = 24.0;
+    _dpiScale = 1.0;
   }
 
   Future<void> reload() async {
@@ -157,6 +176,7 @@ class SettingsService {
       _themeMode = _prefs!.getString(keyThemeMode) ?? 'system';
       _glassCardEnabled = _prefs!.getBool(keyGlassCardEnabled) ?? true;
       _edgeDragWidth = _prefs!.getDouble(keyEdgeDragWidth) ?? 24.0;
+      _dpiScale = _prefs!.getDouble(keyDpiScale) ?? 1.0;
     }
   }
 }

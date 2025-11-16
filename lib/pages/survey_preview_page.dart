@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../widgets/top_safe_spacer.dart';
@@ -84,10 +86,50 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
     if (backgroundUrl == null || backgroundUrl.isEmpty) {
       return;
     }
-   {
+    
+    try {
       final imageProvider = NetworkImage(toAbsoluteUrl(backgroundUrl));
-      await precacheImage(imageProvider, context);
-    } 
+      // 使用Completer等待图片真正加载完成
+      final completer = Completer<void>();
+      final ImageStream stream = imageProvider.resolve(ImageConfiguration(
+        devicePixelRatio: MediaQuery.of(context).devicePixelRatio,
+      ));
+      
+      late ImageStreamListener listener;
+      listener = ImageStreamListener(
+        (ImageInfo info, bool synchronousCall) {
+          // 图片加载完成
+          completer.complete();
+          stream.removeListener(listener);
+        },
+        onError: (exception, stackTrace) {
+          // 加载失败也继续
+          if (kDebugMode) {
+            print('背景图片加载失败: $exception');
+          }
+          completer.complete();
+          stream.removeListener(listener);
+        },
+      );
+      
+      stream.addListener(listener);
+      
+      // 等待图片加载完成，最多等待3秒
+      await completer.future.timeout(
+        const Duration(seconds: 3),
+        onTimeout: () {
+          if (kDebugMode) {
+            print('背景图片加载超时');
+          }
+          stream.removeListener(listener);
+        },
+      );
+    } catch (e) {
+      // 背景加载失败不影响问卷显示
+      if (kDebugMode) {
+        print('背景图片预加载失败: $e');
+      }
+    }
   }
 
   @override
@@ -100,19 +142,19 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: TweenAnimationBuilder<double>(
-              duration: const Duration(milliseconds: 800),
-              curve: Curves.easeOutCubic,
-              tween: Tween(begin: _backgroundLoaded ? 0.0 : 1.0, end: 0.0),
-              builder: (context, value, child) {
-                return Transform.translate(
-                  offset: Offset(MediaQuery.of(context).size.width * value, 0),
-                  child: child,
-                );
-              },
-              child: (_desktopBackground != null && _desktopBackground!.isNotEmpty) ||
-                     (_mobileBackground != null && _mobileBackground!.isNotEmpty)
-                  ? Container(
+            child: (_desktopBackground != null && _desktopBackground!.isNotEmpty) ||
+                   (_mobileBackground != null && _mobileBackground!.isNotEmpty)
+                ? TweenAnimationBuilder<double>(
+                    duration: const Duration(milliseconds: 800),
+                    curve: Curves.easeOutCubic,
+                    tween: Tween(begin: _backgroundLoaded ? 0.0 : 1.0, end: 0.0),
+                    builder: (context, value, child) {
+                      return Transform.translate(
+                        offset: Offset(MediaQuery.of(context).size.width * value, 0),
+                        child: child,
+                      );
+                    },
+                    child: Container(
                       decoration: BoxDecoration(
                         image: DecorationImage(
                           image: NetworkImage(isWide
@@ -127,9 +169,9 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
                               color: Colors.black.withValues(alpha: 0.4),
                             )
                           : null,
-                    )
-                  : const FrostedGlassBackground(),
-            ),
+                    ),
+                  )
+                : const FrostedGlassBackground(),
           ),
 
           Column(

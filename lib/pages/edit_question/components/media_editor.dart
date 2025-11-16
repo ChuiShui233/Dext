@@ -4,7 +4,51 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../services/config.dart';
+import '../../../services/settings_service.dart';
 import '../../../components/video_player_widget.dart';
+
+// 交互缩放包装：悬停轻微放大（1.02）、按下轻微缩小（0.98）
+class _InteractiveScale extends StatefulWidget {
+  final Widget child;
+
+  const _InteractiveScale({
+    required this.child,
+  });
+
+  @override
+  State<_InteractiveScale> createState() => _InteractiveScaleState();
+}
+
+class _InteractiveScaleState extends State<_InteractiveScale> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  double get _scale {
+    if (_pressed) return 0.98;
+    if (_hovered) return 1.02;
+    return 1.0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => setState(() => _pressed = true),
+        onPointerUp: (_) => setState(() => _pressed = false),
+        onPointerCancel: (_) => setState(() => _pressed = false),
+        child: AnimatedScale(
+          scale: _scale,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
 
 class MediaEditor extends StatefulWidget {
   final List<String> mediaUrls;
@@ -38,6 +82,26 @@ class MediaEditor extends StatefulWidget {
 
 class _MediaEditorState extends State<MediaEditor> {
   bool _isDragOver = false;
+
+  // 按钮基础缩放（屏宽 × DPI）
+  double _buttonBaseScale(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    double base;
+    if (width <= 360) {
+      base = 0.85;
+    } else if (width <= 480) {
+      base = 0.90;
+    } else if (width <= 600) {
+      base = 0.95;
+    } else if (width <= 760) {
+      base = 0.98;
+    } else {
+      base = 1.00;
+    }
+    final dpi = SettingsService().dpiScale;
+    final scaled = base * dpi;
+    return scaled.clamp(0.80, 1.15);
+  }
 
   Future<void> _handleDroppedFiles(List<dynamic> files) async {
     if (files.isEmpty) return;
@@ -141,10 +205,14 @@ class _MediaEditorState extends State<MediaEditor> {
               ],
             ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
+            AnimatedScale(
+              scale: _isDragOver ? 1.02 : 1.0,
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
             ...widget.mediaUrls.map((url) {
               Widget mediaWidget;
               final absUrl = toAbsoluteUrl(url);
@@ -182,112 +250,32 @@ class _MediaEditorState extends State<MediaEditor> {
                 mediaWidget = const Center(child: Icon(Icons.file_present, size: 40));
               }
 
-              return Stack(
-                children: [
-                  Container(
-                    width: isVideo ? 200 : 100,
-                    height: isVideo ? 150 : 100,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey),
-                      borderRadius: BorderRadius.circular(8),
+              return AnimatedSwitcher(
+                key: ValueKey('media_$url'),
+                duration: const Duration(milliseconds: 250),
+                switchInCurve: Curves.easeOutCubic,
+                transitionBuilder: (child, animation) {
+                  final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+                  return FadeTransition(
+                    opacity: animation,
+                    child: ScaleTransition(
+                      scale: Tween<double>(begin: 0.95, end: 1.0).animate(curved),
+                      child: child,
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(7), 
-                      child: mediaWidget,
-                    ),
-                  ),
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: GestureDetector(
-                        onTap: () => widget.onDeleteMedia(url),
-                        child: const Padding(
-                          padding: EdgeInsets.all(4),
-                          child: Icon(
-                            Icons.close,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            }),
-            ...widget.uploadingFiles.keys.map((fileName) {
-              final progress = widget.uploadProgress[fileName] ?? 0.0;
-              final statusText = widget.uploadStatus[fileName];
-              final isImage = fileName.toLowerCase().endsWith('.jpg') || 
-                             fileName.toLowerCase().endsWith('.jpeg') || 
-                             fileName.toLowerCase().endsWith('.png') ||
-                             fileName.toLowerCase().endsWith('.gif');
-              final isVideo = fileName.toLowerCase().endsWith('.mp4') || 
-                             fileName.toLowerCase().endsWith('.avi') || 
-                             fileName.toLowerCase().endsWith('.mov') ||
-                             fileName.toLowerCase().endsWith('.webm');
-              
-              return Container(
-                width: isVideo ? 200 : 100,
-                height: isVideo ? 150 : 100,
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey),
-                  borderRadius: BorderRadius.circular(8),
-                  color: Colors.grey.shade100,
-                ),
+                  );
+                },
                 child: Stack(
                   children: [
-                    Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            isImage ? Icons.image : 
-                            isVideo ? Icons.video_file : 
-                            Icons.audio_file,
-                            size: 30,
-                            color: Colors.grey.shade600,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            fileName.length > 15 
-                                ? '${fileName.substring(0, 12)}...'
-                                : fileName,
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.grey.shade600,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
+                    Container(
+                      width: isVideo ? 200 : 100,
+                      height: isVideo ? 150 : 100,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    ),
-                    Positioned(
-                      bottom: 8,
-                      left: 8,
-                      right: 8,
-                      child: Column(
-                        children: [
-                          LinearProgressIndicator(
-                            value: progress,
-                            backgroundColor: Colors.grey.shade300,
-                            valueColor: const AlwaysStoppedAnimation<Color>(
-                              Colors.blue,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            statusText != null && statusText.isNotEmpty
-                                ? statusText
-                                : '${(progress * 100).toInt()}%',
-                            style: const TextStyle(fontSize: 10),
-                          ),
-                        ],
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(7), 
+                        child: mediaWidget,
                       ),
                     ),
                     Positioned(
@@ -299,7 +287,7 @@ class _MediaEditorState extends State<MediaEditor> {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: GestureDetector(
-                          onTap: () => widget.onCancelUpload(fileName),
+                          onTap: () => widget.onDeleteMedia(url),
                           child: const Padding(
                             padding: EdgeInsets.all(4),
                             child: Icon(
@@ -315,13 +303,141 @@ class _MediaEditorState extends State<MediaEditor> {
                 ),
               );
             }),
+            ...widget.uploadingFiles.keys.map((fileName) {
+              final progress = widget.uploadProgress[fileName] ?? 0.0;
+              final statusText = widget.uploadStatus[fileName];
+              final isImage = fileName.toLowerCase().endsWith('.jpg') || 
+                             fileName.toLowerCase().endsWith('.jpeg') || 
+                             fileName.toLowerCase().endsWith('.png') ||
+                             fileName.toLowerCase().endsWith('.gif');
+              final isVideo = fileName.toLowerCase().endsWith('.mp4') || 
+                             fileName.toLowerCase().endsWith('.avi') || 
+                             fileName.toLowerCase().endsWith('.mov') ||
+                             fileName.toLowerCase().endsWith('.webm');
+              
+              return AnimatedSwitcher(
+                key: ValueKey('upload_$fileName'),
+                duration: const Duration(milliseconds: 220),
+                switchInCurve: Curves.easeOutCubic,
+                transitionBuilder: (child, animation) {
+                  final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+                  return FadeTransition(
+                    opacity: animation,
+                    child: ScaleTransition(
+                      scale: Tween<double>(begin: 0.95, end: 1.0).animate(curved),
+                      child: child,
+                    ),
+                  );
+                },
+                child: Container(
+                  width: isVideo ? 200 : 100,
+                  height: isVideo ? 150 : 100,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.grey.shade100,
+                  ),
+                  child: Stack(
+                    children: [
+                      Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              isImage ? Icons.image : 
+                              isVideo ? Icons.video_file : 
+                              Icons.audio_file,
+                              size: 30,
+                              color: Colors.grey.shade600,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              fileName.length > 15 
+                                  ? '${fileName.substring(0, 12)}...'
+                                  : fileName,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey.shade600,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 8,
+                        left: 8,
+                        right: 8,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              statusText ?? '上传中 ${(progress * 100).toInt()}%',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            LinearProgressIndicator(
+                              value: progress,
+                              backgroundColor: Colors.grey.shade300,
+                              valueColor: const AlwaysStoppedAnimation<Color>(
+                                Colors.blue,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              (progress * 100).toInt() < 100 ? '请稍候...' : '上传完成',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.white70,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: GestureDetector(
+                            onTap: () => widget.onCancelUpload(fileName),
+                            child: const Padding(
+                              padding: EdgeInsets.all(4),
+                              child: Icon(
+                                Icons.close,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
           ],
+              ),
             ),
             const SizedBox(height: 8),
-            FButton(
-              style: FButtonStyle.outline,
-              onPress: widget.onUploadMedia,
-              child: const Text('上传媒体文件'),
+            Transform.scale(
+              scale: _buttonBaseScale(context),
+              alignment: Alignment.centerLeft,
+              child: _InteractiveScale(
+                child: FButton(
+                  style: context.theme.buttonStyles.outline.call,
+                  onPress: () => widget.onUploadMedia(),
+                  child: const Text('上传媒体文件'),
+                ),
+              ),
             ),
             if (widget.mediaUrls.any((url) => _isImageUrl(url))) ...[
               const SizedBox(height: 16),

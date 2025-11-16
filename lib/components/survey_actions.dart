@@ -48,11 +48,13 @@ class SurveyActions extends StatelessWidget {
     // 构建公开链接 - 使用统一配置的域名和问卷的 surveyUID
     final publicLink = buildPublicSurveyUrl(survey.surveyUid);
     
-    await showAdaptiveDialog(
+    await showFDialog(
       context: context,
-      builder: (context) => FDialog(
+      builder: (context, style, animation) => FDialog(
+        style: style.call,
+        animation: animation,
         direction: Axis.horizontal,
-        title: const Text('问卷公开链接'),
+        title: const Text('分享问卷'),
         body: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -100,7 +102,7 @@ class SurveyActions extends StatelessWidget {
         ),
         actions: [
           FButton(
-            style: FButtonStyle.outline,
+            style: context.theme.buttonStyles.outline.call,
             onPress: () async {
               await Clipboard.setData(ClipboardData(text: publicLink));
               if (!context.mounted) return;
@@ -113,16 +115,9 @@ class SurveyActions extends StatelessWidget {
                 alignment: FToastAlignment.bottomRight,
                 title: const Text('复制成功'),
                 description: const Text('链接已复制到剪贴板'),
-                suffixBuilder: (context, entry, _) => IntrinsicHeight(
+                suffixBuilder: (context, entry) => IntrinsicHeight(
                   child: FButton(
-                    style: context.theme.buttonStyles.primary.copyWith(
-                      contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                        textStyle: FWidgetStateMap.all(
-                          context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                        ),
-                      ),
-                    ),
+                    style: context.theme.buttonStyles.primary.call,
                     onPress: entry.dismiss,
                     child: const Text('关闭'),
                   ),
@@ -141,20 +136,22 @@ class SurveyActions extends StatelessWidget {
   }
 
   Future<void> _deleteSurvey(BuildContext context) async {
-    final confirmed = await showAdaptiveDialog<bool>(
+    final confirmed = await showFDialog<bool>(
       context: context,
-      builder: (context) => FDialog(
+      builder: (context, style, animation) => FDialog(
+        style: style.call,
+        animation: animation,
         direction: Axis.horizontal,
         title: const Text('确认删除'),
         body: Text('确定要删除问卷"${survey.surveyName}"吗？此操作不可恢复。'),
         actions: [
           FButton(
-            style: FButtonStyle.outline,
+            style: context.theme.buttonStyles.outline.call,
             onPress: () => Navigator.pop(context, false),
             child: const Text('取消'),
           ),
           FButton(
-            style: FButtonStyle.destructive,
+            style: context.theme.buttonStyles.destructive.call,
             onPress: () => Navigator.pop(context, true),
             child: const Text('删除'),
           ),
@@ -173,16 +170,9 @@ class SurveyActions extends StatelessWidget {
         alignment:FToastAlignment.bottomRight,
         title: const Text('删除成功'),
         description: const Text('问卷已删除'),
-        suffixBuilder: (context, entry, _) => IntrinsicHeight(
+        suffixBuilder: (context, entry) => IntrinsicHeight(
           child: FButton(
-            style: context.theme.buttonStyles.primary.copyWith(
-              contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                textStyle: FWidgetStateMap.all(
-                  context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                ),
-              ),
-            ),
+            style: context.theme.buttonStyles.primary.call,
             onPress: entry.dismiss,
             child: const Text('关闭'),
           ),
@@ -197,16 +187,9 @@ class SurveyActions extends StatelessWidget {
         alignment:FToastAlignment.bottomRight,
         title: const Text('删除失败'),
         description: Text('删除问卷失败: $e'),
-        suffixBuilder: (context, entry, _) => IntrinsicHeight(
+        suffixBuilder: (context, entry) => IntrinsicHeight(
           child: FButton(
-            style: context.theme.buttonStyles.primary.copyWith(
-              contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                textStyle: FWidgetStateMap.all(
-                  context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                ),
-              ),
-            ),
+            style: context.theme.buttonStyles.primary.call,
             onPress: entry.dismiss,
             child: const Text('关闭'),
           ),
@@ -254,7 +237,7 @@ class SurveyActions extends StatelessWidget {
           children: [
           if (survey.surveyStatus == 1) ...[
             FButton(
-              style: FButtonStyle.outline,
+              style: context.theme.buttonStyles.outline.call,
               onPress: () => _showPublicLink(context),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -280,7 +263,7 @@ class SurveyActions extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           FButton(
-            style: FButtonStyle.destructive,
+            style: context.theme.buttonStyles.destructive.call,
             onPress: () => _deleteSurvey(context),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -304,7 +287,7 @@ class SurveyActions extends StatelessWidget {
       children: [
         if (survey.surveyStatus == 1)
           FButton(
-            style: FButtonStyle.outline,
+            style: context.theme.buttonStyles.outline.call,
             onPress: () => _showPublicLink(context),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -337,7 +320,7 @@ class SurveyActions extends StatelessWidget {
           ),
         ),
         FButton(
-          style: FButtonStyle.destructive,
+          style: context.theme.buttonStyles.destructive.call,
           onPress: () => _deleteSurvey(context),
           child: Row(
             mainAxisSize: MainAxisSize.min,

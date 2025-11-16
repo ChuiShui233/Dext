@@ -138,17 +138,10 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
         alignment: FToastAlignment.bottomRight,
         title: const Text('无法添加'),
         description: const Text('已存在自定义填写选项'),
-        suffixBuilder: (context, entry, _) => IntrinsicHeight(
+        suffixBuilder: (context, entry) => IntrinsicHeight(
           child: FButton(
-            style: context.theme.buttonStyles.primary.copyWith(
-              contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                textStyle: FWidgetStateMap.all(
-                  context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                ),
-              ),
-            ),
-            onPress: entry.dismiss,
+            style: context.theme.buttonStyles.primary.call,
+            onPress: entry.dismiss.call,
             child: const Text('关闭'),
           ),
         ),
@@ -182,9 +175,10 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
       for (int i = 0; i < _options.length; i++) {
         final opt = _options[i];
         final jl = _jumpLogic[opt.id];
-        if (jl != null && jl > 0) {
+        // 允许 -1（结束问卷）和正整数（问题ID）
+        if (jl != null && (jl == -1 || jl > 0)) {
           // 已有跳题逻辑
-        } else if (opt.destination != null && opt.destination! > 0) {
+        } else if (opt.destination != null && (opt.destination! == -1 || opt.destination! > 0)) {
           _jumpLogic[opt.id] = opt.destination!;
         }
       }
@@ -425,15 +419,7 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
               });
             }
           },
-          onStatus: (status, message) {
-            if (!mounted) return;
-            if (_cancelledUploads[fileName] ?? false) return;
-            setState(() {
-              if (message != null && message.isNotEmpty) {
-                _uploadStatus[fileName] = message;
-              }
-            });
-          },
+          // 不使用 onStatus，只显示百分比进度
         );
 
         if (mounted && !(_cancelledUploads[fileName] ?? false)) {
@@ -465,7 +451,7 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
         body: const Text('确定要删除这个媒体文件吗？'),
         actions: [
           FButton(
-            style: FButtonStyle.outline,
+            style: context.theme.buttonStyles.outline.call,
             onPress: () => Navigator.pop(context, false),
             child: const Text('取消'),
           ),
@@ -592,17 +578,10 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
       alignment: FToastAlignment.bottomRight,
       title: Text(title),
       description: Text(message),
-      suffixBuilder: (context, entry, _) => IntrinsicHeight(
+      suffixBuilder: (context, entry) => IntrinsicHeight(
         child: FButton(
-          style: context.theme.buttonStyles.primary.copyWith(
-            contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-              textStyle: FWidgetStateMap.all(
-                context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-              ),
-            ),
-          ),
-          onPress: entry.dismiss,
+          style: context.theme.buttonStyles.primary.call,
+          onPress: entry.dismiss.call,
           child: const Text('关闭'),
         ),
       ),
@@ -777,14 +756,14 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
   Widget _buildTypeSelector() {
     return FSelect<QuestionType>(
       label: const Text('问题类型'),
-      format: (value) => _getQuestionTypeText(value),
+      hint: '请选择问题类型',
       initialValue: _selectedType,
       onChange: (value) {
         if (value != null) setState(() => _selectedType = value);
       },
-      children: QuestionType.values
-          .map((type) => FSelectItem(_getQuestionTypeText(type), type))
-          .toList(),
+      items: {
+        for (final type in QuestionType.values) _getQuestionTypeText(type): type,
+      },
     );
   }
 
@@ -886,15 +865,14 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
           );
           if (result != null) {
             setState(() {
-              final newDest = (result == -1) ? null : result;
+              // result 可以是 -1（结束问卷）或其他问题ID
+              // 都应该保存到 jumpLogic 中
+              _jumpLogic[option.id] = result;
+              
+              // 更新选项的 destination 字段（用于 UI 显示）
               final idx = _options.indexWhere((o) => o.id == option.id);
               if (idx != -1) {
-                _options[idx] = _options[idx].copyWith(destination: newDest);
-              }
-              if (newDest == null) {
-                _jumpLogic.remove(option.id);
-              } else {
-                _jumpLogic[option.id] = newDest;
+                _options[idx] = _options[idx].copyWith(destination: result);
               }
             });
           }

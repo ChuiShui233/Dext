@@ -29,10 +29,30 @@ android {
 
     defaultConfig {
         applicationId "com.chuishui.Dext"
-        minSdkVersion 23
+        minSdkVersion flutter.minSdkVersion
         targetSdk 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
+        
+        // 个推配置
+        manifestPlaceholders = [
+                applicationName: "android.app.Application",
+                GETUI_APPID    : "cy0d7CICux7YKvteM5cy87",
+                // 华为相关应用参数
+                HUAWEI_APP_ID  : "",
+                // 小米相关应用参数
+                XIAOMI_APP_ID  : "",
+                XIAOMI_APP_KEY : "",
+                // OPPO相关应用参数
+                OPPO_APP_KEY   : "",
+                OPPO_APP_SECRET: "",
+                // VIVO相关应用参数
+                VIVO_APP_ID    : "",
+                VIVO_APP_KEY   : "",
+                // 魅族相关应用参数
+                MEIZU_APP_ID   : "",
+                MEIZU_APP_KEY  : ""
+        ]
     }
 
     signingConfigs {

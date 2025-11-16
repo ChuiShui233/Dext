@@ -1,5 +1,7 @@
 // file: lib/controllers/survey_runtime.dart
 
+import 'package:flutter/foundation.dart';
+
 import '../models/question.dart';
 
 /// 多选题跳转策略
@@ -92,17 +94,59 @@ class SurveyRuntimeController {
               break;
           }
 
-          final opt = q.options.firstWhere(
-            (o) => o.text == pivot,
-            orElse: () => q.options.first,
-          );
+          // 尝试将 pivot 解析为选项ID，如果失败则按文本匹配
+          QuestionOption? opt;
+          try {
+            final optionId = int.parse(pivot);
+            opt = q.options.firstWhere(
+              (o) => o.id == optionId,
+              orElse: () => q.options.firstWhere(
+                (o) => o.text == pivot,
+                orElse: () => q.options.first,
+              ),
+            );
+          } catch (e) {
+            // pivot 不是数字，按文本匹配
+            opt = q.options.firstWhere(
+              (o) => o.text == pivot,
+              orElse: () => q.options.first,
+            );
+          }
 
-          if (opt.destination == -1) {
+          if (kDebugMode) {
+            print('[Runtime] 问题 ${q.id} 已选择: "$pivot", 匹配到选项ID: ${opt.id}');
+          }
+          if (kDebugMode) {
+            print('[Runtime] 问题 ${q.id} 的 jumpLogic: ${q.jumpLogic}');
+          }
+
+          // 从 Question.jumpLogic 中查找跳转目标，而不是 opt.destination
+          final targetQuestionId = q.jumpLogic[opt.id];
+          if (kDebugMode) {
+            print('[Runtime] 选项ID ${opt.id} 的跳转目标: $targetQuestionId');
+          }
+          
+          if (targetQuestionId == -1) {
+            // -1 表示结束问卷
+            if (kDebugMode) {
+              print('[Runtime] ⚠️ 检测到结束问卷标记，问卷结束');
+            }
             ended = true;
             break;
           }
-          if (opt.destination != null && idToIndex.containsKey(opt.destination)) {
-            nextIdx = idToIndex[opt.destination!];
+          if (targetQuestionId != null && idToIndex.containsKey(targetQuestionId)) {
+            nextIdx = idToIndex[targetQuestionId];
+            if (kDebugMode) {
+              print('[Runtime] 跳转到问题ID: $targetQuestionId (index: $nextIdx)');
+            }
+          } else if (targetQuestionId != null) {
+            if (kDebugMode) {
+              print('[Runtime] 警告: 跳转目标 $targetQuestionId 不存在，使用默认下一题');
+            }
+          } else {
+            if (kDebugMode) {
+              print('[Runtime] 没有跳转逻辑，继续下一题');
+            }
           }
         }
         // 文本题/评分题已作答，继续下一题

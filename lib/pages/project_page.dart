@@ -52,8 +52,13 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _apiService = ApiService(authToken: widget.token);
-    // 首次加载跳过缓存，确保显示最新数据
-    _loadProjects(skipCache: true);
+    // 首次加载使用缓存优先策略，快速显示
+    _loadProjects(skipCache: false).then((_) {
+      // 缓存加载完后，立即发起静默刷新（带下拉动画）
+      if (mounted) {
+        _loadProjects(silent: true, skipCache: false);
+      }
+    });
     
     _startAutoRefresh();
   }
@@ -70,8 +75,8 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // 应用恢复时跳过缓存，加载最新数据
-      _loadProjects(skipCache: true);
+      // 应用恢复时使用缓存优先，后台刷新
+      _loadProjects(skipCache: false);
       _startAutoRefresh();
     } else if (state == AppLifecycleState.paused) {
       _stopAutoRefresh();
@@ -135,17 +140,10 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
         alignment: FToastAlignment.bottomRight,
         title: const Text('刷新失败'),
         description: Text('刷新数据失败: $e'),
-        suffixBuilder: (context, entry, _) => IntrinsicHeight(
+        suffixBuilder: (context, entry) => IntrinsicHeight(
           child: FButton(
-            style: context.theme.buttonStyles.primary.copyWith(
-              contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                textStyle: FWidgetStateMap.all(
-                  context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                ),
-              ),
-            ),
-            onPress: entry.dismiss,
+            style: context.theme.buttonStyles.primary.call,
+            onPress: entry.dismiss.call,
             child: const Text('关闭'),
           ),
         ),
@@ -155,6 +153,11 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
 
   Future<void> _loadProjects({bool silent = false, bool skipCache = false}) async {
     if (!mounted) return;
+    
+    // 静默刷新时触发下拉刷新动画
+    if (silent && !_refreshController.isRefresh) {
+      _refreshController.requestRefresh();
+    }
     
     Timer? loadingTimer;
     if (!silent) {
@@ -174,6 +177,11 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
       );
       loadingTimer?.cancel();
       if (!mounted) return;
+      
+      // 静默刷新完成，结束下拉动画
+      if (silent && _refreshController.isRefresh) {
+        _refreshController.refreshCompleted();
+      }
       
       setState(() {
         _projects = paginatedResponse.items;
@@ -227,17 +235,10 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
           alignment: FToastAlignment.bottomRight,
           title: const Text('加载失败'),
           description: Text(ErrorFormatter.format(e)),
-          suffixBuilder: (context, entry, _) => IntrinsicHeight(
+          suffixBuilder: (context, entry) => IntrinsicHeight(
             child: FButton(
-              style: context.theme.buttonStyles.primary.copyWith(
-                contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                  textStyle: FWidgetStateMap.all(
-                    context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                  ),
-                ),
-              ),
-              onPress: entry.dismiss,
+              style: context.theme.buttonStyles.primary.call,
+              onPress: entry.dismiss.call,
               child: const Text('关闭'),
             ),
           ),
@@ -253,9 +254,11 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
     final TextEditingController nameController = TextEditingController();
     final TextEditingController descController = TextEditingController();
 
-    return showAdaptiveDialog(
+    return showFDialog(
       context: context,
-      builder: (context) => FDialog(
+      builder: (context, style, animation) => FDialog(
+        style: style.call,
+        animation: animation,
         direction: Axis.horizontal,
         title: const Text('新建项目'),
         body: Column(
@@ -276,7 +279,7 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
         ),
         actions: [
           FButton(
-            style: FButtonStyle.outline,
+            style: context.theme.buttonStyles.outline.call,
             onPress: () => Navigator.pop(context),
             child: const Text('取消'),
           ),
@@ -288,17 +291,10 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                   alignment:FToastAlignment.bottomRight,
                   title: const Text('提示'),
                   description: const Text('请填写完整信息'),
-                  suffixBuilder: (context, entry, _) => IntrinsicHeight(
+                  suffixBuilder: (context, entry) => IntrinsicHeight(
                     child: FButton(
-                      style: context.theme.buttonStyles.primary.copyWith(
-                        contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                          textStyle: FWidgetStateMap.all(
-                            context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                          ),
-                        ),
-                      ),
-                      onPress: entry.dismiss,
+                      style: context.theme.buttonStyles.primary.call,
+                      onPress: entry.dismiss.call,
                       child: const Text('关闭'),
                     ),
                   ),
@@ -345,17 +341,10 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                   alignment:FToastAlignment.bottomRight,
                   title: const Text('创建失败'),
                   description: Text('创建项目失败: $e'),
-                  suffixBuilder: (context, entry, _) => IntrinsicHeight(
+                  suffixBuilder: (context, entry) => IntrinsicHeight(
                     child: FButton(
-                      style: context.theme.buttonStyles.primary.copyWith(
-                        contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                          textStyle: FWidgetStateMap.all(
-                            context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                          ),
-                        ),
-                      ),
-                      onPress: entry.dismiss,
+                      style: context.theme.buttonStyles.primary.call,
+                      onPress: entry.dismiss.call,
                       child: const Text('关闭'),
                     ),
                   ),
@@ -376,9 +365,11 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
     final TextEditingController nameController = TextEditingController(text: project.projectName);
     final TextEditingController descController = TextEditingController(text: project.projectDescription);
 
-    return showAdaptiveDialog(
+    return showFDialog(
       context: context,
-      builder: (context) => FDialog(
+      builder: (context, style, animation) => FDialog(
+        style: style.call,
+        animation: animation,
         direction: Axis.horizontal,
         title: const Text('编辑项目'),
         body: Column(
@@ -399,7 +390,7 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
         ),
         actions: [
           FButton(
-            style: FButtonStyle.outline,
+            style: context.theme.buttonStyles.outline.call,
             onPress: () => Navigator.pop(context),
             child: const Text('取消'),
           ),
@@ -411,17 +402,10 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                   alignment:FToastAlignment.bottomRight,
                   title: const Text('提示'),
                   description: const Text('请填写完整信息'),
-                  suffixBuilder: (context, entry, _) => IntrinsicHeight(
+                  suffixBuilder: (context, entry) => IntrinsicHeight(
                     child: FButton(
-                      style: context.theme.buttonStyles.primary.copyWith(
-                        contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                          textStyle: FWidgetStateMap.all(
-                            context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                          ),
-                        ),
-                      ),
-                      onPress: entry.dismiss,
+                      style: context.theme.buttonStyles.primary.call,
+                      onPress: entry.dismiss.call,
                       child: const Text('关闭'),
                     ),
                   ),
@@ -449,17 +433,10 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                   alignment:FToastAlignment.bottomRight,
                   title: const Text('更新失败'),
                   description: Text('更新项目失败: $e'),
-                  suffixBuilder: (context, entry, _) => IntrinsicHeight(
+                  suffixBuilder: (context, entry) => IntrinsicHeight(
                     child: FButton(
-                      style: context.theme.buttonStyles.primary.copyWith(
-                        contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                          textStyle: FWidgetStateMap.all(
-                            context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                          ),
-                        ),
-                      ),
-                      onPress: entry.dismiss,
+                      style: context.theme.buttonStyles.primary.call,
+                      onPress: entry.dismiss.call,
                       child: const Text('关闭'),
                     ),
                   ),
@@ -580,20 +557,22 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
   Future<void> _batchDeleteProjects() async {
     if (_selectedProjectIds.isEmpty) return;
 
-    final confirm = await showAdaptiveDialog<bool>(
+    final confirm = await showFDialog<bool>(
       context: context,
-      builder: (context) => FDialog(
+      builder: (context, style, animation) => FDialog(
+        style: style.call,
+        animation: animation,
         direction: Axis.horizontal,
         title: const Text('确认批量删除'),
         body: Text('确定要删除选中的 ${_selectedProjectIds.length} 个项目吗？此操作不可撤销。'),
         actions: [
           FButton(
-            style: FButtonStyle.outline,
+            style: context.theme.buttonStyles.outline.call,
             onPress: () => Navigator.of(context).pop(false),
             child: const Text('取消'),
           ),
           FButton(
-            style: FButtonStyle.destructive,
+            style: context.theme.buttonStyles.destructive.call,
             onPress: () => Navigator.of(context).pop(true),
             child: const Text('删除'),
           ),
@@ -623,17 +602,10 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
           alignment: FToastAlignment.bottomRight,
           title: const Text('删除成功'),
           description: Text('已删除 $deletedCount 个项目'),
-          suffixBuilder: (context, entry, _) => IntrinsicHeight(
+          suffixBuilder: (context, entry) => IntrinsicHeight(
             child: FButton(
-              style: context.theme.buttonStyles.primary.copyWith(
-                contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                  textStyle: FWidgetStateMap.all(
-                    context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                  ),
-                ),
-              ),
-              onPress: entry.dismiss,
+              style: context.theme.buttonStyles.primary.call,
+              onPress: entry.dismiss.call,
               child: const Text('关闭'),
             ),
           ),
@@ -645,17 +617,10 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
           alignment: FToastAlignment.bottomRight,
           title: const Text('删除失败'),
           description: Text('批量删除项目失败: $e'),
-          suffixBuilder: (context, entry, _) => IntrinsicHeight(
+          suffixBuilder: (context, entry) => IntrinsicHeight(
             child: FButton(
-              style: context.theme.buttonStyles.primary.copyWith(
-                contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                  textStyle: FWidgetStateMap.all(
-                    context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                  ),
-                ),
-              ),
-              onPress: entry.dismiss,
+              style: context.theme.buttonStyles.primary.call,
+              onPress: entry.dismiss.call,
               child: const Text('关闭'),
             ),
           ),
@@ -785,7 +750,6 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                         width: 140,
                         child: FSelect<int>(
                           hint: '每页 $_itemsPerPage 条',
-                          format: (value) => '每页 $value 条',
                           onChange: (value) {
                             if (value != null && value != _itemsPerPage) {
                               setState(() {
@@ -795,11 +759,11 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                               _loadProjects();
                             }
                           },
-                          children: [
-                            FSelectItem('每页 20 条', 20),
-                            FSelectItem('每页 50 条', 50),
-                            FSelectItem('每页 100 条', 100),
-                          ],
+                          items: const {
+                            '每页 20 条': 20,
+                            '每页 50 条': 50,
+                            '每页 100 条': 100,
+                          },
                         ),
                       ),
                     ],
@@ -956,34 +920,36 @@ class ProjectPageState extends State<ProjectPage> with WidgetsBindingObserver {
                                                   mainAxisSize: MainAxisSize.min,
                                                   children: [
                                                     FButton.icon(
-                                                      style: FButtonStyle.outline,
+                                                      style: context.theme.buttonStyles.outline.call,
                                                       onPress: () => _openProjectSurveys(project),
                                                       child: const Icon(Icons.assignment_outlined, size: 20),
                                                     ),
                                                     const SizedBox(width: 4),
                                                     FButton.icon(
-                                                      style: FButtonStyle.outline,
+                                                      style: context.theme.buttonStyles.outline.call,
                                                       onPress: () => _showEditProjectDialog(project),
                                                       child: const Icon(Icons.edit, size: 20),
                                                     ),
                                                     const SizedBox(width: 4),
                                                     FButton.icon(
-                                                      style: FButtonStyle.outline,
+                                                      style: context.theme.buttonStyles.outline.call,
                                                       onPress: () async {
-                                                        final confirm = await showAdaptiveDialog<bool>(
+                                                        final confirm = await showFDialog<bool>(
                                                           context: context,
-                                                          builder: (context) => FDialog(
+                                                          builder: (context, style, animation) => FDialog(
+                                                            style: style.call,
+                                                            animation: animation,
                                                             direction: Axis.horizontal,
                                                             title: const Text('确认删除'),
                                                             body: const Text('确定要删除这个项目吗？此操作不可撤销。'),
                                                             actions: [
                                                               FButton(
-                                                                style: FButtonStyle.outline,
+                                                                style: context.theme.buttonStyles.outline.call,
                                                                 onPress: () => Navigator.of(context).pop(false),
                                                                 child: const Text('取消'),
                                                               ),
                                                               FButton(
-                                                                style: FButtonStyle.destructive,
+                                                                style: context.theme.buttonStyles.destructive.call,
                                                                 onPress: () => Navigator.of(context).pop(true),
                                                                 child: const Text('删除'),
                                                               ),

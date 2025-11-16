@@ -38,10 +38,23 @@ class _JumpLogicDialogState extends State<JumpLogicDialog> {
     }
   }
 
+  /// 截断过长的文本，避免 UI 溢出
+  String _truncateText(String text, int maxLength) {
+    if (text.length <= maxLength) return text;
+    return '${text.substring(0, maxLength)}...';
+  }
+
   @override
   Widget build(BuildContext context) {
+    // 找到当前问题的 order
+    final currentQuestion = widget.questions.firstWhere(
+      (q) => q.id == widget.currentQuestionId,
+      orElse: () => widget.questions.first,
+    );
+    
+    // 只显示当前问题之后的问题（order 大于当前问题）
     final availableQuestions = widget.questions
-        .where((q) => q.id != widget.currentQuestionId)
+        .where((q) => q.order > currentQuestion.order)
         .toList()
       ..sort((a, b) => a.order.compareTo(b.order));
 
@@ -56,33 +69,23 @@ class _JumpLogicDialogState extends State<JumpLogicDialog> {
           const SizedBox(height: 16),
           FSelect<int>(
             hint: '默认（下一题）',
-            format: (value) {
-              if (value == -1) return '结束问卷';
-              final idx = availableQuestions.indexWhere((q) => q.id == value);
-              if (idx == -1) return '默认（下一题）';
-              final question = availableQuestions[idx];
-              return '第${question.order + 1}题：${question.title} (${_getQuestionTypeLabel(question.type)})';
-            },
             initialValue: _selectedQuestionId,
             onChange: (value) => setState(() => _selectedQuestionId = value),
-            children: [
-              ...availableQuestions.map((q) => 
-                FSelectItem('第${q.order + 1}题：${q.title} (${_getQuestionTypeLabel(q.type)})', q.id)
-              ),
-              FSelectItem('结束问卷', -1),
-            ],
+            items: {
+              for (final q in availableQuestions)
+                '第${q.order + 1}题：${_truncateText(q.title, 18)} (${_getQuestionTypeLabel(q.type)})': q.id,
+              '结束问卷': -1,
+            },
           ),
         ],
       ),
       actions: [
         FButton(
-          style: FButtonStyle.outline,
-          intrinsicWidth: true,
+          style: context.theme.buttonStyles.outline.call,
           child: const Text('取消'),
           onPress: () => Navigator.pop(context),
         ),
         FButton(
-          intrinsicWidth: true,
           child: const Text('确定'),
           onPress: () => Navigator.pop(context, _selectedQuestionId),
         ),

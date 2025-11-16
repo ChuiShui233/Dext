@@ -57,17 +57,10 @@ class _CropImageDialogState extends State<CropImageDialog> {
           alignment: FToastAlignment.bottomRight,
           title: const Text('裁剪失败'),
           description: Text('$e'),
-          suffixBuilder: (context, entry, _) => IntrinsicHeight(
+          suffixBuilder: (context, entry) => IntrinsicHeight(
             child: FButton(
-              style: context.theme.buttonStyles.primary.copyWith(
-                contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                  textStyle: FWidgetStateMap.all(
-                    context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                  ),
-                ),
-              ),
-              onPress: entry.dismiss,
+              style: context.theme.buttonStyles.primary.call,
+              onPress: entry.dismiss.call,
               child: const Text('关闭'),
             ),
           ),
@@ -152,7 +145,7 @@ class _CropImageDialogState extends State<CropImageDialog> {
                       Row(
                         children: [
                           FButton.icon(
-                            style: FButtonStyle.outline,
+                            style: context.theme.buttonStyles.outline.call,
                             onPress: _isProcessing
                                 ? null
                                 : () {
@@ -163,7 +156,7 @@ class _CropImageDialogState extends State<CropImageDialog> {
                           ),
                           const SizedBox(width: 8),
                           FButton.icon(
-                            style: FButtonStyle.outline,
+                            style: context.theme.buttonStyles.outline.call,
                             onPress: _isProcessing
                                 ? null
                                 : () {

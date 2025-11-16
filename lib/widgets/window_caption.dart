@@ -72,85 +72,106 @@ class _WindowCaptionState extends State<WindowCaption> with WindowListener {
         context: navCtx,
         barrierDismissible: true,
         builder: (dialogContext) {
+          bool animateIn = false;
+          bool isClosing = false;
+          const animationDuration = Duration(milliseconds: 220);
+
           return StatefulBuilder(
             builder: (builderContext, setDialogState) {
-              return Center(
-                child: Material(
-                  color: Colors.transparent,
-                  child: FDialog(
-                    direction: Axis.horizontal,
-                    title: const Text('确认操作'),
-                    body: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('你要关闭应用还是最小化到任务栏？'),
-                        const SizedBox(height: 16),
-                        InkWell(
-                          onTap: () {
-                            setDialogState(() {
-                              dontAskAgainChecked = !dontAskAgainChecked;
-                            });
-                          },
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: Checkbox(
-                                  value: dontAskAgainChecked,
-                                  onChanged: (value) {
-                                    setDialogState(() {
-                                      dontAskAgainChecked = value ?? false;
-                                    });
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              const Text('下次不再提示，记住我的选择'),
-                            ],
-                          ),
+              if (!animateIn && !isClosing) {
+                Future.microtask(() {
+                  if (dialogContext.mounted) {
+                    setDialogState(() {
+                      animateIn = true;
+                    });
+                  }
+                });
+              }
+
+              Future<void> closeDialogWithAnimation(Future<void> Function()? afterPop) async {
+                if (!dialogContext.mounted) return;
+                setDialogState(() {
+                  animateIn = false;
+                  isClosing = true;
+                });
+                await Future.delayed(animationDuration);
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop();
+                }
+                if (afterPop != null) {
+                  await afterPop();
+                }
+              }
+
+              return AnimatedOpacity(
+                opacity: animateIn ? 1.0 : 0.0,
+                duration: animationDuration,
+                curve: animateIn ? Curves.easeOutCubic : Curves.easeInCubic,
+                child: AnimatedScale(
+                  scale: animateIn ? 1.0 : 0.92,
+                  duration: animationDuration,
+                  curve: animateIn ? Curves.easeOutBack : Curves.easeInCubic,
+                  child: Center(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: FDialog(
+                        direction: Axis.horizontal,
+                        title: const Text('确认操作'),
+                        body: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('你要关闭应用还是最小化到任务栏？'),
+                            const SizedBox(height: 16),
+                            FCheckbox(
+                              label: const Text('下次不再提示，记住我的选择'),
+                              semanticsLabel: '记住关闭行为',
+                              value: dontAskAgainChecked,
+                              onChange: (value) {
+                                setDialogState(() {
+                                  dontAskAgainChecked = value;
+                                });
+                              },
+                            ),
+                          ],
                         ),
-                      ],
+                        actions: [
+                          FButton(
+                            style: context.theme.buttonStyles.ghost.call,
+                            onPress: () => closeDialogWithAnimation(null),
+                            child: const Text('取消'),
+                          ),
+                          FButton(
+                            style: context.theme.buttonStyles.outline.call,
+                            onPress: () async {
+                              if (dontAskAgainChecked) {
+                                final settings = SettingsService();
+                                await settings.setWindowCloseDontAsk(true);
+                                await settings.setWindowCloseDefaultAction('hide');
+                              }
+                              await closeDialogWithAnimation(() async {
+                                await windowManager.hide();
+                              });
+                            },
+                            child: const Text('隐藏到托盘'),
+                          ),
+                          FButton(
+                            style: context.theme.buttonStyles.outline.call,
+                            onPress: () async {
+                              if (dontAskAgainChecked) {
+                                final settings = SettingsService();
+                                await settings.setWindowCloseDontAsk(true);
+                                await settings.setWindowCloseDefaultAction('close');
+                              }
+                              await closeDialogWithAnimation(() async {
+                                await windowManager.destroy();
+                              });
+                            },
+                            child: const Text('关闭应用'),
+                          ),
+                        ],
+                      ),
                     ),
-                    actions: [
-                      FButton(
-                        style: FButtonStyle.ghost,
-                        onPress: () => Navigator.of(dialogContext).pop(),
-                        child: const Text('取消'),
-                      ),
-                      FButton(
-                        style: FButtonStyle.outline,
-                        onPress: () async {
-                          if (dontAskAgainChecked) {
-                            final settings = SettingsService();
-                            await settings.setWindowCloseDontAsk(true);
-                            await settings.setWindowCloseDefaultAction('hide');
-                          }
-                          if (dialogContext.mounted) {
-                            Navigator.of(dialogContext).pop();
-                          }
-                          await windowManager.hide();
-                        },
-                        child: const Text('隐藏到托盘'),
-                      ),
-                      FButton(
-                        style: FButtonStyle.outline,
-                        onPress: () async {
-                          if (dontAskAgainChecked) {
-                            final settings = SettingsService();
-                            await settings.setWindowCloseDontAsk(true);
-                            await settings.setWindowCloseDefaultAction('close');
-                          }
-                          if (dialogContext.mounted) {
-                            Navigator.of(dialogContext).pop();
-                          }
-                          await windowManager.destroy();
-                        },
-                        child: const Text('关闭应用'),
-                      ),
-                    ],
                   ),
                 ),
               );

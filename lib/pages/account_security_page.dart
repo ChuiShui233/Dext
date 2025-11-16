@@ -351,17 +351,10 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
               alignment: FToastAlignment.bottomRight,
               title: const Text('绑定成功'),
               description: Text('${_getProviderDisplayName(provider)}账号已成功绑定'),
-              suffixBuilder: (context, entry, _) => IntrinsicHeight(
+              suffixBuilder: (context, entry) => IntrinsicHeight(
                 child: FButton(
-                  style: context.theme.buttonStyles.primary.copyWith(
-                    contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                      textStyle: FWidgetStateMap.all(
-                        context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                      ),
-                    ),
-                  ),
-                  onPress: entry.dismiss,
+                  style: context.theme.buttonStyles.primary.call,
+                  onPress: entry.dismiss.call,
                   child: const Text('关闭'),
                 ),
               ),
@@ -376,17 +369,10 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
               alignment: FToastAlignment.bottomRight,
               title: const Text('绑定失败'),
               description: Text(bindError.toString()),
-              suffixBuilder: (context, entry, _) => IntrinsicHeight(
+              suffixBuilder: (context, entry) => IntrinsicHeight(
                 child: FButton(
-                  style: context.theme.buttonStyles.primary.copyWith(
-                    contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                      textStyle: FWidgetStateMap.all(
-                        context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                      ),
-                    ),
-                  ),
-                  onPress: entry.dismiss,
+                  style: context.theme.buttonStyles.primary.call,
+                  onPress: entry.dismiss.call,
                   child: const Text('关闭'),
                 ),
               ),
@@ -402,17 +388,10 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
             alignment: FToastAlignment.bottomRight,
             title: const Text('授权失败'),
             description: const Text('OAuth授权失败，请重试'),
-            suffixBuilder: (context, entry, _) => IntrinsicHeight(
+            suffixBuilder: (context, entry) => IntrinsicHeight(
               child: FButton(
-                style: context.theme.buttonStyles.primary.copyWith(
-                  contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                    textStyle: FWidgetStateMap.all(
-                      context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                    ),
-                  ),
-                ),
-                onPress: entry.dismiss,
+                style: context.theme.buttonStyles.primary.call,
+                onPress: entry.dismiss.call,
                 child: const Text('关闭'),
               ),
             ),
@@ -428,17 +407,10 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
           alignment: FToastAlignment.bottomRight,
           title: const Text('绑定失败'),
           description: Text(e.toString()),
-          suffixBuilder: (context, entry, _) => IntrinsicHeight(
+          suffixBuilder: (context, entry) => IntrinsicHeight(
             child: FButton(
-              style: context.theme.buttonStyles.primary.copyWith(
-                contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                  textStyle: FWidgetStateMap.all(
-                    context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                  ),
-                ),
-              ),
-              onPress: entry.dismiss,
+              style: context.theme.buttonStyles.primary.call,
+              onPress: entry.dismiss.call,
               child: const Text('关闭'),
             ),
           ),
@@ -457,7 +429,7 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
         body: Text('确定要解绑${_getProviderDisplayName(provider)}账号吗？'),
         actions: [
           FButton(
-            style: FButtonStyle.outline,
+            style: context.theme.buttonStyles.outline.call,
             onPress: () => Navigator.of(context).pop(false),
             child: const Text('取消'),
           ),
@@ -519,17 +491,10 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
           alignment: FToastAlignment.bottomRight,
           title: const Text('解绑成功'),
           description: Text('${_getProviderDisplayName(provider)}账号已成功解绑'),
-          suffixBuilder: (context, entry, _) => IntrinsicHeight(
+          suffixBuilder: (context, entry) => IntrinsicHeight(
             child: FButton(
-              style: context.theme.buttonStyles.primary.copyWith(
-                contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                  textStyle: FWidgetStateMap.all(
-                    context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                  ),
-                ),
-              ),
-              onPress: entry.dismiss,
+              style: context.theme.buttonStyles.primary.call,
+              onPress: entry.dismiss.call,
               child: const Text('关闭'),
             ),
           ),
@@ -544,17 +509,10 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
           alignment: FToastAlignment.bottomRight,
           title: const Text('解绑失败'),
           description: Text(e.toString()),
-          suffixBuilder: (context, entry, _) => IntrinsicHeight(
+          suffixBuilder: (context, entry) => IntrinsicHeight(
             child: FButton(
-              style: context.theme.buttonStyles.primary.copyWith(
-                contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                  textStyle: FWidgetStateMap.all(
-                    context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                  ),
-                ),
-              ),
-              onPress: entry.dismiss,
+              style: context.theme.buttonStyles.primary.call,
+              onPress: entry.dismiss.call,
               child: const Text('关闭'),
             ),
           ),
@@ -667,8 +625,8 @@ class _BindEmailDialogState extends State<_BindEmailDialog> {
       final captcha = await widget.apiService.getTextCaptcha();
       if (mounted) {
         setState(() {
-          _captchaId = captcha['captchaId'];
-          _captchaImage = captcha['data'];
+          _captchaId = captcha.token;
+          _captchaImage = captcha.originalImageBase64;
         });
       }
     } catch (e) {
@@ -907,7 +865,7 @@ class _BindEmailDialogState extends State<_BindEmailDialog> {
       ),
       actions: [
         FButton(
-          style: FButtonStyle.outline,
+          style: context.theme.buttonStyles.outline.call,
           onPress: _isLoading ? null : () => Navigator.of(context).pop(),
           child: const Text('取消'),
         ),
@@ -976,8 +934,8 @@ class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
       final captcha = await widget.apiService.getTextCaptcha();
       if (mounted) {
         setState(() {
-          _captchaId = captcha['captchaId'];
-          _captchaImage = captcha['data'];
+          _captchaId = captcha.token;
+          _captchaImage = captcha.originalImageBase64;
         });
       }
     } catch (e) {
@@ -1225,7 +1183,7 @@ class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
       ),
       actions: [
         FButton(
-          style: FButtonStyle.outline,
+          style: context.theme.buttonStyles.outline.call,
           onPress: _isLoading ? null : () => Navigator.of(context).pop(),
           child: const Text('取消'),
         ),
@@ -1452,7 +1410,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
                 ),
                 const SizedBox(width: 8),
                 FButton(
-                  style: FButtonStyle.outline,
+                  style: context.theme.buttonStyles.outline.call,
                   onPress: (_isCodeSending || _countdown > 0) ? null : _sendEmailCode,
                   child: _isCodeSending
                       ? const SizedBox(
@@ -1488,7 +1446,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
       ),
       actions: [
         FButton(
-          style: FButtonStyle.outline,
+          style: context.theme.buttonStyles.outline.call,
           onPress: _isLoading ? null : () => Navigator.of(context).pop(),
           child: const Text('取消'),
         ),

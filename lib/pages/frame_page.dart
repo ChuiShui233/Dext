@@ -32,6 +32,7 @@ class FramePage extends StatefulWidget {
   final Function(int) onIndexChanged;
   final VoidCallback onLogout;
   final Function(ThemeMode) onThemeModeChange;
+  final Function(double)? onDpiScaleChange;
   final ApiService? apiService;
   final PageStorageBucket bucket;
   final ValueNotifier<User?>? userNotifier;
@@ -42,6 +43,7 @@ class FramePage extends StatefulWidget {
     required this.onIndexChanged,
     required this.onLogout,
     required this.onThemeModeChange,
+    this.onDpiScaleChange,
     this.apiService,
     required this.bucket,
     this.userNotifier,
@@ -691,7 +693,7 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
         body: const Text('确定要退出应用吗？'),
         actions: [
           FButton(
-            style: FButtonStyle.outline,
+            style: context.theme.buttonStyles.outline.call,
             onPress: () => Navigator.pop(context, false),
             child: const Text('取消'),
           ),
@@ -725,6 +727,7 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
           onSurveyTap: _handleSurveyTap,
           onLogout: widget.onLogout,  // 直接传递 main.dart 的 onLogout，不要传递 _handleLogout
           onThemeModeChange: widget.onThemeModeChange,
+          onDpiScaleChange: widget.onDpiScaleChange,
           onTabChanged: handleTabChange,
           userNotifier: widget.userNotifier,
         );
@@ -779,29 +782,12 @@ Widget _buildSidebarHeader(BuildContext context) {
         children: [
           Row(
             children: [
-              SizedBox(
-                width: 40, // 图片容器宽度
-                height: 40, // 图片容器高度
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8), // 圆角
-                  child: Image.asset(
-                    'assets/images/Dext.png',
-                    fit: BoxFit.cover, // 占满整个容器
-                    errorBuilder: (context, error, stackTrace) => Icon(
-                      FIcons.house,
-                      size: 40,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '问卷调查',
+                      'Dext问卷调查',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: Theme.of(context).colorScheme.primary,
@@ -823,7 +809,7 @@ Widget _buildSidebarHeader(BuildContext context) {
             style: FDividerStyle(
               padding: EdgeInsets.zero,
               color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
-            ),
+            ).call,
           ),
         ],
       ),
@@ -903,7 +889,7 @@ Widget _buildSidebarHeader(BuildContext context) {
               children: [
                 Expanded(
                   child: FButton(
-                    style: FButtonStyle.ghost,
+                    style: context.theme.buttonStyles.ghost.call,
                     onPress: () {
                       _showThemeMenu(context);
                     },
@@ -928,7 +914,7 @@ Widget _buildSidebarHeader(BuildContext context) {
                 const SizedBox(width: 8),
                 Expanded(
                   child: FButton(
-                    style: FButtonStyle.ghost,
+                    style: context.theme.buttonStyles.ghost.call,
                     onPress: () {
                       _showLogoutConfirmDialog(context);
                     },
@@ -1094,7 +1080,7 @@ Widget _buildSidebarHeader(BuildContext context) {
           mainAxisSize: MainAxisSize.min,
           children: [
             FButton(
-              style: FButtonStyle.ghost,
+              style: context.theme.buttonStyles.ghost.call,
               onPress: () async {
                 final navigator = Navigator.of(context);
                 await SettingsService().setThemeMode('system');
@@ -1106,7 +1092,7 @@ Widget _buildSidebarHeader(BuildContext context) {
               child: const Text('跟随系统'),
             ),
             FButton(
-              style: FButtonStyle.ghost,
+              style: context.theme.buttonStyles.ghost.call,
               onPress: () async {
                 final navigator = Navigator.of(context);
                 await SettingsService().setThemeMode('light');
@@ -1118,7 +1104,7 @@ Widget _buildSidebarHeader(BuildContext context) {
               child: const Text('浅色模式'),
             ),
             FButton(
-              style: FButtonStyle.ghost,
+              style: context.theme.buttonStyles.ghost.call,
               onPress: () async {
                 final navigator = Navigator.of(context);
                 await SettingsService().setThemeMode('dark');
@@ -1185,7 +1171,7 @@ Widget _buildSidebarHeader(BuildContext context) {
         ),
         actions: [
           FButton(
-            style: FButtonStyle.outline,
+            style: context.theme.buttonStyles.outline.call,
             onPress: () => Navigator.pop(context),
             child: const Text('取消'),
           ),
@@ -1197,19 +1183,10 @@ Widget _buildSidebarHeader(BuildContext context) {
                   alignment: FToastAlignment.bottomRight,
                   title: const Text('提示'),
                   description: const Text('请填写完整信息'),
-                  suffixBuilder: (context, entry, _) => IntrinsicHeight(
-                    child: FButton(
-                      style: context.theme.buttonStyles.primary.copyWith(
-                        contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                          textStyle: FWidgetStateMap.all(
-                            context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                          ),
-                        ),
-                      ),
-                      onPress: entry.dismiss,
-                      child: const Text('关闭'),
-                    ),
+                  suffixBuilder: (context, entry) => FButton(
+                    style: context.theme.buttonStyles.primary.call,
+                    onPress: entry.dismiss,
+                    child: const Text('关闭'),
                   ),
                 );
                 return;
@@ -1239,17 +1216,10 @@ Widget _buildSidebarHeader(BuildContext context) {
                   alignment: FToastAlignment.bottomRight,
                   title: const Text('创建成功'),
                   description: const Text('项目已创建，正在跳转到项目管理页面'),
-                  suffixBuilder: (context, entry, _) => IntrinsicHeight(
+                  suffixBuilder: (context, entry) => IntrinsicHeight(
                     child: FButton(
-                      style: context.theme.buttonStyles.primary.copyWith(
-                        contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                          textStyle: FWidgetStateMap.all(
-                            context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                          ),
-                        ),
-                      ),
-                      onPress: entry.dismiss,
+                      style: context.theme.buttonStyles.primary.call,
+                      onPress: entry.dismiss.call,
                       child: const Text('关闭'),
                     ),
                   ),
@@ -1262,17 +1232,10 @@ Widget _buildSidebarHeader(BuildContext context) {
                   alignment: FToastAlignment.bottomRight,
                   title: const Text('创建失败'),
                   description: Text('创建项目失败: $e'),
-                  suffixBuilder: (context, entry, _) => IntrinsicHeight(
+                  suffixBuilder: (context, entry) => IntrinsicHeight(
                     child: FButton(
-                      style: context.theme.buttonStyles.primary.copyWith(
-                        contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                          textStyle: FWidgetStateMap.all(
-                            context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                          ),
-                        ),
-                      ),
-                      onPress: entry.dismiss,
+                      style: context.theme.buttonStyles.primary.call,
+                      onPress: entry.dismiss.call,
                       child: const Text('关闭'),
                     ),
                   ),
@@ -1348,17 +1311,10 @@ Widget _buildSidebarHeader(BuildContext context) {
                   alignment: FToastAlignment.bottomRight,
                   title: const Text('加载失败'),
                   description: Text(ErrorFormatter.format(error)),
-                  suffixBuilder: (context, entry, _) => IntrinsicHeight(
+                  suffixBuilder: (context, entry) => IntrinsicHeight(
                     child: FButton(
-                      style: context.theme.buttonStyles.primary.copyWith(
-                        contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                          textStyle: FWidgetStateMap.all(
-                            context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                          ),
-                        ),
-                      ),
-                      onPress: entry.dismiss,
+                      style: context.theme.buttonStyles.primary.call,
+                      onPress: entry.dismiss.call,
                       child: const Text('关闭'),
                     ),
                   ),
@@ -1382,20 +1338,14 @@ Widget _buildSidebarHeader(BuildContext context) {
                   FSelect<int>(
                     label: const Text('所属项目'),
                     hint: '请选择项目',
-                    format: (value) => projects
-                        .firstWhere((p) => p.id == value)
-                        .projectName,
                     onChange: (value) {
                       setState(() {
                         selectedProjectId = value;
                       });
                     },
-                    children: projects.map((project) {
-                      return FSelectItem(
-                        project.projectName,
-                        project.id,
-                      );
-                    }).toList(),
+                    items: {
+                      for (final project in projects) project.projectName: project.id,
+                    },
                   )
                 else if (hasLoadedProjects) // 已加载但没有项目
                   const Padding(
@@ -1423,7 +1373,7 @@ Widget _buildSidebarHeader(BuildContext context) {
             ),
             actions: [
               FButton(
-                style: FButtonStyle.outline,
+                style: context.theme.buttonStyles.outline.call,
                 onPress: () => Navigator.pop(context),
                 child: const Text('取消'),
               ),
@@ -1437,17 +1387,10 @@ Widget _buildSidebarHeader(BuildContext context) {
                       alignment: FToastAlignment.bottomRight,
                       title: const Text('提示'),
                       description: const Text('请填写完整信息并选择项目'),
-                      suffixBuilder: (context, entry, _) => IntrinsicHeight(
+                      suffixBuilder: (context, entry) => IntrinsicHeight(
                         child: FButton(
-                          style: context.theme.buttonStyles.primary.copyWith(
-                            contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                              textStyle: FWidgetStateMap.all(
-                                context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                              ),
-                            ),
-                          ),
-                          onPress: entry.dismiss,
+                          style: context.theme.buttonStyles.primary.call,
+                          onPress: entry.dismiss.call,
                           child: const Text('关闭'),
                         ),
                       ),
@@ -1482,17 +1425,10 @@ Widget _buildSidebarHeader(BuildContext context) {
                       alignment: FToastAlignment.bottomRight,
                       title: const Text('创建成功'),
                       description: const Text('问卷已创建，正在跳转到问卷管理页面'),
-                      suffixBuilder: (context, entry, _) => IntrinsicHeight(
+                      suffixBuilder: (context, entry) => IntrinsicHeight(
                         child: FButton(
-                          style: context.theme.buttonStyles.primary.copyWith(
-                            contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                              textStyle: FWidgetStateMap.all(
-                                context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                              ),
-                            ),
-                          ),
-                          onPress: entry.dismiss,
+                          style: context.theme.buttonStyles.primary.call,
+                          onPress: entry.dismiss.call,
                           child: const Text('关闭'),
                         ),
                       ),
@@ -1505,17 +1441,10 @@ Widget _buildSidebarHeader(BuildContext context) {
                       alignment: FToastAlignment.bottomRight,
                       title: const Text('创建失败'),
                       description: Text('创建问卷失败: $e'),
-                      suffixBuilder: (context, entry, _) => IntrinsicHeight(
+                      suffixBuilder: (context, entry) => IntrinsicHeight(
                         child: FButton(
-                          style: context.theme.buttonStyles.primary.copyWith(
-                            contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                              textStyle: FWidgetStateMap.all(
-                                context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                              ),
-                            ),
-                          ),
-                          onPress: entry.dismiss,
+                          style: context.theme.buttonStyles.primary.call,
+                          onPress: entry.dismiss.call,
                           child: const Text('关闭'),
                         ),
                       ),
@@ -1570,13 +1499,11 @@ Widget _buildSidebarHeader(BuildContext context) {
                   : const Text('确定要退出当前账号吗？'),
               actions: [
                 FButton(
-                  style: FButtonStyle.outline,
-                  intrinsicWidth: true,
+                  style: context.theme.buttonStyles.outline.call,
                   onPress: isLoading ? null : () => Navigator.pop(context),
                   child: const Text('取消'),
                 ),
                 FButton(
-                  intrinsicWidth: true,
                   onPress: isLoading
                       ? null
                       : () async {

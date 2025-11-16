@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import '../widgets/top_safe_spacer.dart';
 import 'package:forui/forui.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
+import 'package:shimmer/shimmer.dart';
 import '../models/survey.dart';
 import '../models/project.dart';
-import '../models/survey_stats.dart';
 import '../services/api_service.dart';
 import 'create_survey_page.dart';
 import '../utils/date_format.dart';
@@ -18,6 +18,7 @@ import '../components/pull_to_refresh_wrapper.dart';
 import '../components/loading_indicator.dart';
 import 'frame_page.dart';
 import '../widgets/frosted_glass_background.dart';
+import '../services/settings_service.dart';
 
 class SurveyPage extends StatefulWidget {
   final String token;
@@ -34,14 +35,13 @@ class SurveyPage extends StatefulWidget {
 class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, TickerProviderStateMixin {
   late final ApiService _apiService;
   List<Survey> _surveys = [];
-  Map<int, SurveyStats> _surveyStats = {};
   Map<int, Project> _projects = {};
   bool _isLoading = true;
   bool _projectsLoaded = false; // 首次加载后缓存项目，避免每次分页请求项目列表
   String _searchQuery = '';
   int? _selectedSurveyType;
   final int _pageSize = 5;
-  late final FSelectController<String> _typeSelectController;
+  late final FSelectController<int> _typeSelectController;
   final bool _isAllExpanded = false;
   final Key _listKey = UniqueKey();
   
@@ -64,9 +64,14 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _apiService = ApiService(authToken: widget.token);
-    _typeSelectController = FSelectController<String>(vsync: this);
-    // 首次加载跳过缓存，确保显示最新数据
-    _loadData(skipCache: true);
+    _typeSelectController = FSelectController<int>(vsync: this);
+    // 首次加载使用缓存优先策略，快速显示
+    _loadData(skipCache: false).then((_) {
+      // 缓存加载完后，立即发起静默刷新（带下拉动画）
+      if (mounted) {
+        _loadData(silent: true, skipCache: false);
+      }
+    });
     
     _startAutoRefresh();
     _startCountdown();
@@ -86,8 +91,8 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // 应用恢复时跳过缓存，加载最新数据
-      _loadData(skipCache: true);
+      // 应用恢复时使用缓存优先，后台刷新
+      _loadData(skipCache: false);
       _startAutoRefresh();
       _startCountdown();
     } else if (state == AppLifecycleState.paused) {
@@ -198,17 +203,10 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
         alignment: FToastAlignment.bottomRight,
         title: const Text('刷新失败'),
         description: Text('刷新数据失败: $e'),
-        suffixBuilder: (context, entry, _) => IntrinsicHeight(
+        suffixBuilder: (context, entry) => IntrinsicHeight(
           child: FButton(
-            style: context.theme.buttonStyles.primary.copyWith(
-              contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                textStyle: FWidgetStateMap.all(
-                  context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                ),
-              ),
-            ),
-            onPress: entry.dismiss,
+            style: context.theme.buttonStyles.primary.call,
+            onPress: entry.dismiss.call,
             child: const Text('关闭'),
           ),
         ),
@@ -219,6 +217,11 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   Future<void> _loadData({bool silent = false, bool refreshProjects = false, bool skipCache = false}) async {
     if (!mounted) return;
     final context = this.context;
+    
+    // 静默刷新时触发下拉刷新动画
+    if (silent && !_refreshController.isRefresh) {
+      _refreshController.requestRefresh();
+    }
     
     Timer? loadingTimer;
     if (!silent) {
@@ -250,6 +253,11 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
       loadingTimer?.cancel();
       if (!mounted) return;
       
+      // 静默刷新完成，结束下拉动画
+      if (silent && _refreshController.isRefresh) {
+        _refreshController.refreshCompleted();
+      }
+      
       setState(() {
         _surveys = surveyResponse.items;
         _totalPages = surveyResponse.totalPages;
@@ -267,7 +275,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
       // 同步当前页码到分页控制器（转换为0-based）
       _paginationController.page = (_currentPage - 1).clamp(0, (_totalPages - 1).clamp(0, double.infinity).toInt());
       
-      _loadSurveyStats();
     } catch (e) {
       loadingTimer?.cancel();
       if (!mounted) return;
@@ -316,17 +323,10 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
           alignment:FToastAlignment.bottomRight,
           title: const Text('加载失败'),
           description: Text(ErrorFormatter.format(e)),
-          suffixBuilder: (context, entry, _) => IntrinsicHeight(
+          suffixBuilder: (context, entry) => IntrinsicHeight(
             child: FButton(
-              style: context.theme.buttonStyles.primary.copyWith(
-                contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                  textStyle: FWidgetStateMap.all(
-                    context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                  ),
-                ),
-              ),
-              onPress: entry.dismiss,
+              style: context.theme.buttonStyles.primary.call,
+              onPress: entry.dismiss.call,
               child: const Text('关闭'),
             ),
           ),
@@ -335,21 +335,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     }
   }
 
-  Future<void> _loadSurveyStats() async {
-    try {
-      final stats = await _apiService.getAllSurveyStats();
-      if (!mounted) return;
-      
-      setState(() {
-        _surveyStats = {
-          for (var stat in stats) stat.surveyId: stat
-        };
-      });
-    } catch (e) {
-      if (mounted) {
-      }
-    }
-  }
 
   String _getSurveyTypeText(int type) {
     switch (type) {
@@ -416,68 +401,20 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     }
   }
 
-  Future<void> _viewSurveyStats(Survey survey) async {
+  void _viewSurveyStats(Survey survey) {
     if (!mounted) return;
     final context = this.context;
     
-    try {
-      final stats = await _apiService.getSurveyStats(survey.id);
-      if (!mounted) return;
-
-      if (context.mounted) {
-        showAdaptiveDialog(
-          context: context,
-        builder: (context) => FDialog(
-          direction: Axis.horizontal,
-          title: Text('${survey.surveyName} - 统计信息'),
-          body: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('总访问次数: ${stats.viewCount}'),
-              const SizedBox(height: 8),
-              Text('总提交次数: ${stats.submitCount}'),
-              const SizedBox(height: 8),
-              Text('最后访问时间: ${stats.lastViewTime.toLocal().toString()}'),
-              const SizedBox(height: 8),
-              Text('最后提交时间: ${stats.lastSubmitTime.toLocal().toString()}'),
-            ],
-          ),
-          actions: [
-            FButton(
-              style: FButtonStyle.outline,
-              onPress: () => Navigator.pop(context),
-              child: const Text('关闭'),
-            ),
-          ],
+    if (context.mounted) {
+      showFDialog(
+        context: context,
+        builder: (context, style, animation) => _SurveyStatsDialog(
+          survey: survey,
+          apiService: _apiService,
+          style: style,
+          animation: animation,
         ),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      
-      if (context.mounted) {
-        showFToast(
-          context: context,
-          alignment:FToastAlignment.bottomRight,
-          title: const Text('获取失败'),
-          description: Text('获取统计信息失败: $e'),
-          suffixBuilder: (context, entry, _) => IntrinsicHeight(
-            child: FButton(
-              style: context.theme.buttonStyles.primary.copyWith(
-                contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                  textStyle: FWidgetStateMap.all(
-                    context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                  ),
-                ),
-              ),
-              onPress: entry.dismiss,
-              child: const Text('关闭'),
-            ),
-          ),
-        );
-      }
+      );
     }
   }
 
@@ -537,48 +474,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                     ),
                   ],
                   suffixes: [
-                    FHeaderAction(
-                      icon: const Icon(Icons.info_outline, size: 20),
-                      onPress: () {
-                        showAdaptiveDialog(
-                          context: context,
-                          builder: (context) => FDialog(
-                            direction: Axis.horizontal,
-                            title: const Text('问卷统计信息'),
-                            body: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      const Text('总访问量:'),
-                                      Text('${_surveyStats.values.fold(0, (sum, stat) => sum + stat.viewCount)}'),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      const Text('总提交量:'),
-                                      Text('${_surveyStats.values.fold(0, (sum, stat) => sum + stat.submitCount)}'),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            actions: [
-                              FButton(
-                                style: FButtonStyle.outline,
-                                onPress: () => Navigator.of(context).pop(),
-                                child: const Text('关闭'),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
                     FHeaderAction(
                       icon: const Icon(Icons.refresh, size: 20),
                       onPress: () {
@@ -686,9 +581,15 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                       SizedBox(
                         width: 160,
                         child: FSelect<int>(
+                          controller: _typeSelectController,
                           hint: '类型筛选',
-                          format: (value) => _getSurveyTypeText(value),
                           clearable: true,
+                          items: const {
+                            '问卷调查': 0,
+                            '限时问卷': 1,
+                            '限次问卷': 2,
+                            '自选风格': 3,
+                          },
                           onChange: (value) {
                             setState(() {
                               _selectedSurveyType = value;
@@ -696,12 +597,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                             });
                             _loadData();
                           },
-                          children: [
-                            FSelectItem('问卷调查', 0),
-                            FSelectItem('限时问卷', 1),
-                            FSelectItem('限次问卷', 2),
-                            FSelectItem('自选风格', 3),
-                          ],
                         ),
                       ),
                     ],
@@ -796,7 +691,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                   itemCount: paginatedSurveys.length,
                                   itemBuilder: (context, index) {
                                   final survey = paginatedSurveys[index];
-                                  final stats = _surveyStats[survey.id];
                                   final isSelected = _selectedSurveyIds.contains(survey.id);
                                   final deadlineDt = _parseDeadline(survey.deadline);
                                   final now = DateTime.now();
@@ -957,20 +851,6 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                                           ],
                                                         ),
                                                       ],
-                                                      if (stats != null) ...[
-                                                        const Divider(color: Colors.grey),
-                                                        _buildInfoRow('访问量', stats.viewCount.toString()),
-                                                        const SizedBox(height: 8),
-                                                        _buildInfoRow('提交量', stats.submitCount.toString()),
-                                                        const SizedBox(height: 8),
-                                                        _buildInfoRow('最近访问', DateFormatUtils.formatDateTime(stats.lastViewTime)),
-                                                        const SizedBox(height: 8),
-                                                        _buildInfoRow('最近提交', DateFormatUtils.formatDateTime(stats.lastSubmitTime)),
-                                                        if (stats.submittedUsers.isNotEmpty) ...[
-                                                          const SizedBox(height: 8),
-                                                          _buildInfoRow('提交用户', stats.submittedUsers.join(", ")),
-                                                        ],
-                                                      ],
                                                     ],
                                                   ),
                                                 ),
@@ -990,34 +870,38 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
                                               alignment: Alignment.centerRight,
                                               child: Align(
                                                 alignment: Alignment.centerRight,
-                                                child: Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    FButton(
-                                                      style: FButtonStyle.outline,
-                                                      onPress: () => _viewSurveyStats(survey),
-                                                      child: Row(
-                                                        mainAxisSize: MainAxisSize.min,
-                                                        children: const [
-                                                          Icon(Icons.info_outline, size: 20),
-                                                          SizedBox(width: 6),
-                                                          Text('统计'),
-                                                        ],
+                                                child: Transform.scale(
+                                                  scale: _buttonScale(context),
+                                                  alignment: Alignment.centerRight,
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      FButton(
+                                                        style: context.theme.buttonStyles.outline.call,
+                                                        onPress: () => _viewSurveyStats(survey),
+                                                        child: Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: const [
+                                                            Icon(Icons.info_outline, size: 20),
+                                                            SizedBox(width: 6),
+                                                            Text('统计'),
+                                                          ],
+                                                        ),
                                                       ),
-                                                    ),
-                                                    const SizedBox(width: 12),
-                                                    SurveyActions(
-                                                      survey: survey,
-                                                      token: widget.token,
-                                                      apiService: _apiService,
-                                                      useRow: true,
-                                                      onSuccess: () {
-                                                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                                                          _refreshController.requestRefresh();
-                                                        });
-                                                      },
-                                                    ),
-                                                  ],
+                                                      const SizedBox(width: 12),
+                                                      SurveyActions(
+                                                        survey: survey,
+                                                        token: widget.token,
+                                                        apiService: _apiService,
+                                                        useRow: true,
+                                                        onSuccess: () {
+                                                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                                                            _refreshController.requestRefresh();
+                                                          });
+                                                        },
+                                                      ),
+                                                    ],
+                                                  ),
                                                 ),
                                               ),
                                             ),
@@ -1043,6 +927,25 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
         ),
       ),
     );
+  }
+
+  // 根据屏幕宽度 + DPI 对底部操作按钮做整体缩放，保持在小屏下的视觉紧凑与不遮挡。
+  double _buttonScale(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    // 参考分档：
+    // ≤360: 0.85；≤480: 0.90；≤600: 0.95；≤760: 0.98；>760: 1.00
+    double base;
+    if (width <= 360) {
+      base = 0.85;
+    } else if (width <= 480) base = 0.90;
+    else if (width <= 600) base = 0.95;
+    else if (width <= 760) base = 0.98;
+    else base = 1.00;
+
+    final dpi = SettingsService().dpiScale;
+    final scaled = base * dpi;
+    // 防止过度放大/缩小破坏布局
+    return scaled.clamp(0.80, 1.15);
   }
 
   Widget _buildFPagination(BuildContext context, int totalPages) {
@@ -1179,20 +1082,22 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   Future<void> _batchDeleteSurveys() async {
     if (_selectedSurveyIds.isEmpty) return;
 
-    final confirm = await showAdaptiveDialog<bool>(
+    final confirm = await showFDialog<bool>(
       context: context,
-      builder: (context) => FDialog(
+      builder: (context, style, animation) => FDialog(
+        style: style.call,
+        animation: animation,
         direction: Axis.horizontal,
         title: const Text('确认批量删除'),
         body: Text('确定要删除选中的 ${_selectedSurveyIds.length} 份问卷吗？此操作不可撤销。'),
         actions: [
           FButton(
-            style: FButtonStyle.outline,
+            style: context.theme.buttonStyles.outline.call,
             onPress: () => Navigator.of(context).pop(false),
             child: const Text('取消'),
           ),
           FButton(
-            style: FButtonStyle.destructive,
+            style: context.theme.buttonStyles.destructive.call,
             onPress: () => Navigator.of(context).pop(true),
             child: const Text('删除'),
           ),
@@ -1222,17 +1127,10 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
             alignment: FToastAlignment.bottomRight,
             title: const Text('删除成功'),
             description: Text('已删除 $deletedCount 份问卷'),
-            suffixBuilder: (context, entry, _) => IntrinsicHeight(
+            suffixBuilder: (context, entry) => IntrinsicHeight(
               child: FButton(
-                style: context.theme.buttonStyles.primary.copyWith(
-                  contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                    textStyle: FWidgetStateMap.all(
-                      context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                    ),
-                  ),
-                ),
-                onPress: entry.dismiss,
+                style: context.theme.buttonStyles.primary.call,
+                onPress: entry.dismiss.call,
                 child: const Text('关闭'),
               ),
             ),
@@ -1245,17 +1143,10 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
             alignment: FToastAlignment.bottomRight,
             title: const Text('删除失败'),
             description: Text('批量删除问卷失败: $e'),
-            suffixBuilder: (context, entry, _) => IntrinsicHeight(
+            suffixBuilder: (context, entry) => IntrinsicHeight(
               child: FButton(
-                style: context.theme.buttonStyles.primary.copyWith(
-                  contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                    textStyle: FWidgetStateMap.all(
-                      context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                    ),
-                  ),
-                ),
-                onPress: entry.dismiss,
+                style: context.theme.buttonStyles.primary.call,
+                onPress: entry.dismiss.call,
                 child: const Text('关闭'),
               ),
             ),
@@ -1264,4 +1155,182 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
       }
     }
   }
-} 
+}
+
+class _SurveyStatsDialog extends StatefulWidget {
+  final Survey survey;
+  final ApiService apiService;
+  final FDialogStyle style;
+  final Animation<double> animation;
+
+  const _SurveyStatsDialog({
+    required this.survey,
+    required this.apiService,
+    required this.style,
+    required this.animation,
+  });
+
+  @override
+  State<_SurveyStatsDialog> createState() => _SurveyStatsDialogState();
+}
+
+class _SurveyStatsDialogState extends State<_SurveyStatsDialog> {
+  bool _isLoading = true;
+  String? _errorMessage;
+  int? _viewCount;
+  int? _submitCount;
+  DateTime? _lastViewTime;
+  DateTime? _lastSubmitTime;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final stats = await widget.apiService.getSurveyStats(widget.survey.id);
+      if (mounted) {
+        setState(() {
+          _viewCount = stats.viewCount;
+          _submitCount = stats.submitCount;
+          _lastViewTime = stats.lastViewTime;
+          _lastSubmitTime = stats.lastSubmitTime;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = '获取失败: $e';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  String _formatDateTime(DateTime? dateTime) {
+    if (dateTime == null) return '暂无记录';
+    final local = dateTime.toLocal();
+    return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')} '
+           '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildSkeletonLine({double width = double.infinity, double height = 14}) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    final baseColor = isDark
+        ? colorScheme.onSurface.withValues(alpha: 0.24)
+        : colorScheme.primary.withValues(alpha: 0.22);
+    final highlightColor = isDark
+        ? colorScheme.onSurface.withValues(alpha: 0.42)
+        : colorScheme.primary.withValues(alpha: 0.38);
+    final fillColor = isDark
+        ? colorScheme.onSurface.withValues(alpha: 0.18)
+        : colorScheme.primary.withValues(alpha: 0.24);
+
+    return Shimmer.fromColors(
+      baseColor: baseColor,
+      highlightColor: highlightColor,
+      child: Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: fillColor,
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Widget content;
+
+    if (_errorMessage != null) {
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.error_outline,
+                color: context.theme.colors.destructive,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _errorMessage!,
+                  style: TextStyle(
+                    color: context.theme.colors.destructive,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          FButton(
+            style: context.theme.buttonStyles.outline.call,
+            onPress: _loadStats,
+            child: const Text('重试'),
+          ),
+        ],
+      );
+    } else if (_isLoading) {
+      content = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSkeletonLine(width: 220),
+          const SizedBox(height: 16),
+          _buildSkeletonLine(width: 220),
+          const SizedBox(height: 16),
+          _buildSkeletonLine(width: 260),
+          const SizedBox(height: 16),
+          _buildSkeletonLine(width: 260),
+        ],
+      );
+    } else {
+      content = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('总访问次数: ${_viewCount ?? 0}'),
+          const SizedBox(height: 12),
+          Text('总提交次数: ${_submitCount ?? 0}'),
+          const SizedBox(height: 12),
+          Text('最后访问时间: ${_formatDateTime(_lastViewTime)}'),
+          const SizedBox(height: 12),
+          Text('最后提交时间: ${_formatDateTime(_lastSubmitTime)}'),
+        ],
+      );
+    }
+
+    return FDialog(
+      style: widget.style.call,
+      animation: widget.animation,
+      direction: Axis.horizontal,
+      title: Text('${widget.survey.surveyName} - 统计信息'),
+      body: SizedBox(
+        width: 320,
+        child: content,
+      ),
+      actions: [
+        FButton(
+          style: context.theme.buttonStyles.outline.call,
+          onPress: () => Navigator.pop(context),
+          child: const Text('关闭'),
+        ),
+      ],
+    );
+  }
+}

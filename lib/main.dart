@@ -17,6 +17,8 @@ import 'services/url_handler.dart';
 import 'services/clipboard_service.dart';
 import 'services/uri_handler_service.dart';
 import 'services/settings_service.dart';
+import 'services/push_service.dart';
+import 'services/config.dart';
 import 'utils/network_reachability.dart';
 
 import 'models/project.dart';
@@ -250,6 +252,28 @@ void main(List<String> args) async {
     debugPrint('$st');
   }
 
+  if (!kIsWeb && !isDesktop) {
+    try {
+      final pushService = PushService();
+      final initialized = await pushService.initialize(
+        appId: getuiAppId,
+        appKey: getuiAppKey,
+        appSecret: getuiAppSecret,
+      );
+      
+      if (initialized) {
+        debugPrint('[个推] SDK初始化成功');
+        // 启动推送服务
+        await pushService.startPush();
+      } else {
+        debugPrint('[个推] SDK初始化失败');
+      }
+    } catch (e, st) {
+      debugPrint('[个推] 初始化异常: $e');
+      debugPrint('$st');
+    }
+  }
+
   runApp(const YuMeng233App());
   }, (error, stack) {
     // 打印未捕获异常，避免静默失败
@@ -277,6 +301,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
   final GlobalKey<FramePageState> _framePageKey = GlobalKey<FramePageState>();
   ThemeMode _themeMode = ThemeMode.system;
   bool _isDark = false;
+  double _dpiScale = 1.0;
   final ValueNotifier<User?> userNotifier = ValueNotifier<User?>(null);
 
   String? _token;
@@ -361,8 +386,11 @@ class _YuMeng233AppState extends State<YuMeng233App>
           resolved = ThemeMode.system;
       }
       _setThemeMode(resolved);
+      
+      // 加载 DPI 缩放设置
+      _dpiScale = settings.dpiScale;
     } catch (_) {
-      // 忽略设置加载异常，保持默认 ThemeMode.system
+      // 忽略设置加载异常，保持默认值
     }
   }
 
@@ -381,6 +409,12 @@ class _YuMeng233AppState extends State<YuMeng233App>
       } else {
         _isDark = mode == ThemeMode.dark;
       }
+    });
+  }
+  
+  void _setDpiScale(double scale) {
+    setState(() {
+      _dpiScale = scale;
     });
   }
 
@@ -554,11 +588,18 @@ class _YuMeng233AppState extends State<YuMeng233App>
               onGenerateRoute: _onGenerateRoute,
               scrollBehavior: const _NoScrollbarBehavior(),
               builder: (context, child) {
+                // 应用 DPI 缩放设置
                 return ColoredBox(
                   color: Theme.of(context).scaffoldBackgroundColor,
                   child: Stack(
                     children: [
-                      child!,
+                      // 使用 MediaQuery 设置文本缩放
+                      MediaQuery(
+                        data: MediaQuery.of(context).copyWith(
+                          textScaler: TextScaler.linear(_dpiScale),
+                        ),
+                        child: child!,
+                      ),
                       if (isDesktop)
                         const Align(
                           alignment: Alignment.topRight,
@@ -590,6 +631,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
                 },
                 onLogout: _handleLogout,
                 onThemeModeChange: _setThemeMode,
+                onDpiScaleChange: _setDpiScale,
                 apiService: ApiService(authToken: _token!),
                 userNotifier: userNotifier,
               )
@@ -632,6 +674,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
           },
           onLogout: _handleLogout,
           onThemeModeChange: _setThemeMode,
+          onDpiScaleChange: _setDpiScale,
           apiService: ApiService(authToken: _token ?? ''),
           userNotifier: userNotifier,
         ),
@@ -648,6 +691,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
           },
           onLogout: _handleLogout,
           onThemeModeChange: _setThemeMode,
+          onDpiScaleChange: _setDpiScale,
           apiService: ApiService(authToken: _token ?? ''),
           userNotifier: userNotifier,
         ),

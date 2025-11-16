@@ -488,9 +488,10 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
               bottom: 0,
               child: Center(
                 child: Container(
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.5),
-                    shape: BoxShape.circle,
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: GestureDetector(
                     onTap: _previousMedia,
@@ -505,9 +506,10 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
               bottom: 0,
               child: Center(
                 child: Container(
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.5),
-                    shape: BoxShape.circle,
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: GestureDetector(
                     onTap: _nextMedia,

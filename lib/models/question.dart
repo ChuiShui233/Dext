@@ -257,14 +257,14 @@ class QuestionOption {
     );
   }
 
-  // 修改后的 toJson 与后端字段完全匹配
   Map<String, dynamic> toJson() {
     return {
       'id': id,
       'text': text,
-      'optionText': text,       // 后端需要的字段
+      'optionText': text,
       'mediaURL': mediaUrl,
       if (destination != null) 'destination': destination,
+      if (destination != null) 'destinationQuestionId': destination,
       if (customInputPlaceholder != null) 'customInputPlaceholder': customInputPlaceholder,
     };
   }

@@ -16,6 +16,11 @@ const String githubClientId = 'Ov23linQUMRmORjFIiXr';
 // Microsoft OAuth
 const String microsoftClientId = 'a936dc9c-08e4-44c6-acb5-6aa0548e5199';
 
+// ===== 个推SDK配置 =====
+const String getuiAppId = 'cy0d7CICux7YKvteM5cy87';
+const String getuiAppKey = '你的个推AppKey';  // 从个推控制台获取
+const String getuiAppSecret = '你的个推AppSecret';  // 从个推控制台获取
+
 // ===== OAuth 重定向URI配置 =====
 const String oauthCallbackWeb = 'https://wucode.xyz:11222/api/auth/oauth/callback/web';
 const String oauthCallbackAndroid = 'https://wucode.xyz:11222/api/auth/oauth/callback/mobile';

@@ -103,6 +103,8 @@ class _PublicAccessPageState extends State<PublicAccessPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dpr = MediaQuery.of(context).devicePixelRatio;
+    final iconSize = dpr <= 1.5 ? 200.0 : (dpr >= 3.0 ? 80.0 : 90.0);
     
     return Scaffold(
       body: Stack(
@@ -138,10 +140,11 @@ class _PublicAccessPageState extends State<PublicAccessPage> {
                           padding: const EdgeInsets.all(24),
                           child: Column(
                             children: [
-                              Icon(
-                                FIcons.globe,
-                                size: 48,
-                                color: isDark ? Colors.blue[300] : Colors.blue[600],
+                              Image.asset(
+                                'assets/images/c1.png',
+                                width: iconSize,
+                                height: iconSize,
+                                fit: BoxFit.contain,
                               ),
                               const SizedBox(height: 16),
                               Text(

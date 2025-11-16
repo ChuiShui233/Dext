@@ -238,15 +238,20 @@ class _AddOptionDialogState extends State<AddOptionDialog> {
 
   Widget _buildMediaSection() {
     if (_isUploading) {
+      final percentage = (_uploadProgress * 100).toInt();
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('正在上传...'),
+          Text('上传中 $percentage%'),
           const SizedBox(height: 8),
-          LinearProgressIndicator(value: _uploadProgress),
+          LinearProgressIndicator(
+            value: _uploadProgress,
+            backgroundColor: Colors.grey.shade300,
+            valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
+          ),
           const SizedBox(height: 4),
           Text(
-            '${(_uploadProgress * 100).toInt()}%',
+            percentage < 100 ? '请稍候...' : '上传完成',
             style: const TextStyle(fontSize: 12, color: Colors.grey),
           ),
         ],
@@ -412,13 +417,11 @@ class _AddOptionDialogState extends State<AddOptionDialog> {
       ),
       actions: [
         FButton(
-          style: FButtonStyle.outline,
-          intrinsicWidth: true,
+          style: context.theme.buttonStyles.outline.call,
           child: const Text('取消'),
           onPress: () => Navigator.pop(context),
         ),
         FButton(
-          intrinsicWidth: true,
           child: const Text('确定'),
           onPress: () {
             if (_formKey.currentState!.validate()) {

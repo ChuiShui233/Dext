@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
-import 'package:forui/forui.dart';
 
 class PullToRefreshWrapper extends StatelessWidget {
   final RefreshController controller;
@@ -32,48 +31,22 @@ class PullToRefreshWrapper extends StatelessWidget {
         physics: const BouncingScrollPhysics(
           parent: AlwaysScrollableScrollPhysics(),
         ),
-        header: CustomHeader(
-          builder: (context, mode) {
-            Widget icon;
-            if (mode == RefreshStatus.idle) {
-              icon = Icon(FIcons.chevronDown, size: 25);
-            } else if (mode == RefreshStatus.refreshing) {
-              icon = const SizedBox(
-                width: 25,
-                height: 25,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              );
-            } else if (mode == RefreshStatus.completed) {
-              icon = Icon(FIcons.check, size: 25, color: Colors.green);
-            } else if (mode == RefreshStatus.failed) {
-              icon = Icon(FIcons.x, size: 25, color: Colors.red);
-            } else {
-              icon = Icon(FIcons.chevronDown, size: 20);
-            }
-            
-            return Container(
-              height: 60,
-              alignment: Alignment.center,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                switchInCurve: Curves.easeOut,
-                switchOutCurve: Curves.easeIn,
-                transitionBuilder: (child, animation) {
-                  return FadeTransition(
-                    opacity: animation,
-                    child: ScaleTransition(
-                      scale: animation,
-                      child: child,
-                    ),
-                  );
-                },
-                child: KeyedSubtree(
-                  key: ValueKey(mode),
-                  child: icon,
-                ),
-              ),
-            );
-          },
+        header: ClassicHeader(
+          height: 60,
+          refreshingIcon: const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          completeIcon: const Icon(Icons.check, size: 20),
+          failedIcon: const Icon(Icons.error_outline, size: 20),
+          idleIcon: const Icon(Icons.arrow_downward, size: 20),
+          releaseIcon: const Icon(Icons.refresh, size: 20),
+          idleText: '下拉刷新',
+          refreshingText: '加载中...',
+          completeText: '刷新完成',
+          failedText: '刷新失败',
+          releaseText: '松开刷新',
         ),
         child: child,
       ),

@@ -20,6 +20,7 @@ class HomeSettingsContent extends StatefulWidget {
   final VoidCallback onLogout;
   final VoidCallback onChangeAvatar;
   final Function(ThemeMode) onThemeModeChange;
+  final Function(double)? onDpiScaleChange;
   final ApiService apiService;
   final ValueNotifier<User?>? userNotifier;
 
@@ -28,6 +29,7 @@ class HomeSettingsContent extends StatefulWidget {
     required this.onLogout,
     required this.onChangeAvatar,
     required this.onThemeModeChange,
+    this.onDpiScaleChange,
     required this.apiService,
     this.userNotifier,
   });
@@ -223,7 +225,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
           ),
           actions: [
             FButton(
-              style: FButtonStyle.outline,
+              style: context.theme.buttonStyles.outline.call,
               onPress: isLoading ? null : () => Navigator.of(context).pop(),
               child: const Text('取消'),
             ),
@@ -290,6 +292,9 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
       appBar: AppBar(
         centerTitle: true,
         elevation: 0,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 0,
         title: const Text('设置'),
       ),
       body: SingleChildScrollView(
@@ -429,6 +434,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
         
         final settings = snapshot.data!;
         final currentEdgeDragWidth = settings['edge_drag_width'] as double;
+        final currentDpiScale = settings['dpi_scale'] as double;
         
         final List<Widget> children = [];
         
@@ -441,6 +447,19 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
             onChanged: (value) {
               settingsService.setEdgeDragWidth(value);
               // 不需要立即 setState，避免频繁重建
+            },
+          ),
+        );
+        
+        // DPI 缩放设置（所有端可见）
+        children.add(
+          _DpiScaleCard(
+            initialValue: currentDpiScale,
+            theme: theme,
+            onChanged: (value) {
+              settingsService.setDpiScale(value);
+              // 通知主应用实时更新 DPI 缩放
+              widget.onDpiScaleChange?.call(value);
             },
           ),
         );
@@ -487,12 +506,11 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
                   const SizedBox(height: 8),
                   FSelect<String>(
                     hint: '选择关闭行为',
-                    format: (s) => s,
-                    children: [
-                      FSelectItem('每次询问', '每次询问'),
-                      FSelectItem('隐藏到托盘', '隐藏到托盘'),
-                      FSelectItem('直接关闭', '直接关闭'),
-                    ],
+                    items: const {
+                      '每次询问': '每次询问',
+                      '隐藏到托盘': '隐藏到托盘',
+                      '直接关闭': '直接关闭',
+                    },
                     onChange: (displayValue) async {
                       if (displayValue != null) {
                         String actionValue;
@@ -547,6 +565,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
       'edge_drag_width': settings.edgeDragWidth,
       'window_close_dont_ask': settings.windowCloseDontAsk,
       'window_close_default_action': settings.windowCloseDefaultAction,
+      'dpi_scale': settings.dpiScale,
     };
   }
 
@@ -579,12 +598,11 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
               ),
               FSelect<String>(
                 hint: '选择主题模式',
-                format: (s) => s,
-                children: [
-                  FSelectItem('跟随系统', '跟随系统'),
-                  FSelectItem('浅色模式', '浅色模式'),
-                  FSelectItem('深色模式', '深色模式'),
-                ],
+                items: const {
+                  '跟随系统': '跟随系统',
+                  '浅色模式': '浅色模式',
+                  '深色模式': '深色模式',
+                },
                 onChange: (mode) async {
                   if (mode != null) {
                     String pref;
@@ -784,7 +802,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
         body: const Text('确定要清空所有本地缓存吗？\n这将清除问卷、项目、统计数据等缓存，但不会影响您的账户数据。'),
         actions: [
           FButton(
-            style: FButtonStyle.ghost,
+            style: context.theme.buttonStyles.ghost.call,
             onPress: () => Navigator.of(dialogContext).pop(false),
             child: const Text('取消'),
           ),
@@ -843,7 +861,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
         body: const Text('确定要将所有设置恢复为默认值吗？\n这将包括主题、侧滑范围、窗口行为等所有设置。'),
         actions: [
           FButton(
-            style: FButtonStyle.ghost,
+            style: context.theme.buttonStyles.ghost.call,
             onPress: () => Navigator.of(dialogContext).pop(false),
             child: const Text('取消'),
           ),
@@ -866,6 +884,10 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
         
         // 恢复侧滑触发范围为 24px
         await settings.setEdgeDragWidth(24.0);
+        
+        // 恢复 DPI 缩放为默认值 1.0
+        await settings.setDpiScale(1.0);
+        widget.onDpiScaleChange?.call(1.0);
         
         // 恢复窗口关闭行为为每次询问
         await settings.setWindowCloseDontAsk(false);
@@ -968,13 +990,11 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
                   : const Text('确定要退出当前账号吗？'),
               actions: [
                 FButton(
-                  style: FButtonStyle.outline,
-                  intrinsicWidth: true,
+                  style: context.theme.buttonStyles.outline.call,
                   onPress: isLoading ? null : () => Navigator.pop(dialogContext, false),
                   child: const Text('取消'),
                 ),
                 FButton(
-                  intrinsicWidth: true,
                   onPress: isLoading
                       ? null
                       : () async {
@@ -1264,6 +1284,110 @@ class _EdgeDragWidgetCardState extends State<_EdgeDragWidgetCard> {
               FSliderMark(value: 0.5, label: Text('40px')),
               FSliderMark(value: 0.75, tick: false),
               FSliderMark(value: 1, label: Text('64px')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// DPI 缩放设置卡片
+class _DpiScaleCard extends StatefulWidget {
+  final double initialValue;
+  final ThemeData theme;
+  final ValueChanged<double> onChanged;
+
+  const _DpiScaleCard({
+    required this.initialValue,
+    required this.theme,
+    required this.onChanged,
+  });
+
+  @override
+  State<_DpiScaleCard> createState() => _DpiScaleCardState();
+}
+
+class _DpiScaleCardState extends State<_DpiScaleCard> {
+  late FDiscreteSliderController _controller;
+  late double _currentValue;
+
+  @override
+  void initState() {
+    super.initState();
+    // 确保初始值在有效范围内 (0.85-1.15)
+    _currentValue = widget.initialValue.clamp(0.85, 1.15);
+    // 将 0.85-1.15 映射到 0-1 的归一化值
+    // normalized = (value - 0.85) / (1.15 - 0.85) = (value - 0.85) / 0.3
+    final normalized = ((_currentValue - 0.85) / 0.3).clamp(0.0, 1.0);
+    _controller = FDiscreteSliderController(
+      selection: FSliderSelection(
+        max: normalized,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'DPI 缩放',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              ),
+              Text(
+                '${(_currentValue * 100).toInt()}%',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: widget.theme.colorScheme.primary.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '调整界面元素的显示大小',
+            style: TextStyle(
+              fontSize: 12,
+              color: widget.theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 8),
+          FSlider(
+            tooltipBuilder: (style, value) {
+              final percentage = (85 + value * 30).round();
+              return Text('$percentage%');
+            },
+            controller: _controller,
+            onChange: (selection) {
+              final normalizedValue = _controller.selection.offset.max;
+              final scaleValue = 0.85 + normalizedValue * 0.3;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                setState(() {
+                  _currentValue = scaleValue;
+                });
+                widget.onChanged(scaleValue);
+              });
+            },
+            marks: const [
+              FSliderMark(value: 0, label: Text('85%')),
+              FSliderMark(value: 0.333, tick: false),
+              FSliderMark(value: 0.5, label: Text('100%')),
+              FSliderMark(value: 0.667, tick: false),
+              FSliderMark(value: 1, label: Text('115%')),
             ],
           ),
         ],

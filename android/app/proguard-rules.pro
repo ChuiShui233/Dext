@@ -63,3 +63,9 @@
 -assumenosideeffects class kotlin.jvm.internal.DebugMetadata {
     *;
 }
+
+# 忽略 Apache Tika 和其他依赖引用的 Java XML 类（Android 不支持）
+-dontwarn javax.xml.stream.**
+-dontwarn org.apache.tika.**
+-dontwarn org.xml.sax.**
+-dontwarn javax.xml.**

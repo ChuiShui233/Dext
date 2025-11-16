@@ -63,6 +63,57 @@ class MarkdownTextWidget extends StatelessWidget {
   }
 
   void _parseLineMarkdown(String line, List<TextSpan> spans, TextStyle baseStyle, ThemeData theme) {
+    // 检查是否是Markdown标题行
+    final headingMatch = RegExp(r'^(#{1,6})\s+(.+)$').firstMatch(line);
+    if (headingMatch != null) {
+      final level = headingMatch.group(1)!.length;
+      final headingText = headingMatch.group(2)!;
+      
+      // 根据标题级别设置字号，支持更高的字号
+      double fontSizeMultiplier;
+      FontWeight fontWeight;
+      switch (level) {
+        case 1:
+          fontSizeMultiplier = 2.0;  // H1: 2倍
+          fontWeight = FontWeight.w900;
+          break;
+        case 2:
+          fontSizeMultiplier = 1.75; // H2: 1.75倍
+          fontWeight = FontWeight.w800;
+          break;
+        case 3:
+          fontSizeMultiplier = 1.5;  // H3: 1.5倍
+          fontWeight = FontWeight.w700;
+          break;
+        case 4:
+          fontSizeMultiplier = 1.25; // H4: 1.25倍
+          fontWeight = FontWeight.w600;
+          break;
+        case 5:
+          fontSizeMultiplier = 1.1;  // H5: 1.1倍
+          fontWeight = FontWeight.w600;
+          break;
+        default:
+          fontSizeMultiplier = 1.0;  // H6: 1倍
+          fontWeight = FontWeight.w500;
+      }
+      
+      final headingStyle = baseStyle.copyWith(
+        fontSize: (baseStyle.fontSize ?? 14) * fontSizeMultiplier,
+        fontWeight: fontWeight,
+        height: 1.3,
+      );
+      
+      // 递归解析标题内容中的其他Markdown语法（粗体、斜体等）
+      _parseInlineMarkdown(headingText, spans, headingStyle, theme);
+      return;
+    }
+    
+    // 非标题行，正常解析
+    _parseInlineMarkdown(line, spans, baseStyle, theme);
+  }
+  
+  void _parseInlineMarkdown(String text, List<TextSpan> spans, TextStyle baseStyle, ThemeData theme) {
     final RegExp markdownRegex = RegExp(
       r'(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(`([^`]+)`)|(\[([^\]]+)\]\(([^)]+)\))',
       multiLine: true,
@@ -70,10 +121,10 @@ class MarkdownTextWidget extends StatelessWidget {
 
     int lastMatchEnd = 0;
     
-    for (final match in markdownRegex.allMatches(line)) {
+    for (final match in markdownRegex.allMatches(text)) {
       // 添加匹配前的普通文本
       if (match.start > lastMatchEnd) {
-        final plainText = line.substring(lastMatchEnd, match.start);
+        final plainText = text.substring(lastMatchEnd, match.start);
         if (plainText.isNotEmpty) {
           spans.add(TextSpan(text: plainText, style: baseStyle));
         }
@@ -122,11 +173,11 @@ class MarkdownTextWidget extends StatelessWidget {
     }
 
     // 如果这一行没有找到任何 Markdown 语法，添加整行文本
-    if (lastMatchEnd == 0 && line.isNotEmpty) {
-      spans.add(TextSpan(text: line, style: baseStyle));
-    } else if (lastMatchEnd < line.length) {
+    if (lastMatchEnd == 0 && text.isNotEmpty) {
+      spans.add(TextSpan(text: text, style: baseStyle));
+    } else if (lastMatchEnd < text.length) {
       // 添加剩余的普通文本
-      final remainingText = line.substring(lastMatchEnd);
+      final remainingText = text.substring(lastMatchEnd);
       if (remainingText.isNotEmpty) {
         spans.add(TextSpan(text: remainingText, style: baseStyle));
       }
@@ -184,6 +235,7 @@ class MarkdownToolbar extends StatelessWidget {
       ),
       child: Wrap(
         spacing: 4,
+        runSpacing: 4,
         children: [
           _buildToolButton(
             context,
@@ -200,6 +252,29 @@ class MarkdownToolbar extends StatelessWidget {
             icon: Icons.link,
             onTap: () => _insertMarkdown('[', '](https://example.com)', '链接文本'),
           ),
+          // 分隔线
+          Container(
+            width: 1,
+            height: 20,
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            color: theme.dividerColor.withValues(alpha: 0.3),
+          ),
+          // 标题按钮
+          _buildToolButton(
+            context,
+            label: 'H1',
+            onTap: () => _insertHeading(1),
+          ),
+          _buildToolButton(
+            context,
+            label: 'H2',
+            onTap: () => _insertHeading(2),
+          ),
+          _buildToolButton(
+            context,
+            label: 'H3',
+            onTap: () => _insertHeading(3),
+          ),
         ],
       ),
     );
@@ -207,17 +282,81 @@ class MarkdownToolbar extends StatelessWidget {
 
   Widget _buildToolButton(
     BuildContext context, {
-    required IconData icon,
+    IconData? icon,
+    String? label,
     required VoidCallback onTap,
   }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(4),
       child: Container(
-        padding: const EdgeInsets.all(6),
-        child: Icon(icon, size: 18),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: icon != null 
+          ? Icon(icon, size: 18)
+          : Text(
+              label ?? '',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
       ),
     );
+  }
+
+  void _insertHeading(int level) {
+    final text = controller.text;
+    TextSelection selection = controller.selection;
+    
+    if (!selection.isValid || selection.start < 0) {
+      selection = TextSelection.collapsed(offset: text.length);
+    }
+    
+    final cursorPos = selection.start.clamp(0, text.length);
+    
+    // 找到当前行的开始位置
+    int lineStart = cursorPos;
+    while (lineStart > 0 && text[lineStart - 1] != '\n') {
+      lineStart--;
+    }
+    
+    // 找到当前行的结束位置
+    int lineEnd = cursorPos;
+    while (lineEnd < text.length && text[lineEnd] != '\n') {
+      lineEnd++;
+    }
+    
+    // 获取当前行文本
+    String lineText = text.substring(lineStart, lineEnd);
+    
+    // 检查是否已经有标题语法
+    final existingHeading = RegExp(r'^(#{1,6})\s+(.*)$').firstMatch(lineText);
+    
+    String newLineText;
+    if (existingHeading != null) {
+      // 已有标题，更新级别
+      final content = existingHeading.group(2)!;
+      newLineText = '${'#' * level} $content';
+    } else {
+      // 没有标题，添加标题语法
+      final trimmed = lineText.trimLeft();
+      if (trimmed.isEmpty) {
+        newLineText = '${'#' * level} 标题文本';
+      } else {
+        newLineText = '${'#' * level} $trimmed';
+      }
+    }
+    
+    // 替换当前行
+    final before = text.substring(0, lineStart);
+    final after = text.substring(lineEnd);
+    controller.text = before + newLineText + after;
+    
+    // 设置光标位置到行尾
+    final newCursorPos = lineStart + newLineText.length;
+    controller.selection = TextSelection.collapsed(offset: newCursorPos);
+    
+    onChanged?.call();
   }
 
   void _insertMarkdown(String prefix, String suffix, String placeholder) {

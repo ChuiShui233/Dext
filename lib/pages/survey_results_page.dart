@@ -21,11 +21,10 @@ import '../main.dart' show isDesktop;
 import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xls;
 import '../utils/date_format.dart';
 import 'dart:ui' as ui;
-import '../widgets/frosted_glass_background.dart';
 import '../widgets/markdown_text_widget.dart';
+import '../widgets/downscaled_blur.dart';
 import '../services/config.dart';
 import '../components/loading_indicator.dart';
-import '../components/glass_card.dart';
 import '../components/adaptive_message_card.dart';
 import '../components/glass_button.dart';
 
@@ -54,9 +53,13 @@ class _SlideGradientTransform extends GradientTransform {
 }
 
 class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProviderStateMixin {
+  // 壁纸缓存：surveyId -> {desktopBackground, mobileBackground}
+  static final Map<String, Map<String, String?>> _backgroundCache = {};
+  
   List<SurveyResult> _results = [];
   List<Question> _questions = [];
   bool _isLoading = true;
+  bool _isBackgroundLoading = true;
   String? _errorMessage;
   Set<int> _selectedResults = {};
   bool _isSelectionMode = false;
@@ -74,12 +77,13 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
   late final AnimationController _rainbowCtl;
 
   String _computeStatsKey() {
-
     final lenR = _results.length;
     final lenQ = _questions.length;
     final firstId = lenR > 0 ? _results.first.id : -1;
     final lastId = lenR > 0 ? _results.last.id : -1;
-    return '$lenR-$lenQ-$firstId-$lastId';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final chartType = _usePieChart ? 'pie' : 'bar';
+    return '$lenR-$lenQ-$firstId-$lastId-$isDark-$chartType';
   }
 
   Widget _buildPieChart(Map<int, int> stats, List<QuestionOption> options, int total, {String? title}) {
@@ -778,46 +782,50 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
     );
   }
 
-  // 渐变操作按钮（参考 login_page.dart 的 OAuth 按钮风格）
+  // 毛玻璃样式按钮
   Widget _buildActionButton({
     required VoidCallback onTap,
     required IconData icon,
     required String label,
     required List<Color> colors,
   }) {
-    return Container(
-      height: 44,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: colors),
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: [
-          BoxShadow(
-            color: colors.first.withValues(alpha: 0.25),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          height: 44,
+          decoration: BoxDecoration(
+            color: colors.first.withValues(alpha: isDark ? 0.35 : 0.2),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: (isDark ? colors.first : Colors.white).withValues(alpha: isDark ? 0.4 : 0.2),
+              width: 1,
+            ),
           ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 18, color: Colors.white),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'PingFangSuper',
-                ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 18, color: isDark ? Colors.white : colors.first),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: isDark ? Colors.white : colors.first,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'PingFangSuper',
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -855,26 +863,32 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
     super.dispose();
   }
 
-  Widget _buildGlassCard({required Widget child, bool highlighted = false}) {
-    // 使用全局 GlassCard 以跟随设置中的“毛玻璃卡片”开关
-    final Color bg = highlighted
-        ? Colors.white.withAlpha(68)
-        : Colors.white.withAlpha(51);
-    final Color bd = highlighted
-        ? Colors.white.withAlpha(102)
-        : Colors.white.withAlpha(51);
-
-    return GlassCard(
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedSuperellipseBorder(
+  Widget _buildListCard({required Widget child, bool highlighted = false}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Card(
+      elevation: 0,
+      color: highlighted
+          ? (isDark ? Colors.white.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.65))
+          : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.55)),
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
+        side: highlighted
+            ? BorderSide(
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+                width: 2,
+              )
+            : BorderSide.none,
       ),
-      backgroundColor: bg,
-      borderColor: bd,
-      blurSigma: 12,
       child: child,
     );
   }
+
+  Widget _buildGlassCard({required Widget child, bool highlighted = false}) {
+    // 兼容旧的调用，直接转到新的 _buildListCard
+    return _buildListCard(child: child, highlighted: highlighted);
+  }
+
 
   Future<void> _loadData() async {
     Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
@@ -932,18 +946,53 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
 
   // 加载问卷壁纸（桌面/移动）
   Future<void> _loadBackground() async {
+    final surveyId = widget.survey.id.toString();
+    
+    // 检查缓存
+    if (_backgroundCache.containsKey(surveyId)) {
+      final cached = _backgroundCache[surveyId]!;
+      if (mounted) {
+        setState(() {
+          _desktopBackground = cached['desktopBackground'];
+          _mobileBackground = cached['mobileBackground'];
+          _isBackgroundLoading = false;
+        });
+      }
+      return;
+    }
+    
+    // 从 API 加载
     try {
       final data = await _apiService.getSurveyBackground(widget.survey.id);
       if (!mounted) return;
+      
+      final desktop = data['desktopBackground'] as String?;
+      final mobile = data['mobileBackground'] as String?;
+      
+      // 存入缓存
+      _backgroundCache[surveyId] = {
+        'desktopBackground': desktop,
+        'mobileBackground': mobile,
+      };
+      
       setState(() {
-        _desktopBackground = data['desktopBackground'] as String?;
-        _mobileBackground = data['mobileBackground'] as String?;
+        _desktopBackground = desktop;
+        _mobileBackground = mobile;
+        _isBackgroundLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
+      
+      // 即使加载失败也缓存 null 值，避免重复请求
+      _backgroundCache[surveyId] = {
+        'desktopBackground': null,
+        'mobileBackground': null,
+      };
+      
       setState(() {
         _desktopBackground = null;
         _mobileBackground = null;
+        _isBackgroundLoading = false;
       });
     }
   }
@@ -1331,12 +1380,12 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
         body: const Text('确定要删除这条作答记录吗？此操作不可撤销。'),
         actions: [
           FButton(
-            style: FButtonStyle.outline,
+            style: context.theme.buttonStyles.outline.call,
             onPress: () => Navigator.of(context).pop(false),
             child: const Text('取消'),
           ),
           FButton(
-            style: FButtonStyle.destructive,
+            style: context.theme.buttonStyles.destructive.call,
             onPress: () => Navigator.of(context).pop(true),
             child: const Text('删除'),
           ),
@@ -1358,12 +1407,12 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
         body: Text('确定要删除选中的 ${_selectedResults.length} 条作答记录吗？此操作不可撤销。'),
         actions: [
           FButton(
-            style: FButtonStyle.outline,
+            style: context.theme.buttonStyles.outline.call,
             onPress: () => Navigator.of(context).pop(false),
             child: const Text('取消'),
           ),
           FButton(
-            style: FButtonStyle.destructive,
+            style: context.theme.buttonStyles.destructive.call,
             onPress: () => Navigator.of(context).pop(true),
             child: const Text('删除'),
           ),
@@ -1464,7 +1513,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
                       ),
                       if (!_isSelectionMode)
                         FButton(
-                          style: FButtonStyle.ghost,
+                          style: context.theme.buttonStyles.ghost.call,
                           onPress: () => _showDeleteConfirmDialog(result.id),
                           child: Icon(
                             Icons.delete,
@@ -1679,7 +1728,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       FButton(
-                        style: FButtonStyle.ghost,
+                        style: context.theme.buttonStyles.ghost.call,
                         onPress: () {
                           setState(() => _exportFmtExpanded = !_exportFmtExpanded);
                           _exportFmtCtl.toggle();
@@ -1926,7 +1975,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
                       const SizedBox(height: 8),
                       LayoutBuilder(builder: (context, constraints) {
                         final w = constraints.maxWidth;
-                        final cols = w >= 1200 ? 3 : (w >= 800 ? 2 : 1);
+                        final cols = w >= 2000 ? 5 : (w >= 1600 ? 4 : (w >= 1200 ? 3 : (w >= 800 ? 2 : 1)));
                         const gap = 12.0;
                         final itemW = cols > 1 ? (w - gap * (cols - 1)) / cols : w;
                         final tiles = question.options.asMap().entries.map((entry) {
@@ -2140,7 +2189,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
                       })
                     ] else LayoutBuilder(builder: (context, constraints) {
                       final w = constraints.maxWidth;
-                      final cols = w >= 1200 ? 3 : (w >= 800 ? 2 : 1);
+                      final cols = w >= 2000 ? 5 : (w >= 1600 ? 4 : (w >= 1200 ? 3 : (w >= 800 ? 2 : 1)));
                       const gap = 12.0;
                       final itemW = cols > 1 ? (w - gap * (cols - 1)) / cols : w;
                       return Wrap(
@@ -2204,29 +2253,97 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
     final isWide = screenWidth > 800;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // 背景加载中，显示加载动画
+    if (_isBackgroundLoading) {
+      return Scaffold(
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isDark
+                  ? [Colors.grey[900]!, Colors.black]
+                  : [Colors.blue[50]!, Colors.purple[50]!],
+            ),
+          ),
+          child: Column(
+            children: [
+              const TopSafeSpacer(),
+              FHeader.nested(
+                title: Text('${widget.survey.surveyName} - 作答结果'),
+                prefixes: [
+                  FHeaderAction(
+                    icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+                    onPress: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 50,
+                        height: 50,
+                        child: CircularProgressIndicator(strokeWidth: 3),
+                      ),
+                      SizedBox(height: 24),
+                      Text(
+                        '加载背景中...',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       body: Stack(
         children: [
+          // 全屏模糊背景
           Positioned.fill(
-            child: (_desktopBackground != null && _desktopBackground!.isNotEmpty) ||
-                   (_mobileBackground != null && _mobileBackground!.isNotEmpty)
-                ? Container(
-                    decoration: BoxDecoration(
-                      image: DecorationImage(
-                        image: CachedNetworkImageProvider(
-                          isWide
-                              ? toAbsoluteUrl(_desktopBackground)
-                              : toAbsoluteUrl(_mobileBackground),
+            child: DownscaledBlur(
+              sigma: 30,
+              downscale: 0.4,
+              child: (_desktopBackground != null && _desktopBackground!.isNotEmpty) ||
+                     (_mobileBackground != null && _mobileBackground!.isNotEmpty)
+                  ? Container(
+                      decoration: BoxDecoration(
+                        image: DecorationImage(
+                          image: CachedNetworkImageProvider(
+                            isWide
+                                ? toAbsoluteUrl(_desktopBackground)
+                                : toAbsoluteUrl(_mobileBackground),
+                          ),
+                          fit: BoxFit.cover,
+                          onError: (_, __) {},
                         ),
-                        fit: BoxFit.cover,
-                        onError: (_, __) {},
+                      ),
+                      child: Container(
+                        color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.3),
+                      ),
+                    )
+                  : Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: isDark
+                              ? [Colors.grey[900]!, Colors.black]
+                              : [Colors.blue[50]!, Colors.purple[50]!],
+                        ),
                       ),
                     ),
-                    child: isDark
-                        ? Container(color: Colors.black.withValues(alpha: 0.4))
-                        : null,
-                  )
-                : const FrostedGlassBackground(),
+            ),
           ),
           Column(
             children: [
@@ -2255,16 +2372,6 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
                       ),
                       onPress: _selectAll,
                     ),
-                    if (_selectedResults.isNotEmpty)
-                      FButton(
-                        style: FButtonStyle.ghost,
-                        onPress: _showBatchDeleteConfirmDialog,
-                        child: Icon(
-                          Icons.delete,
-                          size: 18,
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
                     FHeaderAction(
                       icon: const Icon(Icons.close, size: 20),
                       onPress: _toggleSelectionMode,
@@ -2401,13 +2508,13 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
                                         physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                                         slivers: [
                                           SliverPadding(
-                                            padding: EdgeInsets.fromLTRB(side + 16, 0, side + 16, 0),
+                                            padding: EdgeInsets.fromLTRB(side + 16, 8, side + 16, 0),
                                             sliver: SliverToBoxAdapter(child: _getStatisticsCard()),
                                           ),
                                           SliverPadding(
-                                            padding: EdgeInsets.fromLTRB(side + 16, 16, side + 16, 0),
+                                            padding: EdgeInsets.fromLTRB(side + 16, 0, side + 16, 0),
                                             sliver: SliverToBoxAdapter(
-                                              child: _buildGlassCard(
+                                              child: _buildListCard(
                                                 child: const Padding(
                                                   padding: EdgeInsets.all(16),
                                                   child: Text(
@@ -2447,7 +2554,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
                                                         ),
                                                         if (_selectedResults.isNotEmpty)
                                                           FButton(
-                                                            style: FButtonStyle.destructive,
+                                                            style: context.theme.buttonStyles.destructive.call,
                                                             onPress: _showBatchDeleteConfirmDialog,
                                                             child: const Text('删除选中'),
                                                           ),
@@ -2603,7 +2710,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
                     SizedBox(
                       width: double.infinity,
                       child: FButton(
-                        style: FButtonStyle.outline,
+                        style: context.theme.buttonStyles.outline.call,
                         onPress: () => _showTextInputDetails(question, textAnswers),
                         child: const Text('查看所有回复'),
                       ),
@@ -2624,9 +2731,11 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
         ? '自定义填写' 
         : question.options[optionIndex].text;
     
-    showAdaptiveDialog(
+    showFDialog(
       context: context,
-      builder: (context) => FDialog(
+      builder: (context, style, animation) => FDialog(
+        style: style.call,
+        animation: animation,
         direction: Axis.vertical,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2719,7 +2828,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
         ),
         actions: [
           FButton(
-            style: FButtonStyle.outline,
+            style: context.theme.buttonStyles.outline.call,
             onPress: () => Navigator.of(context).pop(),
             child: const Text('关闭'),
           ),
@@ -2740,9 +2849,11 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
       }
     }
     
-    showAdaptiveDialog(
+    showFDialog(
       context: context,
-      builder: (context) => FDialog(
+      builder: (context, style, animation) => FDialog(
+        style: style.call,
+        animation: animation,
         direction: Axis.vertical,
         title: MarkdownTextWidget(
           text: question.title,
@@ -2839,7 +2950,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
         ),
         actions: [
           FButton(
-            style: FButtonStyle.outline,
+            style: context.theme.buttonStyles.outline.call,
             onPress: () => Navigator.of(context).pop(),
             child: const Text('关闭'),
           ),

@@ -110,13 +110,12 @@ class _TimeLimitPageState extends State<TimeLimitPage> with TickerProviderStateM
                     key: _daysSelectKey,
                     controller: _daysController,
                     hint: '天数',
-                    format: (value) => '$value天',
                     onChange: (value) {
                       setState(() {
                         _days = value ?? 0;
                       });
                     },
-                    children: List.generate(31, (index) => FSelectItem('$index天', index)),
+                    items: { for (var index = 0; index < 31; index++) '$index天': index },
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -126,13 +125,12 @@ class _TimeLimitPageState extends State<TimeLimitPage> with TickerProviderStateM
                     key: _hoursSelectKey,
                     controller: _hoursController,
                     hint: '小时',
-                    format: (value) => '${value.toString().padLeft(2, '0')}时',
                     onChange: (value) {
                       setState(() {
                         _hours = value ?? 0;
                       });
                     },
-                    children: List.generate(24, (index) => FSelectItem('${index.toString().padLeft(2, '0')}时', index)),
+                    items: { for (var index = 0; index < 24; index++) '${index.toString().padLeft(2, '0')}时': index },
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -142,13 +140,12 @@ class _TimeLimitPageState extends State<TimeLimitPage> with TickerProviderStateM
                     key: _minutesSelectKey,
                     controller: _minutesController,
                     hint: '分钟',
-                    format: (value) => '${value.toString().padLeft(2, '0')}分',
                     onChange: (value) {
                       setState(() {
                         _minutes = value ?? 0;
                       });
                     },
-                    children: List.generate(60, (index) => FSelectItem('${index.toString().padLeft(2, '0')}分', index)),
+                    items: { for (var index = 0; index < 60; index++) '${index.toString().padLeft(2, '0')}分': index },
                   ),
                 ),
               ],
@@ -157,6 +154,7 @@ class _TimeLimitPageState extends State<TimeLimitPage> with TickerProviderStateM
             SizedBox(
               width: double.infinity,
               child: FButton(
+                style: context.theme.buttonStyles.primary.call,
                 onPress: () {
                   if (_days == 0 && _hours == 0 && _minutes == 0) {
                     showFToast(
@@ -164,17 +162,10 @@ class _TimeLimitPageState extends State<TimeLimitPage> with TickerProviderStateM
                       alignment:FToastAlignment.bottomRight,
                       title: const Text('提示'),
                       description: const Text('请至少设置一个时间单位'),
-                      suffixBuilder: (context, entry, _) => IntrinsicHeight(
+                      suffixBuilder: (context, entry) => IntrinsicHeight(
                         child: FButton(
-                          style: context.theme.buttonStyles.primary.copyWith(
-                            contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                              textStyle: FWidgetStateMap.all(
-                                context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                              ),
-                            ),
-                          ),
-                          onPress: entry.dismiss,
+                          style: context.theme.buttonStyles.primary.call,
+                          onPress: entry.dismiss.call,
                           child: const Text('关闭'),
                         ),
                       ),
@@ -316,9 +307,11 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
   Future<bool> _showPublishConfirmDialog() async {
     if (!mounted) return false;
     
-    final confirmed = await showAdaptiveDialog<bool>(
+    final confirmed = await showFDialog<bool>(
       context: context,
-      builder: (context) => FDialog(
+      builder: (context, style, animation) => FDialog(
+        style: style.call,
+        animation: animation,
         direction: Axis.horizontal,
         title: const Text('确认发布问卷'),
         body: const Column(
@@ -335,7 +328,7 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
         ),
         actions: [
           FButton(
-            style: FButtonStyle.outline,
+            style: context.theme.buttonStyles.outline.call,
             onPress: () => Navigator.of(context).pop(false),
             child: const Text('取消'),
           ),
@@ -370,17 +363,19 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
     final hoursController = FSelectController<int>(vsync: this);
     final minutesController = FSelectController<int>(vsync: this);
 
-    await showAdaptiveDialog(
+    await showFDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
+      builder: (context, style, animation) => StatefulBuilder(
         builder: (context, setState) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             daysController.value = tempDays;
             hoursController.value = tempHours;
             minutesController.value = tempMinutes;
           });
-          
+
           return FDialog(
+            style: style.call,
+            animation: animation,
             direction: Axis.horizontal,
             title: const Text('设置截止时间'),
             body: Column(
@@ -397,13 +392,12 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
                         key: _daysSelectKey,
                         controller: daysController,
                         hint: '天数',
-                        format: (value) => '$value天',
                         onChange: (value) {
                           setState(() {
                             tempDays = value ?? 0;
                           });
                         },
-                        children: List.generate(31, (index) => FSelectItem('$index天', index)),
+                        items: { for (var index = 0; index < 31; index++) '$index天': index },
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -413,13 +407,12 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
                         key: _hoursSelectKey,
                         controller: hoursController,
                         hint: '小时',
-                        format: (value) => '${value.toString().padLeft(2, '0')}时',
                         onChange: (value) {
                           setState(() {
                             tempHours = value ?? 0;
                           });
                         },
-                        children: List.generate(24, (index) => FSelectItem('${index.toString().padLeft(2, '0')}时', index)),
+                        items: { for (var index = 0; index < 24; index++) '${index.toString().padLeft(2, '0')}时': index },
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -429,13 +422,12 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
                         key: _minutesSelectKey,
                         controller: minutesController,
                         hint: '分钟',
-                        format: (value) => '${value.toString().padLeft(2, '0')}分',
                         onChange: (value) {
                           setState(() {
                             tempMinutes = value ?? 0;
                           });
                         },
-                        children: List.generate(60, (index) => FSelectItem('${index.toString().padLeft(2, '0')}分', index)),
+                        items: { for (var index = 0; index < 60; index++) '${index.toString().padLeft(2, '0')}分': index },
                       ),
                     ),
                   ],
@@ -444,7 +436,7 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
             ),
             actions: [
               FButton(
-                style: FButtonStyle.outline,
+                style: context.theme.buttonStyles.outline.call,
                 onPress: () => Navigator.of(context).pop(),
                 child: const Text('取消'),
               ),
@@ -454,20 +446,13 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
                     if (!mounted) return;
                     showFToast(
                       context: context,
-                      alignment:FToastAlignment.bottomRight,
+                      alignment: FToastAlignment.bottomRight,
                       title: const Text('提示'),
                       description: const Text('请至少设置一个时间单位'),
-                      suffixBuilder: (context, entry, _) => IntrinsicHeight(
+                      suffixBuilder: (context, entry) => IntrinsicHeight(
                         child: FButton(
-                          style: context.theme.buttonStyles.primary.copyWith(
-                            contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                              textStyle: FWidgetStateMap.all(
-                                context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                              ),
-                            ),
-                          ),
-                          onPress: entry.dismiss,
+                          style: context.theme.buttonStyles.primary.call,
+                          onPress: entry.dismiss.call,
                           child: const Text('关闭'),
                         ),
                       ),
@@ -501,17 +486,10 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
         alignment:FToastAlignment.bottomRight,
         title: const Text('提示'),
         description: const Text('请选择一个项目'),
-        suffixBuilder: (context, entry, _) => IntrinsicHeight(
+        suffixBuilder: (context, entry) => IntrinsicHeight(
           child: FButton(
-            style: context.theme.buttonStyles.primary.copyWith(
-              contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                textStyle: FWidgetStateMap.all(
-                  context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                ),
-              ),
-            ),
-            onPress: entry.dismiss,
+            style: context.theme.buttonStyles.primary.call,
+            onPress: entry.dismiss.call,
             child: const Text('关闭'),
           ),
         ),
@@ -526,17 +504,10 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
         alignment:FToastAlignment.bottomRight,
         title: const Text('提示'),
         description: const Text('请选择问卷类型'),
-        suffixBuilder: (context, entry, _) => IntrinsicHeight(
+        suffixBuilder: (context, entry) => IntrinsicHeight(
           child: FButton(
-            style: context.theme.buttonStyles.primary.copyWith(
-              contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                textStyle: FWidgetStateMap.all(
-                  context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                ),
-              ),
-            ),
-            onPress: entry.dismiss,
+            style: context.theme.buttonStyles.primary.call,
+            onPress: entry.dismiss.call,
             child: const Text('关闭'),
           ),
         ),
@@ -551,17 +522,10 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
         alignment:FToastAlignment.bottomRight,
         title: const Text('提示'),
         description: const Text('请选择问卷状态'),
-        suffixBuilder: (context, entry, _) => IntrinsicHeight(
+        suffixBuilder: (context, entry) => IntrinsicHeight(
           child: FButton(
-            style: context.theme.buttonStyles.primary.copyWith(
-              contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                textStyle: FWidgetStateMap.all(
-                  context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                ),
-              ),
-            ),
-            onPress: entry.dismiss,
+            style: context.theme.buttonStyles.primary.call,
+            onPress: entry.dismiss.call,
             child: const Text('关闭'),
           ),
         ),
@@ -577,17 +541,10 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
         alignment:FToastAlignment.bottomRight,
         title: const Text('提示'),
         description: const Text('请设置问卷截止时间'),
-        suffixBuilder: (context, entry, _) => IntrinsicHeight(
+        suffixBuilder: (context, entry) => IntrinsicHeight(
           child: FButton(
-            style: context.theme.buttonStyles.primary.copyWith(
-              contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                textStyle: FWidgetStateMap.all(
-                  context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                ),
-              ),
-            ),
-            onPress: entry.dismiss,
+            style: context.theme.buttonStyles.primary.call,
+            onPress: entry.dismiss.call,
             child: const Text('关闭'),
           ),
         ),
@@ -647,33 +604,7 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
     }
   }
 
-  String _getSurveyTypeText(int type) {
-    switch (type) {
-      case 0:
-        return '普通问卷';
-      case 1:
-        return '限时问卷';
-      case 2:
-        return '限次问卷';
-      case 3:
-        return '自选风格';
-      default:
-        return '未知类型';
-    }
-  }
 
-  String _getSurveyStatusText(int status) {
-    switch (status) {
-      case 0:
-        return '未发布';
-      case 1:
-        return '发布中';
-      case 2:
-        return '已完结';
-      default:
-        return '未知状态';
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -892,21 +823,15 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
                 controller: _projectSelectController,
                 label: const Text('所属项目'),
                 hint: '请选择项目',
-                format: (value) => widget.projects
-                    .firstWhere((p) => p.id == value)
-                    .projectName,
                 onChange: (value) {
                   setState(() {
                     _selectedProjectId = value;
                   });
                   _projectSelectController.value = value;
                 },
-                children: widget.projects.map((project) {
-                  return FSelectItem(
-                    project.projectName,
-                    project.id,
-                  );
-                }).toList(),
+                items: {
+                  for (final project in widget.projects) project.projectName: project.id,
+                },
               ),
             ],
         ),
@@ -951,19 +876,18 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
               controller: _typeSelectController,
               label: const Text('问卷类型'),
               hint: '请选择问卷类型',
-              format: (value) => _getSurveyTypeText(value),
               onChange: (value) {
                 setState(() {
                   _selectedType = value;
                 });
                 _typeSelectController.value = value;
               },
-              children: [
-                FSelectItem('普通问卷', 0),
-                FSelectItem('限时问卷', 1),
-                FSelectItem('限次问卷', 2),
-                FSelectItem('自选风格', 3),
-              ],
+              items: const {
+                '普通问卷': 0,
+                '限时问卷': 1,
+                '限次问卷': 2,
+                '自选风格': 3,
+              },
             ),
             if (_selectedType == 1) ...[
               const SizedBox(height: 16),
@@ -1020,25 +944,21 @@ class _EditSurveyPageState extends State<EditSurveyPage> with TickerProviderStat
               controller: _statusSelectController,
               label: const Text('问卷状态'),
               hint: '请选择问卷状态',
-              format: (value) => _getSurveyStatusText(value),
               onChange: (value) async {
                 if (value == 1 && _selectedStatus != 1) {
                   final confirmed = await _showPublishConfirmDialog();
-                  if (!confirmed) {
-                    _statusSelectController.value = _selectedStatus;
-                    return;
-                  }
+                  if (!confirmed) return;
                 }
                 setState(() {
                   _selectedStatus = value;
                 });
                 _statusSelectController.value = value;
               },
-              children: [
-                FSelectItem('未发布', 0),
-                FSelectItem('发布中', 1),
-                FSelectItem('已完结', 2),
-              ],
+              items: const {
+                '未发布': 0,
+                '发布中': 1,
+                '已完结': 2,
+              },
             ),
             const SizedBox(height: 24),
             _buildSwitchTile(

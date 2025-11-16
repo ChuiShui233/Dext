@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 import 'package:dext/services/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
@@ -36,6 +37,7 @@ class HomePage extends StatefulWidget {
   final VoidCallback onSurveyTap;
   final VoidCallback onLogout;
   final Function(ThemeMode) onThemeModeChange;
+  final Function(double)? onDpiScaleChange;
   final Function(int)? onTabChanged;
   final ApiService apiService;
   final ValueNotifier<User?>? userNotifier;
@@ -49,6 +51,7 @@ class HomePage extends StatefulWidget {
     required this.onSurveyTap,
     required this.onLogout,
     required this.onThemeModeChange,
+    this.onDpiScaleChange,
     required this.apiService,
     this.onTabChanged,
     this.userNotifier,
@@ -130,6 +133,51 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
     }
   }
 
+  Widget _buildNavItem(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required int index,
+    required bool isSelected,
+  }) {
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => widget.onTabChanged?.call(index),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 24,
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    color: isSelected
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context); // 必须调用以支持 AutomaticKeepAliveClientMixin
@@ -155,6 +203,7 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
       HomeSettingsContent(
         onLogout: widget.onLogout,
         onThemeModeChange: widget.onThemeModeChange,
+        onDpiScaleChange: widget.onDpiScaleChange,
         onChangeAvatar: () {
   },
         apiService: widget.apiService,
@@ -175,19 +224,6 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
           Scaffold(
             backgroundColor: Colors.transparent,
             extendBody: true,
-            bottomNavigationBar: !showDesktopLayout ? BottomNavigationBar(
-              currentIndex: widget.currentIndex,
-              onTap: (index) {
-                widget.onTabChanged?.call(index);
-              },
-              items: const [
-                BottomNavigationBarItem(icon: Icon(FIcons.house), label: '主页'),
-                BottomNavigationBarItem(icon: Icon(FIcons.clock), label: '历史记录'),
-                BottomNavigationBarItem(icon: Icon(FIcons.settings), label: '设置'),
-              ],
-              backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0.6),
-              elevation: 0,
-            ) : null,
             body: LayoutBuilder(
               builder: (context, constraints) {
                 final Widget current = AnimatedSwitcher(
@@ -196,12 +232,82 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
                   switchOutCurve: Curves.fastOutSlowIn.flipped,
                   child: contents[widget.currentIndex],
                 );
-                if (widget.currentIndex == 2) {
-                  return current;
+                
+                final contentWidget = widget.currentIndex == 2
+                    ? current
+                    : Padding(
+                        padding: padding,
+                        child: current,
+                      );
+                
+                // 桌面端不显示底部导航栏
+                if (showDesktopLayout) {
+                  return contentWidget;
                 }
-                return Padding(
-                  padding: padding,
-                  child: current,
+                
+                // 手机端：添加悬浮式底部导航栏
+                return Stack(
+                  children: [
+                    // 主内容
+                    contentWidget,
+                    
+                    // 悬浮导航栏
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      bottom: 16,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: Container(
+                            height: 68,
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.7),
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(
+                                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                                width: 1,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.1),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: [
+                                _buildNavItem(
+                                  context,
+                                  icon: FIcons.house,
+                                  label: '主页',
+                                  index: 0,
+                                  isSelected: widget.currentIndex == 0,
+                                ),
+                                _buildNavItem(
+                                  context,
+                                  icon: FIcons.clock,
+                                  label: '历史',
+                                  index: 1,
+                                  isSelected: widget.currentIndex == 1,
+                                ),
+                                _buildNavItem(
+                                  context,
+                                  icon: FIcons.settings,
+                                  label: '设置',
+                                  index: 2,
+                                  isSelected: widget.currentIndex == 2,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 );
               },
             ),

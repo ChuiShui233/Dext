@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:video_player/video_player.dart';
 import '../components/video_player_widget.dart';
 import '../services/config.dart';
+import '../services/api_service.dart';
 import '../components/loading_indicator.dart';
 
 class MediaGallery extends StatelessWidget {
@@ -47,8 +48,10 @@ class MediaGallery extends StatelessWidget {
         double h = imageItemSize;
 
         if (isImage) {
+          // 使用缩略图加载，减少带宽消耗
+          final imageUrl = ApiService.getThumbUrl(url);
           mediaWidget = CachedNetworkImage(
-            imageUrl: absUrl,
+            imageUrl: imageUrl,
             httpHeaders: authToken != null && authToken!.isNotEmpty
                 ? { 'Authorization': 'Bearer ${authToken!}' }
                 : null,

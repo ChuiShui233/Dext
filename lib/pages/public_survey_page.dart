@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -16,7 +17,6 @@ import 'fullscreen_media_viewer.dart';
 import '../widgets/frosted_glass_background.dart';
 import '../widgets/top_safe_spacer.dart';
 import '../components/loading_indicator.dart';
-import '../services/config.dart';
 
 class PublicSurveyPage extends StatefulWidget {
   final String surveyUID;
@@ -115,6 +115,11 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
             final optionsList = json.decode(optionsData) as List;
             options = optionsList.map((o) => QuestionOption.fromJson(o)).toList();
           }
+          if (kDebugMode && options.isNotEmpty) {
+            if (kDebugMode) {
+              print('[PublicSurvey] 问题 ${q['id']} 的选项IDs: ${options.map((o) => o.id).toList()}');
+            }
+          }
         } catch (e) {
           if (kDebugMode) {
             print('解析选项失败: $e');
@@ -135,6 +140,38 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
           }
         }
 
+        // 解析跳题逻辑
+        Map<int, int> jumpLogic = {};
+        try {
+          final jumpLogicData = q['jumpLogic'];
+          if (kDebugMode) {
+            print('[PublicSurvey] 问题 ${q['id']} 的原始 jumpLogic 数据: $jumpLogicData');
+          }
+          if (jumpLogicData is Map) {
+            jumpLogicData.forEach((k, v) {
+              try {
+                final keyInt = k is int ? k : int.parse(k.toString());
+                final valInt = v is int ? v : int.parse(v.toString());
+                jumpLogic[keyInt] = valInt;
+                if (kDebugMode) {
+                  print('[PublicSurvey] 解析跳转: 选项ID $keyInt -> 目标 $valInt ${valInt == -1 ? "(结束问卷)" : ""} ');
+                }
+              } catch (_) {
+                // 忽略无效的跳题逻辑条目
+              }
+            });
+          }
+          if (kDebugMode && jumpLogic.isNotEmpty) {
+            if (kDebugMode) {
+              print('[PublicSurvey] 问题 ${q['id']} 最终 jumpLogic: $jumpLogic');
+            }
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('[PublicSurvey] 解析跳题逻辑失败: $e');
+          }
+        }
+
         return Question(
           id: q['id'] ?? 0,
           title: q['title'] ?? '',
@@ -143,6 +180,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
           required: q['required'] ?? true,
           order: q['order'] ?? 0,
           mediaUrls: mediaUrls,
+          jumpLogic: jumpLogic,
           imageScale: (q['imageScale'] as num?)?.toDouble() ?? 1.0,
         );
       }).toList();
@@ -193,8 +231,45 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
     }
     
     try {
-      final imageProvider = NetworkImage(toAbsoluteUrl(backgroundUrl));
-      await precacheImage(imageProvider, context);
+      // 使用中等质量图片进行预加载
+      final imageUrl = ApiService.getMediumUrl(backgroundUrl);
+      final imageProvider = NetworkImage(imageUrl);
+      
+      // 使用Completer等待图片真正加载完成
+      final completer = Completer<void>();
+      final ImageStream stream = imageProvider.resolve(ImageConfiguration(
+        devicePixelRatio: MediaQuery.of(context).devicePixelRatio,
+      ));
+      
+      late ImageStreamListener listener;
+      listener = ImageStreamListener(
+        (ImageInfo info, bool synchronousCall) {
+          // 图片加载完成
+          completer.complete();
+          stream.removeListener(listener);
+        },
+        onError: (exception, stackTrace) {
+          // 加载失败也继续
+          if (kDebugMode) {
+            print('背景图片加载失败: $exception');
+          }
+          completer.complete();
+          stream.removeListener(listener);
+        },
+      );
+      
+      stream.addListener(listener);
+      
+      // 等待图片加载完成，最多等待3秒
+      await completer.future.timeout(
+        const Duration(seconds: 3),
+        onTimeout: () {
+          if (kDebugMode) {
+            print('背景图片加载超时');
+          }
+          stream.removeListener(listener);
+        },
+      );
     } catch (e) {
       // 背景加载失败不影响问卷显示
       if (kDebugMode) {
@@ -229,7 +304,10 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
       }
       _optionStates[_getOptionKey(questionId, optionIndex)] = true;
       
-      _runtime?.setAnswerSingle(questionId, option);
+      // 获取实际的选项ID而不是文本
+      final question = questions.firstWhere((q) => q.id == questionId);
+      final selectedOption = question.options[optionIndex];
+      _runtime?.setAnswerSingle(questionId, selectedOption.id.toString());
       _runtime?.recomputeVisible();
       
       // 检查是否选中了自定义填写选项
@@ -237,6 +315,8 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
         _questionsWithCustomInput.add(questionId);
       } else {
         _questionsWithCustomInput.remove(questionId);
+        // 清除该问题的所有自定义输入内容
+        _customInputValues.removeWhere((key, value) => key.startsWith('${questionId}_'));
       }
     });
     
@@ -251,7 +331,10 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
     setState(() {
       _optionStates[_getOptionKey(questionId, optionIndex)] = !isSelected;
       
-      _runtime?.toggleMultiple(questionId, option, !isSelected);
+      // 获取实际的选项ID而不是文本
+      final question = questions.firstWhere((q) => q.id == questionId);
+      final selectedOption = question.options[optionIndex];
+      _runtime?.toggleMultiple(questionId, selectedOption.id.toString(), !isSelected);
       _runtime?.recomputeVisible();
       
       // 检查是否选中了自定义填写选项
@@ -260,6 +343,8 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
           _questionsWithCustomInput.add(questionId);
         } else {
           _questionsWithCustomInput.remove(questionId);
+          // 清除该问题该选项的自定义输入内容
+          _customInputValues.remove('${questionId}_$optionIndex');
         }
       }
     });
@@ -273,7 +358,12 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
 
   void _updateTextInputAnswer(int questionId, String value) {
     setState(() {
-      _runtime?.setAnswerSingle(questionId, value);
+      // 如果输入内容为空，清除答案
+      if (value.trim().isEmpty) {
+        _runtime?.answers.remove(questionId);
+      } else {
+        _runtime?.setAnswerSingle(questionId, value);
+      }
       _runtime?.recomputeVisible();
     });
   }
@@ -293,12 +383,39 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
   bool _areAllRequiredQuestionsAnswered() {
     if (_runtime == null) return false;
     
-    // 检查所有必答题是否都已回答（不仅限于当前可见的题目）
-    for (final question in questions) {
+    // 只检查可见的必答题是否都已回答
+    for (final question in questions.where((q) => _runtime!.visibleQuestionIds.contains(q.id))) {
       if (question.required) {
         final answer = _runtime!.answers[question.id];
         if (answer == null || answer.isEmpty) {
           return false;
+        }
+        
+        // 对于文本输入题，检查内容是否为空
+        if (question.type == QuestionType.textInput) {
+          final textAnswer = answer.join('').trim();
+          if (textAnswer.isEmpty) {
+            return false;
+          }
+        }
+        
+        // 检查是否有自定义填写选项被选中但未填写内容
+        if (question.type == QuestionType.singleChoice || question.type == QuestionType.multipleChoice) {
+          for (int i = 0; i < question.options.length; i++) {
+            final option = question.options[i];
+            if (option.text == '__custom_input__') {
+              // 检查该选项是否被选中
+              final optionStr = option.text;
+              if (answer.contains(optionStr) || answer.contains(i.toString())) {
+                // 选项被选中，检查是否有输入内容
+                final customKey = '${question.id}_$i';
+                final customValue = _customInputValues[customKey]?.trim() ?? '';
+                if (customValue.isEmpty) {
+                  return false;
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -306,15 +423,57 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
   }
 
   void _checkAutoSubmit() {
+    if (kDebugMode) {
+      print('[AutoSubmit] 检查自动提交: autoSubmit=$autoSubmit, isSubmitting=$isSubmitting, isSubmitted=$isSubmitted, ended=${_runtime?.ended}');
+    }
     if (!autoSubmit || isSubmitting || isSubmitted) return;
     
+    // 只有当问卷真正结束时才考虑自动提交
+    if (_runtime?.ended != true) {
+      if (kDebugMode) {
+        print('[AutoSubmit] 问卷未结束，跳过自动提交检查');
+      }
+      return;
+    }
+    
     // 如果有问题选中了自定义填写选项，不触发自动提交
-    if (_questionsWithCustomInput.isNotEmpty) return;
+    if (_questionsWithCustomInput.isNotEmpty) {
+      if (kDebugMode) {
+        print('[AutoSubmit] 有未完成的自定义输入选项: $_questionsWithCustomInput');
+      }
+      return;
+    }
+    
+    // 检查是否有自定义输入内容未完成
+    bool hasUnfinishedCustomInput = _customInputValues.values.any((value) => value.trim().isNotEmpty);
+    if (hasUnfinishedCustomInput) {
+      if (kDebugMode) {
+        print('[AutoSubmit] 有未完成的自定义输入内容: $_customInputValues');
+      }
+      return;
+    }
     
     // 延迟检查，避免在状态更新过程中触发
+    if (kDebugMode) {
+      print('[AutoSubmit] 开始延迟检查...');
+    }
     Future.delayed(const Duration(milliseconds: 100), () {
-      if (_areAllRequiredQuestionsAnswered()) {
+      if (kDebugMode) {
+        print('[AutoSubmit] 延迟检查执行，检查必答题是否全部回答...');
+      }
+      bool allAnswered = _areAllRequiredQuestionsAnswered();
+      if (kDebugMode) {
+        print('[AutoSubmit] 必答题检查结果: $allAnswered');
+      }
+      if (allAnswered) {
+        if (kDebugMode) {
+          print('[AutoSubmit] 触发自动提交');
+        }
         _submitAnswers();
+      } else {
+        if (kDebugMode) {
+          print('[AutoSubmit] 必答题未全部回答，跳过自动提交');
+        }
       }
     });
   }
@@ -329,17 +488,10 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
           alignment: FToastAlignment.bottomRight,
           title: const Text('提示'),
           description: Text('请回答必答题: ${question.title}'),
-          suffixBuilder: (context, entry, _) => IntrinsicHeight(
+          suffixBuilder: (context, entry) => IntrinsicHeight(
             child: FButton(
-              style: context.theme.buttonStyles.primary.copyWith(
-                contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                  textStyle: FWidgetStateMap.all(
-                    context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                  ),
-                ),
-              ),
-              onPress: entry.dismiss,
+              style: context.theme.buttonStyles.primary.call,
+              onPress: entry.dismiss.call,
               child: const Text('关闭'),
             ),
           ),
@@ -374,17 +526,10 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
             alignment: FToastAlignment.bottomRight,
             title: const Text('提示'),
             description: Text('某题目的答案超过字数限制（当前 ${answer.length}，最多 $maxLength 字）'),
-            suffixBuilder: (context, entry, _) => IntrinsicHeight(
+            suffixBuilder: (context, entry) => IntrinsicHeight(
               child: FButton(
-                style: context.theme.buttonStyles.primary.copyWith(
-                  contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                    textStyle: FWidgetStateMap.all(
-                      context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                    ),
-                  ),
-                ),
-                onPress: entry.dismiss,
+                style: context.theme.buttonStyles.primary.call,
+                onPress: entry.dismiss.call,
                 child: const Text('关闭'),
               ),
             ),
@@ -517,16 +662,9 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
             alignment: FToastAlignment.bottomRight,
             title: const Text('提交失败'),
             description: Text(ErrorFormatter.format(e)),
-            suffixBuilder: (context, entry, _) => IntrinsicHeight(
+            suffixBuilder: (context, entry) => IntrinsicHeight(
               child: FButton(
-                style: context.theme.buttonStyles.primary.copyWith(
-                  contentStyle: context.theme.buttonStyles.primary.contentStyle.copyWith(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                    textStyle: FWidgetStateMap.all(
-                      context.theme.typography.xs.copyWith(color: context.theme.colors.primaryForeground),
-                    ),
-                  ),
-                ),
+                style: context.theme.buttonStyles.primary.call,
                 onPress: entry.dismiss,
                 child: const Text('关闭'),
               ),
@@ -542,6 +680,64 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isWide = screenWidth > 800;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // 背景加载中，显示加载界面
+    if (isLoading && !_backgroundLoaded) {
+      return Scaffold(
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isDark
+                  ? [Colors.grey[900]!, Colors.black]
+                  : [Colors.blue[50]!, Colors.purple[50]!],
+            ),
+          ),
+          child: Column(
+            children: [
+              const TopSafeSpacer(),
+              FHeader.nested(
+                title: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(surveyName.isNotEmpty ? surveyName : '问卷调查'),
+                  ],
+                ),
+                prefixes: [
+                  FHeaderAction(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPress: () => _navigateToPublicAccess(),
+                  ),
+                ],
+              ),
+              const Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 50,
+                        height: 50,
+                        child: CircularProgressIndicator(strokeWidth: 3),
+                      ),
+                      SizedBox(height: 24),
+                      Text(
+                        '加载中...',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       body: Stack(
@@ -562,9 +758,11 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
                   ? Container(
                       decoration: BoxDecoration(
                         image: DecorationImage(
-                          image: NetworkImage(isWide
-                              ? toAbsoluteUrl(_desktopBackground)
-                              : toAbsoluteUrl(_mobileBackground)),
+                          image: NetworkImage(
+                            ApiService.getMediumUrl(
+                              isWide ? _desktopBackground : _mobileBackground
+                            )
+                          ),
                           fit: BoxFit.cover,
                           onError: (_, __) {},
                         ),
@@ -797,7 +995,12 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
                               onCustomInputChanged: (questionId, optionIndex, value) {
                                 setState(() {
                                   final key = '${questionId}_$optionIndex';
-                                  _customInputValues[key] = value;
+                                  if (value.trim().isEmpty) {
+                                    // 删除空内容，触发 UI 重新构建
+                                    _customInputValues.remove(key);
+                                  } else {
+                                    _customInputValues[key] = value;
+                                  }
                                 });
                                 // 自定义填写输入不触发自动提交
                               },
@@ -812,26 +1015,9 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
           );
         }),
 
-        if (_runtime?.ended == true)
-          _buildGlassCard(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
-                    '问卷已结束',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                  SizedBox(height: 8),
-                  Text('根据您的选择，问卷在此结束。您可以直接提交。'),
-                ],
-              ),
-            ),
-          ),
         
         // 提交按钮
-        if (_areAllRequiredQuestionsAnswered())
+        if (_areAllRequiredQuestionsAnswered() || _runtime?.ended == true)
           Container(
             margin: const EdgeInsets.only(bottom: 16),
             child: isSubmitting

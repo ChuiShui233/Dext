@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/api_core.dart';
 
@@ -70,19 +71,38 @@ class AuthService {
   }
 
   Future<String> refreshToken({StatusCallback? onStatus}) async {
+    // 读取 refresh_token
+    final prefs = await SharedPreferences.getInstance();
+    final refreshToken = prefs.getString('refresh_token');
+    
+    if (refreshToken == null || refreshToken.isEmpty) {
+      throw TokenExpired('无法刷新令牌：未找到刷新令牌');
+    }
+
     // 使用普通HTTP请求，因为后端已将refresh端点加入白名单
     final resp = await core.httpRequest(
       'POST',
       '${ApiCore.baseUrl}/api/auth/refresh',
-      data: {'refresh': true},
+      data: {'refresh_token': refreshToken},
       onStatus: onStatus,
     );
     if (resp.statusCode == 200) {
       final Map<String, dynamic> data = json.decode(resp.body);
-      return data['token'] as String;
+      final newToken = data['token'] as String;
+      final newRefreshToken = data['refresh_token'];
+      
+      // 更新存储的令牌
+      await prefs.setString('auth_token', newToken);
+      if (newRefreshToken != null) {
+        await prefs.setString('refresh_token', newRefreshToken.toString());
+      }
+      
+      return newToken;
     } else if (resp.statusCode == 401) {
-      final msg = '认证令牌已失效，请重新登录';
-      throw TokenExpired(msg);
+      // 清理过期令牌
+      await prefs.remove('auth_token');
+      await prefs.remove('refresh_token');
+      throw TokenExpired('认证令牌已失效，请重新登录');
     } else {
       throw '刷新认证token失败: ${resp.statusCode}';
     }
