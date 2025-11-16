@@ -4,7 +4,7 @@ publish_to: 'none' # 如果您希望发布到 pub.dev，请移除此行
 version: 1.0.6+1020
 
 environment:
-  sdk: ^3.7.2
+  sdk: ^3.9.0
 dependencies:
   basic_utils: ^5.8.2
   crypto: ^3.0.6

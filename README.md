@@ -8,7 +8,7 @@
     <a href='https://github.com/chuishui233/dext'><img alt="Github stars" src="https://img.shields.io/github/stars/chuishui233/dext?logo=github"></a>
     <a href='https://github.com/chuishui233/dext'><img alt="Github forks" src="https://img.shields.io/github/forks/chuishui233/dext?logo=github"></a>
     <a href='https://github.com/chuishui233/dext/releases'><img alt="Github releases" src="https://img.shields.io/github/v/release/chuishui233/dext?logo=github"></a>
-    <a href='https://flutter.dev'><img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.32.0+-blue?logo=flutter"></a>
+    <a href='https://flutter.dev'><img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.35.0+-blue?logo=flutter"></a>
 </p>
 
 ## 项目介绍
@@ -125,15 +125,15 @@ lib/
 ### 开发环境
 |                                | 版本
 |------------------------------- | ---------------------------
-| Flutter SDK                    |  3.32.0+
-| Dart SDK                       |  3.8.0+
+| Flutter SDK                    |  3.35.0+
+| Dart SDK                       |  3.9+
 
 ### 核心依赖
 |                                | 版本          | 用途
 |------------------------------- | ------------- | ---------------------------
-| forui                          |  ^0.12.0      | UI组件库
+| forui                          |  ^0.16.0      | UI组件库
 | http                           |  ^1.1.0       | 网络请求
-| flutter_secure_storage         |  ^9.2.4       | 安全存储
+| flutter_secure_storage         |  ^10.0.0-beta.4 | 安全存储
 | shared_preferences             |  ^2.5.3       | 本地存储
 | provider                       |  ^6.1.5+1     | 状态管理
 | cached_network_image           |  ^3.4.1       | 图片缓存
@@ -144,8 +144,8 @@ lib/
 | flutter_staggered_grid_view    |  ^0.7.0       | 瀑布流布局
 | uni_links                      |  ^0.5.1       | 深度链接
 | url_launcher                   |  ^6.2.5       | URL启动
-| window_manager                 |  ^0.3.8       | 窗口管理
-| tray_manager                   |  ^0.2.3       | 系统托盘
+| window_manager                 |  ^0.5.1       | 窗口管理
+| tray_manager                   |  ^0.5.2       | 系统托盘
 | web                            |  ^1.1.0       | Web平台支持
 | clipboard                      |  ^0.1.3       | 剪切板操作
 
@@ -161,8 +161,8 @@ lib/
 
 ### 环境要求
 
-- Flutter SDK 3.32.0 或更高版本
-- Dart SDK 3.8.0 或更高版本
+- Flutter SDK 3.35.0 或更高版本（最低支持版本）
+- Dart SDK 3.9 或更高版本（最低支持版本）
 - Android Studio / VS Code
 - Git
 

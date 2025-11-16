@@ -20,6 +20,7 @@ import 'services/settings_service.dart';
 import 'services/push_service.dart';
 import 'services/config.dart';
 import 'utils/network_reachability.dart';
+import 'utils/error_filter.dart';
 
 import 'models/project.dart';
 import 'pages/login_page.dart';
@@ -145,38 +146,15 @@ void main(List<String> args) async {
   if (kDebugMode) {
     // 设置日志过滤器
     debugPrint = (String? message, {int? wrapWidth}) {
-      if (message != null) {
-        // 过滤AccessibilityBridge相关日志
-        if (message.contains('AccessibilityBridge') ||
-            message.contains('Scroll index is out of bounds') ||
-            message.contains('E/AccessibilityBridge') ||
-            // 过滤高通/厂商图形驱动的无害告警
-            message.contains('qdgralloc') ||
-            message.contains('OplusViewDragTouchViewHelper') ||
-            message.contains('ViewRootImplExtImpl')) {
-          return;
-        }
-        // 过滤网络连接错误
-        if (message.contains('SocketException') ||
-            message.contains('Connection refused')) {
-          return;
-        }
-      }
-
-    };
+    // 使用 ErrorFilter 来过滤日志
+    if (ErrorFilter.shouldFilter(message!)) {
+      return;
+    }
+  };
     
     FlutterError.onError = (FlutterErrorDetails details) {
-      // 过滤网络连接错误
-      if (details.exception.toString().contains('SocketException') ||
-          details.exception.toString().contains('Connection refused')) {
-        return;
-      }
-      
-      // 过滤AccessibilityBridge错误日志
-      final errorMessage = details.exception.toString();
-      if (errorMessage.contains('AccessibilityBridge') ||
-          errorMessage.contains('Scroll index is out of bounds') ||
-          errorMessage.contains('!semantics.parentDataDirty')) {
+      // 使用 ErrorFilter 来过滤异常
+      if (ErrorFilter.shouldFilterException(details.exception)) {
         return;
       }
       
@@ -184,21 +162,11 @@ void main(List<String> args) async {
     };
     
     PlatformDispatcher.instance.onError = (error, stack) {
-      final errorString = error.toString();
-      
-      // 过滤网络连接错误
-      if (errorString.contains('SocketException') ||
-          errorString.contains('Connection refused')) {
+      // 使用 ErrorFilter 来过滤错误
+      if (ErrorFilter.shouldFilterError(error)) {
         return true;
       }
-      
-      // 过滤AccessibilityBridge错误日志
-      if (errorString.contains('AccessibilityBridge') ||
-          errorString.contains('Scroll index is out of bounds') ||
-          errorString.contains('!semantics.parentDataDirty')) {
-        return true;
-      }
-      
+
       return false;
     };
   }
