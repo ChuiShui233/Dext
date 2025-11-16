@@ -696,20 +696,32 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
           ),
           child: Column(
             children: [
-              const TopSafeSpacer(),
-              FHeader.nested(
-                title: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(surveyName.isNotEmpty ? surveyName : '问卷调查'),
+              const TopSafeSpacer(showBackground: true),
+              Container(
+                decoration: BoxDecoration(
+                  color: isDark 
+                    ? Colors.black.withValues(alpha: 120/255)
+                    : Colors.white.withValues(alpha: 120/255),
+                ),
+                child: FHeader.nested(
+                  title: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        surveyName.isNotEmpty ? surveyName : '问卷调查',
+                        style: TextStyle(
+                          color: isDark ? Colors.white.withValues(alpha: 0.7) : Colors.black.withValues(alpha: 0.87),
+                        ),
+                      ),
+                    ],
+                  ),
+                  prefixes: [
+                    FHeaderAction(
+                      icon: Icon(Icons.close, size: 20, color: isDark ? Colors.white.withValues(alpha: 0.7) : Colors.black.withValues(alpha: 0.87)),
+                      onPress: () => _navigateToPublicAccess(),
+                    ),
                   ],
                 ),
-                prefixes: [
-                  FHeaderAction(
-                    icon: const Icon(Icons.close, size: 20),
-                    onPress: () => _navigateToPublicAccess(),
-                  ),
-                ],
               ),
               const Expanded(
                 child: Center(
@@ -777,20 +789,32 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
 
           Column(
             children: [
-              const TopSafeSpacer(),
-              FHeader.nested(
-                title: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(surveyName.isNotEmpty ? surveyName : '问卷调查'),
+              const TopSafeSpacer(showBackground: true),
+              Container(
+                decoration: BoxDecoration(
+                  color: isDark 
+                    ? Colors.black.withValues(alpha: 120/255)
+                    : Colors.white.withValues(alpha: 120/255),
+                ),
+                child: FHeader.nested(
+                  title: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        surveyName.isNotEmpty ? surveyName : '问卷调查',
+                        style: TextStyle(
+                          color: isDark ? Colors.white.withValues(alpha: 0.7) : Colors.black.withValues(alpha: 0.87),
+                        ),
+                      ),
+                    ],
+                  ),
+                  prefixes: [
+                    FHeaderAction(
+                      icon: Icon(Icons.close, size: 20, color: isDark ? Colors.white.withValues(alpha: 0.7) : Colors.black.withValues(alpha: 0.87)),
+                      onPress: () => _navigateToPublicAccess(),
+                    ),
                   ],
                 ),
-                prefixes: [
-                  FHeaderAction(
-                    icon: const Icon(Icons.close, size: 20),
-                    onPress: () => _navigateToPublicAccess(),
-                  ),
-                ],
               ),
               Expanded(
                 child: isLoading

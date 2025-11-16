@@ -937,10 +937,18 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     double base;
     if (width <= 360) {
       base = 0.85;
-    } else if (width <= 480) base = 0.90;
-    else if (width <= 600) base = 0.95;
-    else if (width <= 760) base = 0.98;
-    else base = 1.00;
+    } else if (width <= 480) {
+      base = 0.90;
+    }
+    else if (width <= 600) {
+      base = 0.95;
+    }
+    else if (width <= 760) {
+      base = 0.98;
+    }
+    else {
+      base = 1.00;
+    }
 
     final dpi = SettingsService().dpiScale;
     final scaled = base * dpi;

@@ -687,22 +687,69 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
     final shouldExit = await showDialog<bool>(
       context: context,
       barrierDismissible: true,
-      builder: (context) => FDialog(
-        direction: Axis.horizontal,
-        title: const Text('确认退出'),
-        body: const Text('确定要退出应用吗？'),
-        actions: [
-          FButton(
-            style: context.theme.buttonStyles.outline.call,
-            onPress: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FButton(
-            onPress: () => Navigator.pop(context, true),
-            child: const Text('退出'),
-          ),
-        ],
-      ),
+      builder: (dialogContext) {
+        bool animateIn = false;
+        bool isClosing = false;
+        const animationDuration = Duration(milliseconds: 220);
+
+        return StatefulBuilder(
+          builder: (builderContext, setDialogState) {
+            if (!animateIn && !isClosing) {
+              Future.microtask(() {
+                if (dialogContext.mounted) {
+                  setDialogState(() {
+                    animateIn = true;
+                  });
+                }
+              });
+            }
+
+            Future<void> closeDialogWithAnimation(bool result) async {
+              if (!dialogContext.mounted) return;
+              setDialogState(() {
+                animateIn = false;
+                isClosing = true;
+              });
+              await Future.delayed(animationDuration);
+              if (dialogContext.mounted) {
+                Navigator.of(dialogContext).pop(result);
+              }
+            }
+
+            return AnimatedOpacity(
+              opacity: animateIn ? 1.0 : 0.0,
+              duration: animationDuration,
+              curve: animateIn ? Curves.easeOutCubic : Curves.easeInCubic,
+              child: AnimatedScale(
+                scale: animateIn ? 1.0 : 0.92,
+                duration: animationDuration,
+                curve: animateIn ? Curves.easeOutBack : Curves.easeInCubic,
+                child: Center(
+                  child: Material(
+                    color: Colors.transparent,
+                    child: FDialog(
+                      direction: Axis.horizontal,
+                      title: const Text('确认退出'),
+                      body: const Text('确定要退出应用吗？'),
+                      actions: [
+                        FButton(
+                          style: context.theme.buttonStyles.outline.call,
+                          onPress: () => closeDialogWithAnimation(false),
+                          child: const Text('取消'),
+                        ),
+                        FButton(
+                          onPress: () => closeDialogWithAnimation(true),
+                          child: const Text('退出'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
 
     if (shouldExit == true) {
@@ -1074,56 +1121,95 @@ Widget _buildSidebarHeader(BuildContext context) {
   void _showThemeMenu(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => FDialog(
-        title: const Text('主题设置'),
-        body: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FButton(
-              style: context.theme.buttonStyles.ghost.call,
-              onPress: () async {
-                final navigator = Navigator.of(context);
-                await SettingsService().setThemeMode('system');
-                widget.onThemeModeChange(ThemeMode.system);
-                if (mounted) {
-                  navigator.pop();
+      builder: (dialogContext) {
+        bool animateIn = false;
+        bool isClosing = false;
+        const animationDuration = Duration(milliseconds: 220);
+
+        return StatefulBuilder(
+          builder: (builderContext, setDialogState) {
+            if (!animateIn && !isClosing) {
+              Future.microtask(() {
+                if (dialogContext.mounted) {
+                  setDialogState(() {
+                    animateIn = true;
+                  });
                 }
-              },
-              child: const Text('跟随系统'),
-            ),
-            FButton(
-              style: context.theme.buttonStyles.ghost.call,
-              onPress: () async {
-                final navigator = Navigator.of(context);
-                await SettingsService().setThemeMode('light');
-                widget.onThemeModeChange(ThemeMode.light);
-                if (mounted) {
-                  navigator.pop();
-                }
-              },
-              child: const Text('浅色模式'),
-            ),
-            FButton(
-              style: context.theme.buttonStyles.ghost.call,
-              onPress: () async {
-                final navigator = Navigator.of(context);
-                await SettingsService().setThemeMode('dark');
-                widget.onThemeModeChange(ThemeMode.dark);
-                if (mounted) {
-                  navigator.pop();
-                }
-              },
-              child: const Text('深色模式'),
-            ),
-          ],
-        ),
-        actions: [
-          FButton(
-            child: const Text('关闭'),
-            onPress: () => Navigator.pop(context),
-          ),
-        ],
-      ),
+              });
+            }
+
+            Future<void> closeDialogWithAnimation([Future<void> Function()? afterPop]) async {
+              if (!dialogContext.mounted) return;
+              setDialogState(() {
+                animateIn = false;
+                isClosing = true;
+              });
+              await Future.delayed(animationDuration);
+              if (dialogContext.mounted) {
+                Navigator.of(dialogContext).pop();
+              }
+              if (afterPop != null) await afterPop();
+            }
+
+            return AnimatedOpacity(
+              opacity: animateIn ? 1.0 : 0.0,
+              duration: animationDuration,
+              curve: animateIn ? Curves.easeOutCubic : Curves.easeInCubic,
+              child: AnimatedScale(
+                scale: animateIn ? 1.0 : 0.92,
+                duration: animationDuration,
+                curve: animateIn ? Curves.easeOutBack : Curves.easeInCubic,
+                child: Center(
+                  child: Material(
+                    color: Colors.transparent,
+                    child: FDialog(
+                      title: const Text('主题设置'),
+                      body: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          FButton(
+                            style: context.theme.buttonStyles.ghost.call,
+                            onPress: () async {
+                              await SettingsService().setThemeMode('system');
+                              widget.onThemeModeChange(ThemeMode.system);
+                              await closeDialogWithAnimation();
+                            },
+                            child: const Text('跟随系统'),
+                          ),
+                          FButton(
+                            style: context.theme.buttonStyles.ghost.call,
+                            onPress: () async {
+                              await SettingsService().setThemeMode('light');
+                              widget.onThemeModeChange(ThemeMode.light);
+                              await closeDialogWithAnimation();
+                            },
+                            child: const Text('浅色模式'),
+                          ),
+                          FButton(
+                            style: context.theme.buttonStyles.ghost.call,
+                            onPress: () async {
+                              await SettingsService().setThemeMode('dark');
+                              widget.onThemeModeChange(ThemeMode.dark);
+                              await closeDialogWithAnimation();
+                            },
+                            child: const Text('深色模式'),
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        FButton(
+                          child: const Text('关闭'),
+                          onPress: () => closeDialogWithAnimation(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1131,16 +1217,63 @@ Widget _buildSidebarHeader(BuildContext context) {
     if (widget.apiService == null) {
       showDialog(
         context: context,
-        builder: (context) => FDialog(
-          title: const Text('提示'),
-          body: const Text('无法创建项目，请先登录'),
-          actions: [
-            FButton(
-              child: const Text('关闭'),
-              onPress: () => Navigator.pop(context),
-            ),
-          ],
-        ),
+        builder: (dialogContext) {
+          bool animateIn = false;
+          bool isClosing = false;
+          const animationDuration = Duration(milliseconds: 220);
+
+          return StatefulBuilder(
+            builder: (builderContext, setDialogState) {
+              if (!animateIn && !isClosing) {
+                Future.microtask(() {
+                  if (dialogContext.mounted) {
+                    setDialogState(() {
+                      animateIn = true;
+                    });
+                  }
+                });
+              }
+
+              Future<void> closeDialogWithAnimation() async {
+                if (!dialogContext.mounted) return;
+                setDialogState(() {
+                  animateIn = false;
+                  isClosing = true;
+                });
+                await Future.delayed(animationDuration);
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop();
+                }
+              }
+
+              return AnimatedOpacity(
+                opacity: animateIn ? 1.0 : 0.0,
+                duration: animationDuration,
+                curve: animateIn ? Curves.easeOutCubic : Curves.easeInCubic,
+                child: AnimatedScale(
+                  scale: animateIn ? 1.0 : 0.92,
+                  duration: animationDuration,
+                  curve: animateIn ? Curves.easeOutBack : Curves.easeInCubic,
+                  child: Center(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: FDialog(
+                        title: const Text('提示'),
+                        body: const Text('无法创建项目，请先登录'),
+                        actions: [
+                          FButton(
+                            child: const Text('关闭'),
+                            onPress: () => closeDialogWithAnimation(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
       );
       return;
     }
@@ -1150,102 +1283,152 @@ Widget _buildSidebarHeader(BuildContext context) {
 
     showDialog(
       context: context,
-      builder: (context) => FDialog(
-        direction: Axis.horizontal,
-        title: const Text('快速创建项目'),
-        body: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FTextField(
-              controller: nameController,
-              label: const Text('项目名称'),
-              hint: '请输入项目名称',
-            ),
-            const SizedBox(height: 16),
-            FTextField(
-              controller: descController,
-              label: const Text('项目描述'),
-              hint: '请输入项目描述',
-            ),
-          ],
-        ),
-        actions: [
-          FButton(
-            style: context.theme.buttonStyles.outline.call,
-            onPress: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          FButton(
-            onPress: () async {
-              if (nameController.text.isEmpty || descController.text.isEmpty) {
-                showFToast(
-                  context: context,
-                  alignment: FToastAlignment.bottomRight,
-                  title: const Text('提示'),
-                  description: const Text('请填写完整信息'),
-                  suffixBuilder: (context, entry) => FButton(
-                    style: context.theme.buttonStyles.primary.call,
-                    onPress: entry.dismiss,
-                    child: const Text('关闭'),
-                  ),
-                );
-                return;
+      builder: (dialogContext) {
+        bool animateIn = false;
+        bool isClosing = false;
+        const animationDuration = Duration(milliseconds: 220);
+
+        return StatefulBuilder(
+          builder: (builderContext, setDialogState) {
+            if (!animateIn && !isClosing) {
+              Future.microtask(() {
+                if (dialogContext.mounted) {
+                  setDialogState(() {
+                    animateIn = true;
+                  });
+                }
+              });
+            }
+
+            Future<void> closeDialogWithAnimation(Future<void> Function()? afterPop) async {
+              if (!dialogContext.mounted) return;
+              setDialogState(() {
+                animateIn = false;
+                isClosing = true;
+              });
+              await Future.delayed(animationDuration);
+              if (dialogContext.mounted) {
+                Navigator.of(dialogContext).pop();
               }
+              if (afterPop != null) {
+                await afterPop();
+              }
+            }
 
-              try {
-                final newProject = Project(
-                  id: 0,
-                  projectName: nameController.text.trim(),
-                  projectDescription: descController.text.trim(),
-                  userId: '',
-                  createBy: '',
-                  createTime: DateTime.now().toIso8601String(),
-                  updateTime: DateTime.now().toIso8601String(),
-                  updateBy: '',
-                );
+            return AnimatedOpacity(
+              opacity: animateIn ? 1.0 : 0.0,
+              duration: animationDuration,
+              curve: animateIn ? Curves.easeOutCubic : Curves.easeInCubic,
+              child: AnimatedScale(
+                scale: animateIn ? 1.0 : 0.92,
+                duration: animationDuration,
+                curve: animateIn ? Curves.easeOutBack : Curves.easeInCubic,
+                child: Center(
+                  child: Material(
+                    color: Colors.transparent,
+                    child: FDialog(
+                      direction: Axis.horizontal,
+                      title: const Text('快速创建项目'),
+                      body: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          FTextField(
+                            controller: nameController,
+                            label: const Text('项目名称'),
+                            hint: '请输入项目名称',
+                          ),
+                          const SizedBox(height: 16),
+                          FTextField(
+                            controller: descController,
+                            label: const Text('项目描述'),
+                            hint: '请输入项目描述',
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        FButton(
+                          style: context.theme.buttonStyles.outline.call,
+                          onPress: () => closeDialogWithAnimation(null),
+                          child: const Text('取消'),
+                        ),
+                        FButton(
+                          onPress: () async {
+                            if (nameController.text.isEmpty || descController.text.isEmpty) {
+                              showFToast(
+                                context: context,
+                                alignment: FToastAlignment.bottomRight,
+                                title: const Text('提示'),
+                                description: const Text('请填写完整信息'),
+                                suffixBuilder: (context, entry) => FButton(
+                                  style: context.theme.buttonStyles.primary.call,
+                                  onPress: entry.dismiss,
+                                  child: const Text('关闭'),
+                                ),
+                              );
+                              return;
+                            }
 
-                await widget.apiService!.createProject(newProject);
-                if (!context.mounted) return;
-                
-                Navigator.pop(context); // 关闭对话框
-                // 切换到“项目管理”页（在桌面端由右侧嵌套 Navigator 承载）
-                handleTabChange(3);
-                
-                showFToast(
-                  context: context,
-                  alignment: FToastAlignment.bottomRight,
-                  title: const Text('创建成功'),
-                  description: const Text('项目已创建，正在跳转到项目管理页面'),
-                  suffixBuilder: (context, entry) => IntrinsicHeight(
-                    child: FButton(
-                      style: context.theme.buttonStyles.primary.call,
-                      onPress: entry.dismiss.call,
-                      child: const Text('关闭'),
+                            try {
+                              final newProject = Project(
+                                id: 0,
+                                projectName: nameController.text.trim(),
+                                projectDescription: descController.text.trim(),
+                                userId: '',
+                                createBy: '',
+                                createTime: DateTime.now().toIso8601String(),
+                                updateTime: DateTime.now().toIso8601String(),
+                                updateBy: '',
+                              );
+
+                              await widget.apiService!.createProject(newProject);
+                              if (!context.mounted) return;
+
+                              await closeDialogWithAnimation(() async {
+                                // 切换到“项目管理”页
+                                handleTabChange(3);
+                                showFToast(
+                                  context: context,
+                                  alignment: FToastAlignment.bottomRight,
+                                  title: const Text('创建成功'),
+                                  description: const Text('项目已创建，正在跳转到项目管理页面'),
+                                  suffixBuilder: (context, entry) => IntrinsicHeight(
+                                    child: FButton(
+                                      style: context.theme.buttonStyles.primary.call,
+                                      onPress: entry.dismiss.call,
+                                      child: const Text('关闭'),
+                                    ),
+                                  ),
+                                );
+                              });
+                            } catch (e) {
+                              if (!context.mounted) return;
+
+                              showFToast(
+                                context: context,
+                                alignment: FToastAlignment.bottomRight,
+                                title: const Text('创建失败'),
+                                description: Text('创建项目失败: $e'),
+                                suffixBuilder: (context, entry) => IntrinsicHeight(
+                                  child: FButton(
+                                    style: context.theme.buttonStyles.primary.call,
+                                    onPress: entry.dismiss.call,
+                                    child: const Text('关闭'),
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                          child: const Text('创建'),
+                        ),
+                      ],
                     ),
                   ),
-                );
-              } catch (e) {
-                if (!context.mounted) return;
-                
-                showFToast(
-                  context: context,
-                  alignment: FToastAlignment.bottomRight,
-                  title: const Text('创建失败'),
-                  description: Text('创建项目失败: $e'),
-                  suffixBuilder: (context, entry) => IntrinsicHeight(
-                    child: FButton(
-                      style: context.theme.buttonStyles.primary.call,
-                      onPress: entry.dismiss.call,
-                      child: const Text('关闭'),
-                    ),
-                  ),
-                );
-              }
-            },
-            child: const Text('创建'),
-          ),
-        ],
-      ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1253,16 +1436,63 @@ Widget _buildSidebarHeader(BuildContext context) {
     if (widget.apiService == null) {
       showDialog(
         context: context,
-        builder: (context) => FDialog(
-          title: const Text('提示'),
-          body: const Text('无法创建问卷，请先登录'),
-          actions: [
-            FButton(
-              child: const Text('关闭'),
-              onPress: () => Navigator.pop(context),
-            ),
-          ],
-        ),
+        builder: (dialogContext) {
+          bool animateIn = false;
+          bool isClosing = false;
+          const animationDuration = Duration(milliseconds: 220);
+
+          return StatefulBuilder(
+            builder: (builderContext, setDialogState) {
+              if (!animateIn && !isClosing) {
+                Future.microtask(() {
+                  if (dialogContext.mounted) {
+                    setDialogState(() {
+                      animateIn = true;
+                    });
+                  }
+                });
+              }
+
+              Future<void> closeDialogWithAnimation() async {
+                if (!dialogContext.mounted) return;
+                setDialogState(() {
+                  animateIn = false;
+                  isClosing = true;
+                });
+                await Future.delayed(animationDuration);
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop();
+                }
+              }
+
+              return AnimatedOpacity(
+                opacity: animateIn ? 1.0 : 0.0,
+                duration: animationDuration,
+                curve: animateIn ? Curves.easeOutCubic : Curves.easeInCubic,
+                child: AnimatedScale(
+                  scale: animateIn ? 1.0 : 0.92,
+                  duration: animationDuration,
+                  curve: animateIn ? Curves.easeOutBack : Curves.easeInCubic,
+                  child: Center(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: FDialog(
+                        title: const Text('提示'),
+                        body: const Text('无法创建问卷，请先登录'),
+                        actions: [
+                          FButton(
+                            child: const Text('关闭'),
+                            onPress: () => closeDialogWithAnimation(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
       );
       return;
     }
@@ -1271,208 +1501,301 @@ Widget _buildSidebarHeader(BuildContext context) {
     final TextEditingController descController = TextEditingController();
     List<Project> projects = [];
     int? selectedProjectId;
-    bool isLoadingProjects = false; // 添加加载状态标志
-    bool hasLoadedProjects = false; // 添加已加载标志
+    bool isLoadingProjects = false;
+    bool hasLoadedProjects = false;
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          if (projects.isEmpty && !isLoadingProjects && !hasLoadedProjects) {
-            Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
-              if (context.mounted && isLoadingProjects) {
-                setState(() {
-                  isLoadingProjects = true;
-                });
+      builder: (dialogContext) {
+        bool animateIn = false;
+        bool isClosing = false;
+        const animationDuration = Duration(milliseconds: 220);
+
+        return StatefulBuilder(
+          builder: (builderContext, setState) {
+            if (!animateIn && !isClosing) {
+              Future.microtask(() {
+                if (dialogContext.mounted) {
+                  setState(() {
+                    animateIn = true;
+                  });
+                }
+              });
+            }
+
+            Future<void> closeDialogWithAnimation(Future<void> Function()? afterPop) async {
+              if (!dialogContext.mounted) return;
+              setState(() {
+                animateIn = false;
+                isClosing = true;
+              });
+              await Future.delayed(animationDuration);
+              if (dialogContext.mounted) {
+                Navigator.of(dialogContext).pop();
               }
-            });
-            
-            widget.apiService!.getProjects().then((loadedProjects) {
-              loadingTimer.cancel();
-              if (context.mounted) {
-                setState(() {
-                  projects = loadedProjects;
-                  isLoadingProjects = false;
-                  hasLoadedProjects = true; // 标记已加载完成
-                  if (projects.isNotEmpty) {
-                    selectedProjectId = projects.first.id;
-                  }
-                });
+              if (afterPop != null) {
+                await afterPop();
               }
-            }).catchError((error) {
-              loadingTimer.cancel();
-              if (context.mounted) {
-                setState(() {
-                  isLoadingProjects = false;
-                  hasLoadedProjects = true; // 即使出错也标记为已加载，避免无限重试
-                });
-                showFToast(
-                  context: context,
-                  alignment: FToastAlignment.bottomRight,
-                  title: const Text('加载失败'),
-                  description: Text(ErrorFormatter.format(error)),
-                  suffixBuilder: (context, entry) => IntrinsicHeight(
-                    child: FButton(
-                      style: context.theme.buttonStyles.primary.call,
-                      onPress: entry.dismiss.call,
-                      child: const Text('关闭'),
+            }
+
+            // 懒加载项目列表
+            if (projects.isEmpty && !isLoadingProjects && !hasLoadedProjects) {
+              Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
+                if (dialogContext.mounted && isLoadingProjects) {
+                  setState(() {
+                    isLoadingProjects = true;
+                  });
+                }
+              });
+
+              widget.apiService!.getProjects().then((loadedProjects) {
+                loadingTimer.cancel();
+                if (dialogContext.mounted) {
+                  setState(() {
+                    projects = loadedProjects;
+                    isLoadingProjects = false;
+                    hasLoadedProjects = true;
+                    if (projects.isNotEmpty) {
+                      selectedProjectId = projects.first.id;
+                    }
+                  });
+                }
+              }).catchError((error) {
+                loadingTimer.cancel();
+                if (dialogContext.mounted) {
+                  setState(() {
+                    isLoadingProjects = false;
+                    hasLoadedProjects = true;
+                  });
+                  showFToast(
+                    context: dialogContext,
+                    alignment: FToastAlignment.bottomRight,
+                    title: const Text('加载失败'),
+                    description: Text(ErrorFormatter.format(error)),
+                    suffixBuilder: (context, entry) => IntrinsicHeight(
+                      child: FButton(
+                        style: context.theme.buttonStyles.primary.call,
+                        onPress: entry.dismiss.call,
+                        child: const Text('关闭'),
+                      ),
+                    ),
+                  );
+                }
+              });
+            }
+
+            return AnimatedOpacity(
+              opacity: animateIn ? 1.0 : 0.0,
+              duration: animationDuration,
+              curve: animateIn ? Curves.easeOutCubic : Curves.easeInCubic,
+              child: AnimatedScale(
+                scale: animateIn ? 1.0 : 0.92,
+                duration: animationDuration,
+                curve: animateIn ? Curves.easeOutBack : Curves.easeInCubic,
+                child: Center(
+                  child: Material(
+                    color: Colors.transparent,
+                    child: FDialog(
+                      direction: Axis.horizontal,
+                      title: const Text('快速创建问卷'),
+                      body: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isLoadingProjects)
+                            const Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: CircularProgressIndicator(),
+                            )
+                          else if (projects.isNotEmpty)
+                            FSelect<int>(
+                              label: const Text('所属项目'),
+                              hint: '请选择项目',
+                              onChange: (value) {
+                                setState(() {
+                                  selectedProjectId = value;
+                                });
+                              },
+                              items: {
+                                for (final project in projects) project.projectName: project.id,
+                              },
+                            )
+                          else if (hasLoadedProjects)
+                            const Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: Text('暂无项目，请先创建项目'),
+                            )
+                          else
+                            const Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: CircularProgressIndicator(),
+                            ),
+                          const SizedBox(height: 16),
+                          FTextField(
+                            controller: nameController,
+                            label: const Text('问卷标题'),
+                            hint: '请输入问卷标题',
+                          ),
+                          const SizedBox(height: 16),
+                          FTextField(
+                            controller: descController,
+                            label: const Text('问卷描述'),
+                            hint: '请输入问卷描述',
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        FButton(
+                          style: context.theme.buttonStyles.outline.call,
+                          onPress: () => closeDialogWithAnimation(null),
+                          child: const Text('取消'),
+                        ),
+                        FButton(
+                          onPress: () async {
+                            if (nameController.text.isEmpty ||
+                                descController.text.isEmpty ||
+                                selectedProjectId == null) {
+                              showFToast(
+                                context: dialogContext,
+                                alignment: FToastAlignment.bottomRight,
+                                title: const Text('提示'),
+                                description: const Text('请填写完整信息并选择项目'),
+                                suffixBuilder: (context, entry) => IntrinsicHeight(
+                                  child: FButton(
+                                    style: context.theme.buttonStyles.primary.call,
+                                    onPress: entry.dismiss.call,
+                                    child: const Text('关闭'),
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+
+                            try {
+                              final newSurvey = Survey(
+                                id: 0,
+                                surveyUid: DateTime.now().millisecondsSinceEpoch.toString(),
+                                surveyName: nameController.text.trim(),
+                                description: descController.text.trim(),
+                                surveyType: 0,
+                                surveyStatus: 0,
+                                totalTimes: 0,
+                                projectId: selectedProjectId!,
+                                deadline: null,
+                                createTime: DateTime.now().toIso8601String(),
+                                updateTime: DateTime.now().toIso8601String(),
+                              );
+
+                              await widget.apiService!.createSurvey(newSurvey);
+                              if (!dialogContext.mounted) return;
+
+                              await closeDialogWithAnimation(() async {
+                                handleTabChange(4);
+                                showFToast(
+                                  context: dialogContext,
+                                  alignment: FToastAlignment.bottomRight,
+                                  title: const Text('创建成功'),
+                                  description: const Text('问卷已创建，正在跳转到问卷管理页面'),
+                                  suffixBuilder: (context, entry) => IntrinsicHeight(
+                                    child: FButton(
+                                      style: context.theme.buttonStyles.primary.call,
+                                      onPress: entry.dismiss.call,
+                                      child: const Text('关闭'),
+                                    ),
+                                  ),
+                                );
+                              });
+                            } catch (e) {
+                              if (!dialogContext.mounted) return;
+
+                              showFToast(
+                                context: dialogContext,
+                                alignment: FToastAlignment.bottomRight,
+                                title: const Text('创建失败'),
+                                description: Text('创建问卷失败: $e'),
+                                suffixBuilder: (context, entry) => IntrinsicHeight(
+                                  child: FButton(
+                                    style: context.theme.buttonStyles.primary.call,
+                                    onPress: entry.dismiss.call,
+                                    child: const Text('关闭'),
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                          child: const Text('创建'),
+                        ),
+                      ],
                     ),
                   ),
-                );
-              }
-            });
-          }
-
-          return FDialog(
-            direction: Axis.horizontal,
-            title: const Text('快速创建问卷'),
-            body: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (isLoadingProjects)
-                  const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: CircularProgressIndicator(),
-                  )
-                else if (projects.isNotEmpty)
-                  FSelect<int>(
-                    label: const Text('所属项目'),
-                    hint: '请选择项目',
-                    onChange: (value) {
-                      setState(() {
-                        selectedProjectId = value;
-                      });
-                    },
-                    items: {
-                      for (final project in projects) project.projectName: project.id,
-                    },
-                  )
-                else if (hasLoadedProjects) // 已加载但没有项目
-                  const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Text('暂无项目，请先创建项目'),
-                  )
-                else
-                  const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: CircularProgressIndicator(),
-                  ),
-                const SizedBox(height: 16),
-                FTextField(
-                  controller: nameController,
-                  label: const Text('问卷标题'),
-                  hint: '请输入问卷标题',
                 ),
-                const SizedBox(height: 16),
-                FTextField(
-                  controller: descController,
-                  label: const Text('问卷描述'),
-                  hint: '请输入问卷描述',
-                ),
-              ],
-            ),
-            actions: [
-              FButton(
-                style: context.theme.buttonStyles.outline.call,
-                onPress: () => Navigator.pop(context),
-                child: const Text('取消'),
               ),
-              FButton(
-                onPress: () async {
-                  if (nameController.text.isEmpty || 
-                      descController.text.isEmpty || 
-                      selectedProjectId == null) {
-                    showFToast(
-                      context: context,
-                      alignment: FToastAlignment.bottomRight,
-                      title: const Text('提示'),
-                      description: const Text('请填写完整信息并选择项目'),
-                      suffixBuilder: (context, entry) => IntrinsicHeight(
-                        child: FButton(
-                          style: context.theme.buttonStyles.primary.call,
-                          onPress: entry.dismiss.call,
-                          child: const Text('关闭'),
-                        ),
-                      ),
-                    );
-                    return;
-                  }
-
-                  try {
-                    final newSurvey = Survey(
-                      id: 0,
-                      surveyUid: DateTime.now().millisecondsSinceEpoch.toString(),
-                      surveyName: nameController.text.trim(),
-                      description: descController.text.trim(),
-                      surveyType: 0, // 默认普通问卷
-                      surveyStatus: 0, // 默认未发布
-                      totalTimes: 0,
-                      projectId: selectedProjectId!,
-                      deadline: null,
-                      createTime: DateTime.now().toIso8601String(),
-                      updateTime: DateTime.now().toIso8601String(),
-                    );
-
-                    await widget.apiService!.createSurvey(newSurvey);
-                    if (!context.mounted) return;
-                    
-                    Navigator.pop(context); // 关闭对话框
-                    // 切换到“问卷管理”页（在桌面端由右侧嵌套 Navigator 承载）
-                    handleTabChange(4);
-                    
-                    showFToast(
-                      context: context,
-                      alignment: FToastAlignment.bottomRight,
-                      title: const Text('创建成功'),
-                      description: const Text('问卷已创建，正在跳转到问卷管理页面'),
-                      suffixBuilder: (context, entry) => IntrinsicHeight(
-                        child: FButton(
-                          style: context.theme.buttonStyles.primary.call,
-                          onPress: entry.dismiss.call,
-                          child: const Text('关闭'),
-                        ),
-                      ),
-                    );
-                  } catch (e) {
-                    if (!context.mounted) return;
-                    
-                    showFToast(
-                      context: context,
-                      alignment: FToastAlignment.bottomRight,
-                      title: const Text('创建失败'),
-                      description: Text('创建问卷失败: $e'),
-                      suffixBuilder: (context, entry) => IntrinsicHeight(
-                        child: FButton(
-                          style: context.theme.buttonStyles.primary.call,
-                          onPress: entry.dismiss.call,
-                          child: const Text('关闭'),
-                        ),
-                      ),
-                    );
-                  }
-                },
-                child: const Text('创建'),
-              ),
-            ],
-          );
-        },
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
   void _showStatisticsDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => FDialog(
-        title: const Text('数据统计'),
-        body: const Text('数据统计功能开发中...'),
-        actions: [
-          FButton(
-            child: const Text('关闭'),
-            onPress: () => Navigator.pop(context),
-          ),
-        ],
-      ),
+      builder: (dialogContext) {
+        bool animateIn = false;
+        bool isClosing = false;
+        const animationDuration = Duration(milliseconds: 220);
+
+        return StatefulBuilder(
+          builder: (builderContext, setDialogState) {
+            if (!animateIn && !isClosing) {
+              Future.microtask(() {
+                if (dialogContext.mounted) {
+                  setDialogState(() {
+                    animateIn = true;
+                  });
+                }
+              });
+            }
+
+            Future<void> closeDialogWithAnimation() async {
+              if (!dialogContext.mounted) return;
+              setDialogState(() {
+                animateIn = false;
+                isClosing = true;
+              });
+              await Future.delayed(animationDuration);
+              if (dialogContext.mounted) {
+                Navigator.of(dialogContext).pop();
+              }
+            }
+
+            return AnimatedOpacity(
+              opacity: animateIn ? 1.0 : 0.0,
+              duration: animationDuration,
+              curve: animateIn ? Curves.easeOutCubic : Curves.easeInCubic,
+              child: AnimatedScale(
+                scale: animateIn ? 1.0 : 0.92,
+                duration: animationDuration,
+                curve: animateIn ? Curves.easeOutBack : Curves.easeInCubic,
+                child: Center(
+                  child: Material(
+                    color: Colors.transparent,
+                    child: FDialog(
+                      title: const Text('数据统计'),
+                      body: const Text('数据统计功能开发中...'),
+                      actions: [
+                        FButton(
+                          child: const Text('关闭'),
+                          onPress: () => closeDialogWithAnimation(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1480,57 +1803,100 @@ Widget _buildSidebarHeader(BuildContext context) {
     showDialog(
       context: context,
       barrierDismissible: false, // 禁止点击遮罩关闭
-      builder: (context) {
+      builder: (dialogContext) {
         bool isLoading = false;
+        bool animateIn = false;
+        bool isClosing = false;
+        const animationDuration = Duration(milliseconds: 220);
+
         return StatefulBuilder(
-          builder: (context, setState) => PopScope(
-            canPop: !isLoading, // 加载中阻止返回
-            child: FDialog(
-              direction: Axis.horizontal,
-              title: const Text('确认退出'),
-              body: isLoading
-                  ? const Row(
-                      children: [
-                        SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                        SizedBox(width: 8),
-                        Text('正在退出登录...'),
-                      ],
-                    )
-                  : const Text('确定要退出当前账号吗？'),
-              actions: [
-                FButton(
-                  style: context.theme.buttonStyles.outline.call,
-                  onPress: isLoading ? null : () => Navigator.pop(context),
-                  child: const Text('取消'),
+          builder: (context, setState) {
+            if (!animateIn && !isClosing) {
+              Future.microtask(() {
+                if (dialogContext.mounted) {
+                  setState(() {
+                    animateIn = true;
+                  });
+                }
+              });
+            }
+
+            Future<void> closeDialogWithAnimation() async {
+              if (!dialogContext.mounted) return;
+              setState(() {
+                animateIn = false;
+                isClosing = true;
+              });
+              await Future.delayed(animationDuration);
+              if (dialogContext.mounted) {
+                Navigator.of(dialogContext).pop();
+              }
+            }
+
+            return PopScope(
+              canPop: !isLoading, // 加载中阻止返回
+              child: AnimatedOpacity(
+                opacity: animateIn ? 1.0 : 0.0,
+                duration: animationDuration,
+                curve: animateIn ? Curves.easeOutCubic : Curves.easeInCubic,
+                child: AnimatedScale(
+                  scale: animateIn ? 1.0 : 0.92,
+                  duration: animationDuration,
+                  curve: animateIn ? Curves.easeOutBack : Curves.easeInCubic,
+                  child: Center(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: FDialog(
+                        direction: Axis.horizontal,
+                        title: const Text('确认退出'),
+                        body: isLoading
+                            ? const Row(
+                                children: [
+                                  SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                                  SizedBox(width: 8),
+                                  Text('正在退出登录...'),
+                                ],
+                              )
+                            : const Text('确定要退出当前账号吗？'),
+                        actions: [
+                          FButton(
+                            style: context.theme.buttonStyles.outline.call,
+                            onPress: isLoading ? null : () => closeDialogWithAnimation(),
+                            child: const Text('取消'),
+                          ),
+                          FButton(
+                            onPress: isLoading
+                                ? null
+                                : () async {
+                                    setState(() => isLoading = true);
+                                    try {
+                                      await widget.apiService?.logoutStrict();
+                                      if (dialogContext.mounted) {
+                                        await closeDialogWithAnimation();
+                                      }
+                                      widget.onLogout();
+                                    } catch (e) {
+                                      if (dialogContext.mounted) {
+                                        showFToast(
+                                          context: dialogContext,
+                                          title: const Text('退出失败'),
+                                          description: Text(e.toString()),
+                                        );
+                                      }
+                                    } finally {
+                                      if (dialogContext.mounted) setState(() => isLoading = false);
+                                    }
+                                  },
+                            child: const Text('确认'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-                FButton(
-                  onPress: isLoading
-                      ? null
-                      : () async {
-                          setState(() => isLoading = true);
-                          try {
-                            await widget.apiService?.logoutStrict();
-                            if (context.mounted) {
-                              Navigator.pop(context);
-                            }
-                            widget.onLogout();
-                          } catch (e) {
-                            if (context.mounted) {
-                              showFToast(
-                                context: context,
-                                title: const Text('退出失败'),
-                                description: Text(e.toString()),
-                              );
-                            }
-                          } finally {
-                            if (context.mounted) setState(() => isLoading = false);
-                          }
-                        },
-                  child: const Text('确认'),
-                ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );

@@ -176,20 +176,32 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
 
           Column(
             children: [
-              const TopSafeSpacer(),
-              FHeader.nested(
-                title: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('问卷预览 - ${widget.survey.surveyName}'),
+              const TopSafeSpacer(showBackground: true),
+              Container(
+                decoration: BoxDecoration(
+                  color: isDark 
+                      ? Colors.black.withAlpha(102).withAlpha(120)
+                      : Colors.white.withAlpha(102).withAlpha(120),
+                ),
+                child: FHeader.nested(
+                  title: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '问卷预览 - ${widget.survey.surveyName}',
+                        style: TextStyle(
+                          color: isDark ? Colors.white70 : Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                  prefixes: [
+                    FHeaderAction(
+                      icon: Icon(Icons.close, size: 20, color: isDark ? Colors.white70 : Colors.black87),
+                      onPress: () => Navigator.pop(context),
+                    ),
                   ],
                 ),
-                prefixes: [
-                  FHeaderAction(
-                    icon: const Icon(Icons.close, size: 20),
-                    onPress: () => Navigator.pop(context),
-                  ),
-                ],
               ),
               Expanded(
                 child: CustomScrollView(

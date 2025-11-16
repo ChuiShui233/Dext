@@ -314,73 +314,40 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
                       child: ScaleTransition(
                         scale: AlwaysStoppedAnimation(currentScale),
                         child: isImage
-                            ? (hasMultipleMedia
-                                ? GestureDetector(
-                                    onTap: _toggleControls,
-                                    child: PhotoViewGallery.builder(
-                                      scrollPhysics: const BouncingScrollPhysics(),
-                                      builder: (BuildContext context, int index) {
-                                        final url = toAbsoluteUrl(widget.allMediaUrls![index]);
-                                        return PhotoViewGalleryPageOptions(
-                                          imageProvider: CachedNetworkImageProvider(
-                                            url,
-                                            headers: (widget.authToken != null && widget.authToken!.isNotEmpty)
-                                                ? { 'Authorization': 'Bearer ${widget.authToken!}' }
-                                                : null,
-                                          ),
-                                          minScale: PhotoViewComputedScale.contained * 0.8,
-                                          maxScale: PhotoViewComputedScale.covered * 4.0,
-                                          heroAttributes: PhotoViewHeroAttributes(tag: url),
-                                        );
-                                      },
-                                      itemCount: widget.allMediaUrls!.length,
-                                      loadingBuilder: (context, event) => const Center(
-                                        child: CircularProgressIndicator(color: Colors.white),
-                                      ),
-                                      backgroundDecoration: const BoxDecoration(
-                                        color: Colors.transparent,
-                                      ),
-                                      pageController: _pageController,
-                                      onPageChanged: (index) {
-                                        setState(() {
-                                          _currentIndex = index;
-                                        });
-                                      },
-                                    ),
-                                  )
-                                : GestureDetector(
-                                    onTap: _toggleControls,
-                                    child: PhotoView(
+                            ? GestureDetector(
+                                onTap: _toggleControls,
+                                child: PhotoViewGallery.builder(
+                                  scrollPhysics: const BouncingScrollPhysics(),
+                                  builder: (BuildContext context, int index) {
+                                    final url = hasMultipleMedia 
+                                        ? toAbsoluteUrl(widget.allMediaUrls![index])
+                                        : toAbsoluteUrl(widget.mediaUrl);
+                                    return PhotoViewGalleryPageOptions(
                                       imageProvider: CachedNetworkImageProvider(
-                                        currentUrl,
+                                        url,
                                         headers: (widget.authToken != null && widget.authToken!.isNotEmpty)
                                             ? { 'Authorization': 'Bearer ${widget.authToken!}' }
                                             : null,
                                       ),
                                       minScale: PhotoViewComputedScale.contained * 0.8,
                                       maxScale: PhotoViewComputedScale.covered * 4.0,
-                                      heroAttributes: PhotoViewHeroAttributes(tag: currentUrl),
-                                      loadingBuilder: (context, event) => const Center(
-                                        child: CircularProgressIndicator(color: Colors.white),
-                                      ),
-                                      errorBuilder: (context, error, stackTrace) => const Center(
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.error, color: Colors.white, size: 64),
-                                            SizedBox(height: 16),
-                                            Text(
-                                              '图片加载失败',
-                                              style: TextStyle(color: Colors.white),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      backgroundDecoration: const BoxDecoration(
-                                        color: Colors.transparent,
-                                      ),
-                                    ),
-                                  )
+                                      heroAttributes: PhotoViewHeroAttributes(tag: url),
+                                    );
+                                  },
+                                  itemCount: hasMultipleMedia ? widget.allMediaUrls!.length : 1,
+                                  loadingBuilder: (context, event) => const Center(
+                                    child: CircularProgressIndicator(color: Colors.white),
+                                  ),
+                                  backgroundDecoration: const BoxDecoration(
+                                    color: Colors.transparent,
+                                  ),
+                                  pageController: hasMultipleMedia ? _pageController : null,
+                                  onPageChanged: hasMultipleMedia ? (index) {
+                                    setState(() {
+                                      _currentIndex = index;
+                                    });
+                                  } : null,
+                                ),
                               )
                             : isVideo
                                 ? _FullscreenVideoPlayer(

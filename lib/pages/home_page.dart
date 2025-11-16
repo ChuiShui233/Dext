@@ -245,63 +245,72 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
                   return contentWidget;
                 }
                 
-                // 手机端：添加悬浮式底部导航栏
+                // 手机端：使用覆盖式底部导航栏
                 return Stack(
                   children: [
-                    // 主内容
+                    // 主内容（全屏显示，可以滚动到导航栏后面）
                     contentWidget,
                     
-                    // 悬浮导航栏
+                    // 覆盖式导航栏
                     Positioned(
-                      left: 16,
-                      right: 16,
-                      bottom: 16,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                          child: Container(
-                            height: 68,
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.7),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-                                width: 1,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        height: 68 + MediaQuery.of(context).padding.bottom,
+                        padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
+                        child: ClipRRect(
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(24),
+                            topRight: Radius.circular(24),
+                          ),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                            child: Container(
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.6),
+                                  borderRadius: const BorderRadius.only(
+                                    topLeft: Radius.circular(24),
+                                    topRight: Radius.circular(24),
+                                  ),
+                                  border: Border.all(
+                                    color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                                    width: 1,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.15),
+                                      blurRadius: 40,
+                                      offset: const Offset(0, -6),
+                                    ),
+                                  ],
+                                ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                children: [
+                                  _buildNavItem(
+                                    context,
+                                    icon: FIcons.house,
+                                    label: '主页',
+                                    index: 0,
+                                    isSelected: widget.currentIndex == 0,
+                                  ),
+                                  _buildNavItem(
+                                    context,
+                                    icon: FIcons.clock,
+                                    label: '历史',
+                                    index: 1,
+                                    isSelected: widget.currentIndex == 1,
+                                  ),
+                                  _buildNavItem(
+                                    context,
+                                    icon: FIcons.settings,
+                                    label: '设置',
+                                    index: 2,
+                                    isSelected: widget.currentIndex == 2,
+                                  ),
+                                ],
                               ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.1),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
-                              children: [
-                                _buildNavItem(
-                                  context,
-                                  icon: FIcons.house,
-                                  label: '主页',
-                                  index: 0,
-                                  isSelected: widget.currentIndex == 0,
-                                ),
-                                _buildNavItem(
-                                  context,
-                                  icon: FIcons.clock,
-                                  label: '历史',
-                                  index: 1,
-                                  isSelected: widget.currentIndex == 1,
-                                ),
-                                _buildNavItem(
-                                  context,
-                                  icon: FIcons.settings,
-                                  label: '设置',
-                                  index: 2,
-                                  isSelected: widget.currentIndex == 2,
-                                ),
-                              ],
                             ),
                           ),
                         ),

@@ -58,24 +58,20 @@ class HomeMainContent extends StatelessWidget {
                       Row(
                             children: [
                               FButton(
-                                onPress: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => const PublicAccessPage(),
-                                    ),
-                                  );
-                                },
+                                onPress: () => Navigator.of(context).pushNamed('/public_survey'),
+                                style: context.theme.buttonStyles.primary.call,
                                 child: const Text('填写问卷'),
                               ),
                           const SizedBox(width: 12),
                               FButton(
                                 onPress: onProjectTap,
+                                style: context.theme.buttonStyles.secondary.call,
                                 child: const Text('管理项目'),
                               ),
                           const SizedBox(width: 12),
                               FButton(
                                 onPress: onSurveyTap,
+                                style: context.theme.buttonStyles.outline.call,
                                 child: const Text('管理问卷'),
                               ),
                             ],
