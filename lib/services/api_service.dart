@@ -1832,10 +1832,27 @@ Future<Question> addQuestion(
       dioClient.options.headers = {
         if (authToken != null) 'Authorization': 'Bearer $authToken',
       };
-      // 移除超时限制，支持大文件上传
-      dioClient.options.sendTimeout = null; // 无发送超时
-      dioClient.options.receiveTimeout = null; // 无接收超时
-      dioClient.options.connectTimeout = const Duration(seconds: 30); // 仅保留连接超时
+      
+      // 优化超时配置，支持大文件上传
+      final fileSizeMB = fileSize / (1024 * 1024);
+      
+      // 根据文件大小动态设置超时时间
+      if (fileSizeMB > 10) {
+        // 大文件（>10MB）：设置更长的超时时间
+        dioClient.options.connectTimeout = const Duration(seconds: 60);
+        dioClient.options.sendTimeout = const Duration(minutes: 10); // 10分钟上传超时
+        dioClient.options.receiveTimeout = const Duration(seconds: 60);
+      } else if (fileSizeMB > 5) {
+        // 中等文件（5-10MB）
+        dioClient.options.connectTimeout = const Duration(seconds: 45);
+        dioClient.options.sendTimeout = const Duration(minutes: 5); // 5分钟上传超时
+        dioClient.options.receiveTimeout = const Duration(seconds: 45);
+      } else {
+        // 小文件（<5MB）：保持原有设置
+        dioClient.options.connectTimeout = const Duration(seconds: 30);
+        dioClient.options.sendTimeout = const Duration(minutes: 2); // 2分钟上传超时
+        dioClient.options.receiveTimeout = const Duration(seconds: 30);
+      }
       
       // Web平台仍然使用fromBytes，因为Stream方式会导致Dio无法追踪进度
       // Dio的onSendProgress需要知道总大小，fromBytes可以正确计算进度
@@ -2033,10 +2050,27 @@ Future<Question> addQuestion(
       dioClient.options.headers = {
         if (authToken != null) 'Authorization': 'Bearer $authToken',
       };
-      // 移除超时限制，支持大文件上传
-      dioClient.options.sendTimeout = null; // 无发送超时
-      dioClient.options.receiveTimeout = null; // 无接收超时
-      dioClient.options.connectTimeout = const Duration(seconds: 30); // 仅保留连接超时
+      
+      // 优化超时配置，支持大文件上传
+      final fileSizeMB = fileSize / (1024 * 1024);
+      
+      // 根据文件大小动态设置超时时间
+      if (fileSizeMB > 10) {
+        // 大文件（>10MB）：设置更长的超时时间
+        dioClient.options.connectTimeout = const Duration(seconds: 60);
+        dioClient.options.sendTimeout = const Duration(minutes: 10); // 10分钟上传超时
+        dioClient.options.receiveTimeout = const Duration(seconds: 60);
+      } else if (fileSizeMB > 5) {
+        // 中等文件（5-10MB）
+        dioClient.options.connectTimeout = const Duration(seconds: 45);
+        dioClient.options.sendTimeout = const Duration(minutes: 5); // 5分钟上传超时
+        dioClient.options.receiveTimeout = const Duration(seconds: 45);
+      } else {
+        // 小文件（<5MB）：保持原有设置
+        dioClient.options.connectTimeout = const Duration(seconds: 30);
+        dioClient.options.sendTimeout = const Duration(minutes: 2); // 2分钟上传超时
+        dioClient.options.receiveTimeout = const Duration(seconds: 30);
+      }
       
       final fileName = filePath.split(Platform.pathSeparator).last;
       // 使用fromFile实现流式传输，不会一次性加载整个文件到内存
@@ -2660,8 +2694,11 @@ Future<Question> addQuestion(
       final uri = Uri.parse('$baseUrl/api/user/avatar/upload');
       final request = http.MultipartRequest('POST', uri);
 
-      // 添加请求头
-      request.headers.addAll(_headers);
+      // 仅设置鉴权头，避免覆盖 multipart/form-data 的 Content-Type
+      final multipartHeaders = <String, String>{
+        if (authToken != null) 'Authorization': 'Bearer $authToken',
+      };
+      request.headers.addAll(multipartHeaders);
 
       // 添加图片文件（使用字节数据）
       final multipartFile = http.MultipartFile.fromBytes(
@@ -2672,8 +2709,8 @@ Future<Question> addQuestion(
       );
       request.files.add(multipartFile);
 
-      // 发送请求
-      final streamedResponse = await request.send().timeout(timeoutDuration);
+      // 发送请求（头像上传给更宽的超时，避免弱网下超时）
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 60));
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
@@ -2739,8 +2776,11 @@ Future<Question> addQuestion(
       final uri = Uri.parse('$baseUrl/api/user/avatar/upload');
       final request = http.MultipartRequest('POST', uri);
 
-      // 添加请求头
-      request.headers.addAll(_headers);
+      // 仅设置鉴权头，避免覆盖 multipart/form-data 的 Content-Type
+      final multipartHeaders = <String, String>{
+        if (authToken != null) 'Authorization': 'Bearer $authToken',
+      };
+      request.headers.addAll(multipartHeaders);
 
       // 添加图片文件
       final multipartFile = await http.MultipartFile.fromPath(
@@ -2750,8 +2790,8 @@ Future<Question> addQuestion(
       );
       request.files.add(multipartFile);
 
-      // 发送请求
-      final streamedResponse = await request.send().timeout(timeoutDuration);
+      // 发送请求（头像上传给更宽的超时，避免弱网下超时）
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 60));
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {

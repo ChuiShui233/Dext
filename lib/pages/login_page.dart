@@ -52,6 +52,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   bool _emailCodeSent = false;
   int _emailCodeCountdown = 0;
   Timer? _countdownTimer;
+  bool _isDialogShowing = false;
 
   final _apiService = ApiService();
   final _oauthService = OAuthService();
@@ -518,63 +519,117 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       _isLoading = true;
     });
 
+    String? lastError;
+    bool success = false;
+    const int maxAttempts = 5;
+    int attempt = 0;
+    int delayMs = 600; // 指数退避初始延迟
+
     try {
-      final purpose = _isResettingPassword ? 'reset_password' : 'register';
-      await _apiService.sendEmailVerificationCode(
-        email: email,
-        purpose: purpose,
-        captchaId: _captchaId ?? '',
-        captchaValue: _captchaController.text.trim(),
-      );
-      
-      if (!mounted) return;
-      
-      setState(() {
-        _emailCodeSent = true;
-        _emailCodeCountdown = 60;
-      });
-      
-      _countdownTimer?.cancel();
-      _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        if (!mounted) {
-          timer.cancel();
-          return;
-        }
-        setState(() {
-          if (_emailCodeCountdown > 0) {
-            _emailCodeCountdown--;
-          } else {
-            timer.cancel();
-            _emailCodeSent = false;
+      while (attempt < maxAttempts && !success) {
+        attempt++;
+        try {
+          final purpose = _isResettingPassword ? 'reset_password' : 'register';
+          await _apiService.sendEmailVerificationCode(
+            email: email,
+            purpose: purpose,
+            captchaId: _captchaId ?? '',
+            captchaValue: _captchaController.text.trim(),
+          );
+
+          if (!mounted) return;
+
+          // 成功：开始倒计时并提示
+          setState(() {
+            _emailCodeSent = true;
+            _emailCodeCountdown = 60;
+          });
+
+          _countdownTimer?.cancel();
+          _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+            if (!mounted) {
+              timer.cancel();
+              return;
+            }
+            setState(() {
+              if (_emailCodeCountdown > 0) {
+                _emailCodeCountdown--;
+              } else {
+                timer.cancel();
+                _emailCodeSent = false;
+              }
+            });
+          });
+
+          if (!_isDialogShowing) {
+            setState(() => _isDialogShowing = true);
+            showFDialog(
+              context: context,
+              builder: (context, style, animation) => FDialog(
+                style: style.call,
+                animation: animation,
+                direction: Axis.horizontal,
+                title: const Text('验证码已发送'),
+                body: const Text('请查收邮件并输入6位验证码'),
+                actions: [
+                  FButton(
+                    style: context.theme.buttonStyles.outline.call,
+                    child: const Text('确定'),
+                    onPress: () {
+                      Navigator.of(context).pop();
+                    },
+                  ),
+                ],
+              ),
+            ).then((_) {
+              if (mounted) setState(() => _isDialogShowing = false);
+            });
           }
-        });
-      });
-      
-      showFDialog(
-        context: context,
-        builder: (context, style, animation) => FDialog(
-          style: style.call,
-          animation: animation,
-          direction: Axis.horizontal,
-          title: const Text('验证码已发送'),
-          body: const Text('请查收邮件并输入6位验证码'),
-          actions: [
-            FButton(
-              style: context.theme.buttonStyles.outline.call,
-              child: const Text('确定'),
-              onPress: () => Navigator.of(context).pop(),
-            ),
-          ],
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      showErrorDialog(e.toString());
+
+          success = true;
+        } catch (e) {
+          lastError = e.toString();
+          if (!mounted) break;
+
+          final lower = lastError.toLowerCase();
+          final bool isRateLimit = lastError.contains('发送过于频繁') || lower.contains('429');
+          final bool isCaptchaError = lastError.contains('验证码') || lower.contains('captcha');
+          final bool isEmailError = lastError.contains('邮箱') && (lastError.contains('格式') || lastError.contains('已被') || lastError.contains('不存在'));
+          final bool isNetworkOrTimeout = lastError.contains('超时') || lastError.contains('网络') || lower.contains('timeout') || lower.contains('socketexception') || lower.contains('failed to connect') || lower.contains('handshake');
+
+          // 不可重试的错误：频率限制/图形验证码错误/邮箱本身错误
+          if (isRateLimit || isCaptchaError || isEmailError) {
+            break;
+          }
+
+          // 其他可重试错误：网络波动、超时、临时异常
+          if (attempt < maxAttempts && isNetworkOrTimeout) {
+            await Future.delayed(Duration(milliseconds: delayMs));
+            delayMs = (delayMs * 2).clamp(600, 4000);
+            continue;
+          } else {
+            break;
+          }
+        }
+      }
+
+      if (!success && lastError != null) {
+        if (lastError.contains('验证码') || lastError.toLowerCase().contains('captcha')) {
+          // 图形验证码错误：刷新验证码并提示用户重新输入
+          await _fetchCaptcha();
+          if (mounted) {
+            showErrorDialog('图形验证码错误或已过期，请重新输入后再试');
+          }
+        } else {
+          showErrorDialog(lastError);
+        }
+      }
     } finally {
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
+        // 与原逻辑保持一致：结束后刷新图形验证码
         _fetchCaptcha();
       }
     }
@@ -639,31 +694,36 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       
       if (!mounted) return;
       
-      showFDialog(
-        context: context, 
-        builder: (context, style, animation) => FDialog(
-          style: style.call,
-          animation: animation,
-          direction: Axis.horizontal,
-          title: const Text('注册成功'),
-          body: const Text('你现在可以登录了'),
-          actions: [
-            FButton(
-              style: context.theme.buttonStyles.outline.call,
-              child: const Text('确定'),
-              onPress: () {
-                Navigator.of(context).pop();
-                setState(() {
-                  _isRegistering = false;
-                  _usernameController.clear();
-                  _passwordController.clear();
-                  _confirmPasswordController.clear();
-                });
-              },
-            ),
-          ],
-        ),
-      );
+      if (!_isDialogShowing) {
+        setState(() => _isDialogShowing = true);
+        showFDialog(
+          context: context, 
+          builder: (context, style, animation) => FDialog(
+            style: style.call,
+            animation: animation,
+            direction: Axis.horizontal,
+            title: const Text('注册成功'),
+            body: const Text('你现在可以登录了'),
+            actions: [
+              FButton(
+                style: context.theme.buttonStyles.outline.call,
+                child: const Text('确定'),
+                onPress: () {
+                  Navigator.of(context).pop();
+                  setState(() {
+                    _isRegistering = false;
+                    _usernameController.clear();
+                    _passwordController.clear();
+                    _confirmPasswordController.clear();
+                  });
+                },
+              ),
+            ],
+          ),
+        ).then((_) {
+          if (mounted) setState(() => _isDialogShowing = false);
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       showErrorDialog(e.toString());
@@ -730,38 +790,43 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       
       if (!mounted) return;
       
-      showFDialog(
-        context: context,
-        builder: (context, style, animation) => FDialog(
-          style: style.call,
-          animation: animation,
-          direction: Axis.horizontal,
-          title: const Text('密码重置成功'),
-          body: const Text('请使用新密码登录'),
-          actions: [
-            FButton(
-              style: context.theme.buttonStyles.outline.call,
-              child: const Text('确定'),
-              onPress: () {
-                Navigator.of(context).pop();
-                setState(() {
-                  _isResettingPassword = false;
-                  _usernameController.clear();
-                  _emailController.clear();
-                  _emailCodeController.clear();
-                  _passwordController.clear();
-                  _confirmPasswordController.clear();
-                  _captchaController.clear();
-                  _emailCodeSent = false;
-                  _emailCodeCountdown = 0;
-                  _countdownTimer?.cancel();
-                });
-                _fetchCaptcha();
-              },
-            ),
-          ],
-        ),
-      );
+      if (!_isDialogShowing) {
+        setState(() => _isDialogShowing = true);
+        showFDialog(
+          context: context,
+          builder: (context, style, animation) => FDialog(
+            style: style.call,
+            animation: animation,
+            direction: Axis.horizontal,
+            title: const Text('密码重置成功'),
+            body: const Text('请使用新密码登录'),
+            actions: [
+              FButton(
+                style: context.theme.buttonStyles.outline.call,
+                child: const Text('确定'),
+                onPress: () {
+                  Navigator.of(context).pop();
+                  setState(() {
+                    _isResettingPassword = false;
+                    _usernameController.clear();
+                    _emailController.clear();
+                    _emailCodeController.clear();
+                    _passwordController.clear();
+                    _confirmPasswordController.clear();
+                    _captchaController.clear();
+                    _emailCodeSent = false;
+                    _emailCodeCountdown = 0;
+                    _countdownTimer?.cancel();
+                  });
+                  _fetchCaptcha();
+                },
+              ),
+            ],
+          ),
+        ).then((_) {
+          if (mounted) setState(() => _isDialogShowing = false);
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       showErrorDialog(e.toString());
@@ -790,7 +855,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }
 
   void showErrorDialog(String message) {
-    if (!mounted) return;
+    if (!mounted || _isDialogShowing) return;
+    setState(() => _isDialogShowing = true);
     showFDialog(
       context: context,
       builder: (context, style, animation) => FDialog(
@@ -803,11 +869,15 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           FButton(
             style: context.theme.buttonStyles.outline.call,
             child: const Text('确定'),
-            onPress: () => Navigator.of(context).pop(),
+            onPress: () {
+              Navigator.of(context).pop();
+            },
           ),
         ],
       ),
-    );
+    ).then((_) {
+      if (mounted) setState(() => _isDialogShowing = false);
+    });
   }
 
   @override

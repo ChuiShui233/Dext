@@ -21,9 +21,7 @@ import 'public_survey_page.dart';
 import '../utils/error_formatter.dart';
 import '../services/config.dart';
 
-// 全局：移动布局下侧边栏是否处于打开（或正在展开）状态
 final ValueNotifier<bool> mobileSidebarOpen = ValueNotifier<bool>(false);
-
 final showSidebarInDrawer = LayoutValue(xs: true, md: false);
 final showSidebarInline = LayoutValue(xs: false, md: true);
 
@@ -1108,7 +1106,7 @@ Widget _buildSidebarHeader(BuildContext context) {
         ),
         FSidebarItem(
           icon: const Icon(FIcons.settings),
-          label: const Text('系统设置'),
+          label: const Text('人家设置'),
           selected: _currentTabIndex == 2,
           onPress: () {
             handleTabChange(2);

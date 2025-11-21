@@ -24,12 +24,6 @@ class AdaptiveMessageCard extends StatelessWidget {
       vertical: (vh * 0.04).clamp(12.0, 40.0),
     );
     
-    final double widthFactor = vw < 380
-        ? 0.86
-        : (vw < 480
-            ? 0.82
-            : (vw < 800 ? 0.66 : 0.5));
-    
     final double maxWidth = math.min(520.0, vw * 0.84);
     
     final contentWidget = ConstrainedBox(
@@ -51,10 +45,7 @@ class AdaptiveMessageCard extends StatelessWidget {
           );
 
     return Center(
-      child: FractionallySizedBox(
-        widthFactor: widthFactor,
-        child: wrappedContent,
-      ),
+      child: wrappedContent,
     );
   }
 }

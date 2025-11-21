@@ -35,12 +35,11 @@ class TopSafeSpacer extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final Color bg = backgroundColor ?? (isDark 
         ? Colors.black.withAlpha(102) 
-        : Colors.white.withAlpha(102)); // 浅色主题下调暗
-    
-    // 使用纯色背景，避免渐变和模糊效果
+        : Colors.white.withAlpha(102));
+  
     return Container(
       height: height,
-      color: bg.withAlpha(120), // 使用适中的不透明度
+      color: bg.withAlpha(120),
     );
   }
 }

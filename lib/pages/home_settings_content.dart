@@ -120,6 +120,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
         if (!mounted) return;
         final Uint8List? croppedBytes = await showDialog<Uint8List>(
           context: context,
+          barrierDismissible: false,
           builder: (context) => CropImageDialog(
             imageBytes: imageBytes,
           ),
@@ -347,6 +348,17 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
                           width: 100,
                           height: 100,
                           fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            // 加载中显示占位头像，避免出现空白
+                            return const Center(
+                              child: Icon(
+                                Icons.person,
+                                size: 50,
+                                color: Colors.grey,
+                              ),
+                            );
+                          },
                           errorBuilder: (context, error, stackTrace) {
                             return const Icon(
                               Icons.person,
