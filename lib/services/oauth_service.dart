@@ -65,9 +65,7 @@ class OAuthService {
     }
   }
 
-  /// Web端Microsoft OAuth登录
   Future<Map<String, dynamic>> _signInWithMicrosoftWeb() async {
-    // 从后端获取授权URL
     final authUrlResponse = await http.get(
       Uri.parse('${ApiService.baseUrl}/api/auth/oauth/microsoft/url?redirect_uri=${Uri.encodeComponent(_redirectUri)}'),
     );
@@ -76,10 +74,9 @@ class OAuthService {
       throw Exception('获取授权URL失败: ${authUrlResponse.statusCode}');
     }
 
-    final authUrlData = json.decode(authUrlResponse.body);
-    final authUrl = authUrlData['auth_url'];
+    final payload = json.decode(authUrlResponse.body);
+    final authUrl = payload['auth_url'];
 
-    // 使用自定义处理器打开OAuth窗口
     final authCode = await WebOAuthHandler.authenticate(
       authUrl: authUrl,
       redirectUrl: _redirectUri,
@@ -90,14 +87,12 @@ class OAuthService {
       timeoutSeconds: 300,
     );
 
-    // 解析授权码
     final uri = Uri.parse(authCode);
     final code = uri.queryParameters['code'];
     if (code == null) {
       throw Exception('未获取到授权码');
     }
 
-    // 直接将授权码发送给后端，让后端处理令牌交换
     final result = await _authenticateWithBackend('microsoft', {
       'authorization_code': code,
       'redirect_uri': _redirectUri,
@@ -111,12 +106,10 @@ class OAuthService {
     };
   }
 
-  /// Windows桌面端Microsoft OAuth登录
   Future<Map<String, dynamic>> _signInWithMicrosoftDesktop() async {
     try {
       final state = UriHandlerService.generateState();
       
-      // 构建授权URL
       final authParams = {
         'client_id': microsoftClientId,
         'response_type': 'code',
@@ -132,30 +125,27 @@ class OAuthService {
         authParams,
       ).toString();
       
-      // 启动OAuth流程并等待回调
-      final result = await UriHandlerService.launchOAuthAndWaitForCallback(
+      final callback = await UriHandlerService.launchOAuthAndWaitForCallback(
         authUrl: authUrl,
         state: state,
       );
       
-      final authCode = result['code'];
+      final authCode = callback['code'];
       if (authCode == null || authCode.isEmpty) {
         throw Exception('未收到授权码');
       }
       
       debugPrint('✅ 收到Microsoft授权码，发送给后端处理');
-      
-      // 直接将授权码发送给后端，让后端处理令牌交换
-      final authResult = await _authenticateWithBackend('microsoft', {
+      final backendAuth = await _authenticateWithBackend('microsoft', {
         'authorization_code': authCode,
         'redirect_uri': _redirectUri,
       });
       
       return {
         'success': true,
-        'token': authResult['token'],
-        'expires': authResult['expires'],
-        'user': authResult['user'],
+        'token': backendAuth['token'],
+        'expires': backendAuth['expires'],
+        'user': backendAuth['user'],
       };
     } catch (e) {
       debugPrint('❌ Microsoft桌面端登录失败: $e');
@@ -166,14 +156,11 @@ class OAuthService {
     }
   }
 
-  /// 原生平台Microsoft OAuth登录
   Future<Map<String, dynamic>> _signInWithMicrosoftNative() async {
-    // Windows桌面端使用自定义URI处理
     if (!kIsWeb && Platform.isWindows) {
       return await _signInWithMicrosoftDesktop();
     }
-    
-    // 其他平台使用原有逻辑
+
     final client = OAuth2Client(
       authorizeUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
       tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
@@ -192,15 +179,13 @@ class OAuthService {
       },
     );
 
-    // 使用Microsoft Graph API获取用户信息
     final response = await helper.get('https://graph.microsoft.com/v1.0/me');
     
     if (response.statusCode == 200) {
       final userInfo = json.decode(response.body);
       final accessToken = await helper.getToken();
       
-      // 调用后端OAuth接口，只传递访问令牌
-      final result = await _authenticateWithBackend('microsoft', {
+      final backendResult = await _authenticateWithBackend('microsoft', {
         'access_token': accessToken?.accessToken,
         'user_info': {
           'id': userInfo['id'],
@@ -213,8 +198,8 @@ class OAuthService {
 
       return {
         'success': true,
-        'token': result['token'],
-        'expires': result['expires'],
+        'token': backendResult['token'],
+        'expires': backendResult['expires'],
         'user': userInfo,
       };
     } else {
@@ -251,9 +236,7 @@ class OAuthService {
     }
   }
 
-  /// Web端Google OAuth登录
   Future<Map<String, dynamic>> _signInWithGoogleWeb() async {
-    // 从后端获取授权URL
     final authUrlResponse = await http.get(
       Uri.parse('${ApiService.baseUrl}/api/auth/oauth/google/url?redirect_uri=${Uri.encodeComponent(_redirectUri)}'),
     );
@@ -262,8 +245,8 @@ class OAuthService {
       throw Exception('获取授权URL失败: ${authUrlResponse.statusCode}');
     }
 
-    final authUrlData = json.decode(authUrlResponse.body);
-    final authUrl = authUrlData['auth_url'];
+    final payload = json.decode(authUrlResponse.body);
+    final authUrl = payload['auth_url'];
 
     // 使用自定义处理器打开OAuth窗口
     final authCode = await WebOAuthHandler.authenticate(
@@ -283,7 +266,6 @@ class OAuthService {
       throw Exception('未获取到授权码');
     }
 
-    // 直接将授权码发送给后端，让后端处理令牌交换
     final result = await _authenticateWithBackend('google', {
       'authorization_code': code,
       'redirect_uri': _redirectUri,
@@ -297,7 +279,6 @@ class OAuthService {
     };
   }
 
-  /// Windows桌面端Google OAuth登录
   Future<Map<String, dynamic>> _signInWithGoogleDesktop() async {
     try {
       final state = UriHandlerService.generateState();
@@ -319,29 +300,27 @@ class OAuthService {
       ).toString();
       
       // 启动OAuth流程并等待回调
-      final result = await UriHandlerService.launchOAuthAndWaitForCallback(
+      final callback = await UriHandlerService.launchOAuthAndWaitForCallback(
         authUrl: authUrl,
         state: state,
       );
       
-      final authCode = result['code'];
+      final authCode = callback['code'];
       if (authCode == null || authCode.isEmpty) {
         throw Exception('未收到授权码');
       }
       
       debugPrint('✅ 收到Google授权码，发送给后端处理');
-      
-      // 直接将授权码发送给后端，让后端处理令牌交换
-      final authResult = await _authenticateWithBackend('google', {
+      final backendAuth = await _authenticateWithBackend('google', {
         'authorization_code': authCode,
         'redirect_uri': _redirectUri,
       });
       
       return {
         'success': true,
-        'token': authResult['token'],
-        'expires': authResult['expires'],
-        'user': authResult['user'],
+        'token': backendAuth['token'],
+        'expires': backendAuth['expires'],
+        'user': backendAuth['user'],
       };
     } catch (e) {
       debugPrint('❌ Google桌面端登录失败: $e');
@@ -352,14 +331,11 @@ class OAuthService {
     }
   }
 
-  /// 原生平台Google OAuth登录
   Future<Map<String, dynamic>> _signInWithGoogleNative() async {
-    // Windows桌面端使用自定义URI处理
     if (!kIsWeb && Platform.isWindows) {
       return await _signInWithGoogleDesktop();
     }
-    
-    // 其他平台使用原有逻辑
+
     final client = GoogleOAuth2Client(
       redirectUri: _redirectUri,
       customUriScheme: _customUriScheme,
@@ -378,20 +354,17 @@ class OAuthService {
       },
     );
 
-    // 首先获取访问令牌
     final accessToken = await helper.getToken();
     if (accessToken?.accessToken == null) {
       throw Exception('获取访问令牌失败');
     }
     
-    // 使用访问令牌获取用户信息
     final response = await helper.get('https://www.googleapis.com/oauth2/v2/userinfo');
     
     if (response.statusCode == 200) {
       final userInfo = json.decode(response.body);
       
-      // 调用后端OAuth接口，只传递访问令牌
-      final result = await _authenticateWithBackend('google', {
+      final backendResult = await _authenticateWithBackend('google', {
         'access_token': accessToken!.accessToken,
         'user_info': {
           'id': userInfo['id'],
@@ -404,8 +377,8 @@ class OAuthService {
 
       return {
         'success': true,
-        'token': result['token'],
-        'expires': result['expires'],
+        'token': backendResult['token'],
+        'expires': backendResult['expires'],
         'user': userInfo,
       };
     } else {
@@ -442,9 +415,7 @@ class OAuthService {
     }
   }
 
-  /// Web端GitHub OAuth登录
   Future<Map<String, dynamic>> _signInWithGitHubWeb() async {
-    // 从后端获取授权URL
     final authUrlResponse = await http.get(
       Uri.parse('${ApiService.baseUrl}/api/auth/oauth/github/url?redirect_uri=${Uri.encodeComponent(_redirectUri)}'),
     );
@@ -474,7 +445,6 @@ class OAuthService {
       throw Exception('未获取到授权码');
     }
 
-    // 直接将授权码发送给后端，让后端处理令牌交换
     final result = await _authenticateWithBackend('github', {
       'authorization_code': code,
       'redirect_uri': _redirectUri,
@@ -488,7 +458,6 @@ class OAuthService {
     };
   }
 
-  /// Windows桌面端GitHub OAuth登录
   Future<Map<String, dynamic>> _signInWithGitHubDesktop() async {
     try {
       final state = UriHandlerService.generateState();
@@ -508,27 +477,26 @@ class OAuthService {
       ).toString();
       
       // 启动OAuth流程并等待回调
-      final result = await UriHandlerService.launchOAuthAndWaitForCallback(
+      final callback = await UriHandlerService.launchOAuthAndWaitForCallback(
         authUrl: authUrl,
         state: state,
       );
       
-      final authCode = result['code'];
+      final authCode = callback['code'];
       if (authCode == null || authCode.isEmpty) {
         throw Exception('未收到授权码');
       }
       
-      // 调用后端OAuth接口，直接传递授权码
-      final authResult = await _authenticateWithBackend('github', {
+      final backendAuth = await _authenticateWithBackend('github', {
         'authorization_code': authCode,
         'redirect_uri': _redirectUri,
       });
       
       return {
         'success': true,
-        'token': authResult['token'],
-        'expires': authResult['expires'],
-        'user': authResult['user'],
+        'token': backendAuth['token'],
+        'expires': backendAuth['expires'],
+        'user': backendAuth['user'],
       };
     } catch (e) {
       return {
@@ -538,14 +506,11 @@ class OAuthService {
     }
   }
 
-  /// 原生平台GitHub OAuth登录
   Future<Map<String, dynamic>> _signInWithGitHubNative() async {
-    // Windows桌面端使用自定义URI处理
     if (!kIsWeb && Platform.isWindows) {
       return await _signInWithGitHubDesktop();
     }
-    
-    // 其他平台使用原有逻辑
+
     final client = GitHubOAuth2Client(
       redirectUri: _redirectUri,
       customUriScheme: _customUriScheme,
@@ -564,14 +529,12 @@ class OAuthService {
       },
     );
 
-    // 获取用户基本信息
     final userResponse = await helper.get('https://api.github.com/user');
     
     if (userResponse.statusCode == 200) {
       final userInfo = json.decode(userResponse.body);
       final accessToken = await helper.getToken();
       
-      // 获取用户邮箱
       String? email = userInfo['email'];
       if (email == null || email.isEmpty) {
         final emailResponse = await helper.get('https://api.github.com/user/emails');
@@ -594,16 +557,15 @@ class OAuthService {
         'provider': 'github',
       };
       
-      // 调用后端OAuth接口，只传递访问令牌
-      final result = await _authenticateWithBackend('github', {
+      final backendResult = await _authenticateWithBackend('github', {
         'access_token': accessToken?.accessToken,
         'user_info': userInfoFormatted,
       });
 
       return {
         'success': true,
-        'token': result['token'],
-        'expires': result['expires'],
+        'token': backendResult['token'],
+        'expires': backendResult['expires'],
         'user': userInfoFormatted,
       };
     } else {

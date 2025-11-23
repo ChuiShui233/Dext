@@ -93,6 +93,10 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
     int _surveyCount = 0;
     User? _currentUser;
     final GlobalKey<NavigatorState> _contentNavigatorKey = GlobalKey<NavigatorState>();
+    // 记录上一次是否为桌面布局，用于在从移动切换到桌面时重置右侧导航栈
+    bool _wasDesktopLayout = false;
+    // 桌面侧边栏折叠状态
+    bool _sidebarCollapsed = false;
     // 自定义侧滑菜单：动画与手势状态
     late final AnimationController _menuController;
     late final Animation<double> _menuScale;
@@ -105,7 +109,7 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
     ui.Image? _backdropImage;
     bool _isCapturingBackdrop = false;
     bool _pendingCapture = false;
-    bool _backdropLoopActive = false;
+    bool _isBackdropLoopActive = false;
     Brightness? _lastBrightness;
     NavigatorObserver? _backdropNavObserver;
     
@@ -145,6 +149,10 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
       _currentTabIndex = widget.selectedIndex;
       _loadData();
       _fetchUserData();
+      // 加载侧边栏折叠设置
+      try {
+        _sidebarCollapsed = SettingsService().sidebarCollapsed;
+      } catch (_) {}
       
       widget.userNotifier?.addListener(_handleUserUpdate);
 
@@ -170,7 +178,7 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
           if (!mobileSidebarOpen.value) mobileSidebarOpen.value = true;
         } else {
           // 侧边栏关闭：停止帧循环
-          _backdropLoopActive = false;
+          _isBackdropLoopActive = false;
           if (mobileSidebarOpen.value) mobileSidebarOpen.value = false;
         }
       });
@@ -350,13 +358,25 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
       WidgetsBinding.instance.addPostFrameCallback((_) => _scheduleBackdropUpdate());
     }
     // 若为移动布局且侧边栏当前处于打开状态，但循环未激活，则立即激活帧循环
-    if (!showDesktopLayout && _menuController.value > 0.01 && !_backdropLoopActive) {
+    if (!showDesktopLayout && _menuController.value > 0.01 && !_isBackdropLoopActive) {
       _ensureBackdropLoop();
     }
     // 进入桌面布局时，强制收起移动侧栏动画，避免残留聚焦背景/圆角
     if (showDesktopLayout && _menuController.value != 0.0) {
       _menuController.value = 0.0;
       if (mobileSidebarOpen.value) mobileSidebarOpen.value = false;
+    }
+
+    // 当布局从移动切换到桌面时，重置右侧嵌套 Navigator 的栈为当前 Tab 的根页面
+    if (showDesktopLayout && !_wasDesktopLayout) {
+      final nav = _contentNavigatorKey.currentState;
+      if (nav != null) {
+        nav.pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => _buildRootForTab(_currentTabIndex)),
+          (route) => false,
+        );
+        _forceBackdropUpdate();
+      }
     }
 
     // 统一采用嵌套 Navigator 承载右侧内容区域，避免切换桌面/移动布局时丢失栈
@@ -376,6 +396,9 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
       ],
     );
 
+    // 记录当前布局状态供下次对比
+    _wasDesktopLayout = showDesktopLayout;
+
     if (showDesktopLayout) {
 
       return PopScope(
@@ -393,7 +416,12 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSidebar(context),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 320),
+                curve: Curves.easeInOutCubic,
+                width: _sidebarCollapsed ? 72 : 240,
+                child: _buildSidebar(context),
+              ),
               Expanded(
                 child: RepaintBoundary(
                   key: _backdropRepaintKey,
@@ -659,11 +687,11 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
 
   // 每一帧都刷新一次聚焦背景
   void _ensureBackdropLoop() {
-    if (_backdropLoopActive) return;
-    _backdropLoopActive = true;
+    if (_isBackdropLoopActive) return;
+    _isBackdropLoopActive = true;
     void pump() {
-      if (!mounted) { _backdropLoopActive = false; return; }
-      if (_menuController.value <= 0.01) { _backdropLoopActive = false; return; }
+      if (!mounted) { _isBackdropLoopActive = false; return; }
+      if (_menuController.value <= 0.01) { _isBackdropLoopActive = false; return; }
       _scheduleBackdropUpdate();
       WidgetsBinding.instance.addPostFrameCallback((_) => pump());
     }
@@ -828,23 +856,48 @@ Widget _buildSidebarHeader(BuildContext context) {
           Row(
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Dext问卷调查',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.primary,
+                child: AnimatedCrossFade(
+                  firstChild: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Dext问卷调查',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
                       ),
-                    ),
-                    Text(
-                      '管理平台',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                      Text(
+                        '管理平台',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                  secondChild: const SizedBox.shrink(),
+                  crossFadeState: _sidebarCollapsed ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                  duration: const Duration(milliseconds: 200),
+                  sizeCurve: Curves.easeInOutCubic,
+                ),
+              ),
+              AnimatedRotation(
+                turns: _sidebarCollapsed ? 0.0 : 0.5, // 左箭头=旋转180度表示收起状态
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeInOutCubic,
+                child: IconButton(
+                  icon: const Icon(Icons.chevron_left, size: 20),
+                  onPressed: () {
+                    setState(() {
+                      _sidebarCollapsed = !_sidebarCollapsed;
+                    });
+                    // 持久化保存
+                    SettingsService().setSidebarCollapsed(_sidebarCollapsed);
+                  },
                 ),
               ),
             ],
@@ -863,7 +916,8 @@ Widget _buildSidebarHeader(BuildContext context) {
 }
 
   Widget _buildSidebarFooter(BuildContext context) {
-    return GlassSidebarCard(
+  if (_sidebarCollapsed) return const SizedBox.shrink();
+  return GlassSidebarCard(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(12),
@@ -985,43 +1039,73 @@ Widget _buildSidebarHeader(BuildContext context) {
 
   Widget _buildMainNavigation(BuildContext context) {
     return FSidebarGroup(
-      label: Row(
-        children: [
-          Icon(
-            FIcons.navigation,
-            size: 16,
-            color: Theme.of(context).colorScheme.primary,
+      label: _sidebarCollapsed
+        ? const SizedBox.shrink()
+        : Row(
+            children: [
+              AnimatedSlide(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeInOutCubic,
+                offset: _sidebarCollapsed ? const Offset(-0.1, 0) : Offset.zero,
+                child: Icon(
+                  FIcons.navigation,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '主要功能',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Text(
-            '主要功能',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.primary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
       children: [
         FSidebarItem(
-          icon: const Icon(FIcons.house),
-          label: const Text('主页'),
+          icon: AnimatedSlide(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOutCubic,
+            offset: _sidebarCollapsed ? const Offset(-0.1, 0) : Offset.zero,
+            child: const Icon(FIcons.house),
+          ),
+          label: _sidebarCollapsed
+              ? const SizedBox.shrink()
+              : const Text('主页', maxLines: 1, overflow: TextOverflow.ellipsis),
           selected: _currentTabIndex == 0,
           onPress: () {
             handleTabChange(0);
           },
         ),
         FSidebarItem(
-          icon: const Icon(FIcons.folderArchive),
-          label: const Text('项目管理'),
+          icon: AnimatedSlide(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOutCubic,
+            offset: _sidebarCollapsed ? const Offset(-0.1, 0) : Offset.zero,
+            child: const Icon(FIcons.folderArchive),
+          ),
+          label: _sidebarCollapsed
+              ? const SizedBox.shrink()
+              : const Text('项目管理', maxLines: 1, overflow: TextOverflow.ellipsis),
           selected: _currentTabIndex == 3,
           onPress: () {
             handleTabChange(3);
           },
         ),
         FSidebarItem(
-          icon: const Icon(FIcons.notebookPen),
-          label: const Text('问卷管理'),
+          icon: AnimatedSlide(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOutCubic,
+            offset: _sidebarCollapsed ? const Offset(-0.1, 0) : Offset.zero,
+            child: const Icon(FIcons.notebookPen),
+          ),
+          label: _sidebarCollapsed
+              ? const SizedBox.shrink()
+              : const Text('问卷管理', maxLines: 1, overflow: TextOverflow.ellipsis),
           selected: _currentTabIndex == 4,
           onPress: () {
             handleTabChange(4);
@@ -1033,41 +1117,71 @@ Widget _buildSidebarHeader(BuildContext context) {
 
   Widget _buildQuickActions(BuildContext context) {
     return FSidebarGroup(
-      label: Row(
-        children: [
-          Icon(
-            FIcons.zap,
-            size: 16,
-            color: Theme.of(context).colorScheme.secondary,
+      label: _sidebarCollapsed
+        ? const SizedBox.shrink()
+        : Row(
+            children: [
+              AnimatedSlide(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeInOutCubic,
+                offset: _sidebarCollapsed ? const Offset(-0.1, 0) : Offset.zero,
+                child: Icon(
+                  FIcons.zap,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.secondary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '快速操作',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.secondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Text(
-            '快速操作',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.secondary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
       children: [
         FSidebarItem(
-          icon: const Icon(FIcons.plus),
-          label: const Text('新建项目'),
+          icon: AnimatedSlide(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOutCubic,
+            offset: _sidebarCollapsed ? const Offset(-0.1, 0) : Offset.zero,
+            child: const Icon(FIcons.plus),
+          ),
+          label: _sidebarCollapsed
+              ? const SizedBox.shrink()
+              : const Text('新建项目', maxLines: 1, overflow: TextOverflow.ellipsis),
           onPress: () {
             _showCreateProjectDialog(context);
           },
         ),
         FSidebarItem(
-          icon: const Icon(FIcons.fileText),
-          label: const Text('新建问卷'),
+          icon: AnimatedSlide(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOutCubic,
+            offset: _sidebarCollapsed ? const Offset(-0.1, 0) : Offset.zero,
+            child: const Icon(FIcons.fileText),
+          ),
+          label: _sidebarCollapsed
+              ? const SizedBox.shrink()
+              : const Text('新建问卷', maxLines: 1, overflow: TextOverflow.ellipsis),
           onPress: () {
             _showCreateSurveyDialog(context);
           },
         ),
         FSidebarItem(
-          icon: const Icon(Icons.bar_chart),
-          label: const Text('数据统计'),
+          icon: AnimatedSlide(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOutCubic,
+            offset: _sidebarCollapsed ? const Offset(-0.1, 0) : Offset.zero,
+            child: const Icon(Icons.bar_chart),
+          ),
+          label: _sidebarCollapsed
+              ? const SizedBox.shrink()
+              : const Text('数据统计', maxLines: 1, overflow: TextOverflow.ellipsis),
           onPress: () {
             _showStatisticsDialog(context);
           },
@@ -1078,35 +1192,58 @@ Widget _buildSidebarHeader(BuildContext context) {
 
   Widget _buildSettingsSection(BuildContext context) {
     return FSidebarGroup(
-      label: Row(
-        children: [
-          Icon(
-            FIcons.settings,
-            size: 16,
-            color: Theme.of(context).colorScheme.secondary,
+      label: _sidebarCollapsed
+        ? const SizedBox.shrink()
+        : Row(
+            children: [
+              AnimatedSlide(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeInOutCubic,
+                offset: _sidebarCollapsed ? const Offset(-0.1, 0) : Offset.zero,
+                child: Icon(
+                  FIcons.settings,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.secondary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '设置与工具',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.secondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Text(
-            '设置与工具',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.secondary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
       children: [
         FSidebarItem(
-          icon: const Icon(FIcons.clock),
-          label: const Text('历史记录'),
+          icon: AnimatedSlide(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOutCubic,
+            offset: _sidebarCollapsed ? const Offset(-0.1, 0) : Offset.zero,
+            child: const Icon(FIcons.clock),
+          ),
+          label: _sidebarCollapsed
+              ? const SizedBox.shrink()
+              : const Text('历史记录', maxLines: 1, overflow: TextOverflow.ellipsis),
           selected: _currentTabIndex == 1,
           onPress: () {
             handleTabChange(1);
           },
         ),
         FSidebarItem(
-          icon: const Icon(FIcons.settings),
-          label: const Text('软件设置'),
+          icon: AnimatedSlide(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOutCubic,
+            offset: _sidebarCollapsed ? const Offset(-0.1, 0) : Offset.zero,
+            child: const Icon(FIcons.settings),
+          ),
+          label: _sidebarCollapsed
+              ? const SizedBox.shrink()
+              : const Text('软件设置', maxLines: 1, overflow: TextOverflow.ellipsis),
           selected: _currentTabIndex == 2,
           onPress: () {
             handleTabChange(2);

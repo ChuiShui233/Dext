@@ -59,7 +59,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
   List<SurveyResult> _results = [];
   List<Question> _questions = [];
   bool _isLoading = true;
-  bool _isBackgroundLoading = true;
+  bool _isBgLoading = true;
   String? _errorMessage;
   Set<int> _selectedResults = {};
   bool _isSelectionMode = false;
@@ -955,7 +955,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
         setState(() {
           _desktopBackground = cached['desktopBackground'];
           _mobileBackground = cached['mobileBackground'];
-          _isBackgroundLoading = false;
+          _isBgLoading = false;
         });
       }
       return;
@@ -978,7 +978,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
       setState(() {
         _desktopBackground = desktop;
         _mobileBackground = mobile;
-        _isBackgroundLoading = false;
+        _isBgLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
@@ -992,7 +992,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
       setState(() {
         _desktopBackground = null;
         _mobileBackground = null;
-        _isBackgroundLoading = false;
+        _isBgLoading = false;
       });
     }
   }
@@ -2253,8 +2253,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
     final isWide = screenWidth > 800;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // 背景加载中，显示加载动画
-    if (_isBackgroundLoading) {
+    if (_isBgLoading) {
       return Scaffold(
         body: Container(
           decoration: BoxDecoration(

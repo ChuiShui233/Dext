@@ -15,8 +15,9 @@ import '../widgets/crop_image_dialog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'account_security_page.dart';
 import '../components/loading_indicator.dart';
-import '../widgets/top_safe_spacer.dart';
 import 'settings/general_settings_page.dart';
+import 'package:provider/provider.dart';
+import '../providers/user_info_provider.dart';
 
 class HomeSettingsContent extends StatefulWidget {
   final VoidCallback onLogout;
@@ -53,7 +54,19 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
   @override
   void initState() {
     super.initState();
-    _fetchUserData();
+    // 若全局已有用户信息，优先使用，避免重复请求
+    // 注意：此处不能直接在initState使用context.watch，使用read即可
+    final existing = mounted ? context.read<UserInfoProvider>().user : null;
+    if (existing != null) {
+      _currentUser = existing;
+    } else {
+      _fetchUserData();
+    }
+    // 从设置服务加载桌面侧栏宽度
+    try {
+      final w = SettingsService().settingsPanelWidth;
+      _settingsPanelWidth = w.clamp(_settingsPanelMinWidth, _settingsPanelMaxWidth);
+    } catch (_) {}
     _loadAppVersion();
   }
   Future<void> _loadAppVersion() async {
@@ -84,6 +97,10 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
         });
 
         widget.userNotifier?.value = user;
+        // 同步到全局 Provider
+        if (mounted) {
+          context.read<UserInfoProvider>().setUser(user);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -154,6 +171,10 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
           });
           
           widget.userNotifier?.value = _currentUser;
+          // 同步到全局 Provider
+          if (mounted) {
+            context.read<UserInfoProvider>().updateUser((old) => old.copyWith(avatarUrl: avatarUrl));
+          }
         }
 
         if (mounted) {
@@ -258,6 +279,10 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
                   await _fetchUserData();
                   
                   widget.userNotifier?.value = _currentUser;
+                  // 同步到全局 Provider
+                  if (context.mounted) {
+                    context.read<UserInfoProvider>().updateUser((old) => old.copyWith(username: newUsername));
+                  }
                   
                   if (context.mounted) {
                     Navigator.of(context).pop();
@@ -331,27 +356,35 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
               ),
             )
           : Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Container(
                   width: _settingsPanelWidth,
+                  height: double.infinity,
                   color: theme.colorScheme.surface,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 8),
-                        _buildUserInfoCard(theme),
-                        const SizedBox(height: 12),
-                        _buildClientSettingsCard(context, theme),
-                        const SizedBox(height: 8),
-                        _buildAccountCard(context, theme),
-                        const SizedBox(height: 8),
-                        _buildAppearanceEffectsCard(context),
-                        const SizedBox(height: 8),
-                        _buildAppInfoCard(context, theme),
-                      ],
-                    ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                          child: Column(
+                            children: [
+                              const SizedBox(height: 8),
+                              _buildUserInfoCard(theme),
+                              const SizedBox(height: 12),
+                              _buildClientSettingsCard(context, theme),
+                              const SizedBox(height: 8),
+                              _buildAccountCard(context, theme),
+                              const SizedBox(height: 8),
+                              _buildAppearanceEffectsCard(context),
+                              const SizedBox(height: 8),
+                              _buildAppInfoCard(context, theme),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
                 MouseRegion(
@@ -363,6 +396,8 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
                         _settingsPanelWidth = (_settingsPanelWidth + details.delta.dx)
                             .clamp(_settingsPanelMinWidth, _settingsPanelMaxWidth);
                       });
+                      // 持久化保存
+                      SettingsService().setSettingsPanelWidth(_settingsPanelWidth);
                     },
                     child: SizedBox(
                       width: 8,
@@ -761,6 +796,14 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
         
         // 恢复毛玻璃卡片为开启
         await settings.setGlassCardEnabled(true);
+
+        // 恢复桌面模式左侧设置面板宽度为默认 420px
+        await settings.setSettingsPanelWidth(420.0);
+        if (mounted) {
+          setState(() {
+            _settingsPanelWidth = 420.0.clamp(_settingsPanelMinWidth, _settingsPanelMaxWidth);
+          });
+        }
         
         if (mounted && localContext.mounted) {
           setState(() {}); // 刷新UI

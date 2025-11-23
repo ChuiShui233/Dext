@@ -38,7 +38,7 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
   late final SurveyRuntimeController _runtime;
   final Map<String, bool> _optionStates = {};
   final Map<int, double?> _hoverRatings = {};
-  bool _backgroundLoaded = false;
+  bool _bgReady = false;
 
   @override
   void initState() {
@@ -65,7 +65,7 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
       
       if (!mounted) return;
       setState(() {
-        _backgroundLoaded = true;
+        _bgReady = true;
       });
     } catch (e) {
       debugPrint('获取问卷背景失败: $e');
@@ -73,7 +73,7 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
       setState(() {
         _desktopBackground = null;
         _mobileBackground = null;
-        _backgroundLoaded = true;
+        _bgReady = true;
       });
     }
   }
@@ -89,7 +89,6 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
     
     try {
       final imageProvider = NetworkImage(toAbsoluteUrl(backgroundUrl));
-      // 使用Completer等待图片真正加载完成
       final completer = Completer<void>();
       final ImageStream stream = imageProvider.resolve(ImageConfiguration(
         devicePixelRatio: MediaQuery.of(context).devicePixelRatio,
@@ -98,12 +97,10 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
       late ImageStreamListener listener;
       listener = ImageStreamListener(
         (ImageInfo info, bool synchronousCall) {
-          // 图片加载完成
           completer.complete();
           stream.removeListener(listener);
         },
         onError: (exception, stackTrace) {
-          // 加载失败也继续
           if (kDebugMode) {
             print('背景图片加载失败: $exception');
           }
@@ -114,7 +111,6 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
       
       stream.addListener(listener);
       
-      // 等待图片加载完成，最多等待3秒
       await completer.future.timeout(
         const Duration(seconds: 3),
         onTimeout: () {
@@ -147,7 +143,7 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
                 ? TweenAnimationBuilder<double>(
                     duration: const Duration(milliseconds: 800),
                     curve: Curves.easeOutCubic,
-                    tween: Tween(begin: _backgroundLoaded ? 0.0 : 1.0, end: 0.0),
+                    tween: Tween(begin: _bgReady ? 0.0 : 1.0, end: 0.0),
                     builder: (context, value, child) {
                       return Transform.translate(
                         offset: Offset(MediaQuery.of(context).size.width * value, 0),

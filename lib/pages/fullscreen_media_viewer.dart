@@ -104,8 +104,6 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
     
     _entryAnimationController.forward();
-
-    // _hideControlsAfterDelay();
   }
 
   @override
@@ -126,10 +124,6 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
     if (_videoPlayerKey.currentState != null) {
       _videoPlayerKey.currentState!.updateControlsVisibility(_showControls);
     }
-    
-    // if (_showControls) {
-    //   _hideControlsAfterDelay();
-    // }
   }
 
   String get _currentMediaUrl {

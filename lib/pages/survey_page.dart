@@ -37,7 +37,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   List<Survey> _surveys = [];
   Map<int, Project> _projects = {};
   bool _isLoading = true;
-  bool _projectsLoaded = false; // 首次加载后缓存项目，避免每次分页请求项目列表
+  bool _hasLoadedProjects = false; // 首次加载后缓存项目，避免每次分页请求项目列表
   String _searchQuery = '';
   int? _selectedSurveyType;
   final int _pageSize = 5;
@@ -57,7 +57,7 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
   
   Timer? _autoRefreshTimer;
   Timer? _countdownTimer;
-  final Set<int> _expiryNotified = {};
+  final Set<int> _notifiedExpiryIds = {};
 
   @override
   void initState() {
@@ -132,10 +132,10 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
     final now = DateTime.now();
     for (final s in _surveys) {
       final dl = _parseDeadline(s.deadline);
-      if (dl == null) continue; // 无截止时间
+      if (dl == null) continue;
       if (now.isAfter(dl) || now.isAtSameMomentAs(dl)) {
-        if (!_expiryNotified.contains(s.id)) {
-          _expiryNotified.add(s.id);
+        if (!_notifiedExpiryIds.contains(s.id)) {
+          _notifiedExpiryIds.add(s.id);
           if (mounted) {
             showFToast(
               context: context,
@@ -242,12 +242,12 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
       );
       // 仅在首次或强制刷新时加载全部项目，避免分页项目接口导致缺失
       if (refreshProjects) {
-        _projectsLoaded = false;
+        _hasLoadedProjects = false;
       }
-      if (!_projectsLoaded) {
+      if (!_hasLoadedProjects) {
         final allProjects = await _apiService.getProjects();
         _projects = {for (var p in allProjects) p.id: p};
-        _projectsLoaded = true;
+        _hasLoadedProjects = true;
       }
       
       loadingTimer?.cancel();
@@ -290,11 +290,11 @@ class SurveyPageState extends State<SurveyPage> with WidgetsBindingObserver, Tic
             skipCache: false,
           );
           // 同时加载项目缓存数据
-          if (!_projectsLoaded) {
+          if (!_hasLoadedProjects) {
             try {
               final allProjects = await _apiService.getProjects();
               _projects = {for (var p in allProjects) p.id: p};
-              _projectsLoaded = true;
+              _hasLoadedProjects = true;
             } catch (_) {
               // 项目数据加载失败，继续显示问卷
             }

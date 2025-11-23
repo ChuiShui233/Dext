@@ -33,6 +33,8 @@ import 'widgets/window_caption.dart';
 
 import 'theme/zincx_theme.dart';
 import 'theme/theme.dart';
+import 'package:provider/provider.dart';
+import 'providers/user_info_provider.dart';
 
 bool get isDesktop {
   if (kIsWeb) return false;
@@ -387,10 +389,10 @@ class _YuMeng233AppState extends State<YuMeng233App>
   }
 
   // 全局401处理：防抖，清理并回到登录
-  bool _handlingUnauthorized = false;
+  bool _isHandlingUnauthorized = false;
   Future<void> _handleUnauthorized401() async {
-    if (_handlingUnauthorized) return;
-    _handlingUnauthorized = true;
+    if (_isHandlingUnauthorized) return;
+    _isHandlingUnauthorized = true;
     try {
       // 只有在用户已经登录的情况下才处理401（登录过期）
       final hasToken = _token != null && _tokenExpiry != null;
@@ -422,7 +424,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
       }
     } finally {
       Future.delayed(const Duration(milliseconds: 800), () {
-        _handlingUnauthorized = false;
+        _isHandlingUnauthorized = false;
       });
     }
   }
@@ -544,7 +546,9 @@ class _YuMeng233AppState extends State<YuMeng233App>
         child: Layout(
           child: FTheme(
             data: _isDark ? zincDark : zincLight,
-            child: MaterialApp(
+            child: ChangeNotifierProvider<UserInfoProvider>(
+              create: (_) => UserInfoProvider(),
+              child: MaterialApp(
               navigatorKey: appNavigatorKey,
               title: 'DEXT',
               theme: lightTheme,
@@ -577,6 +581,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
                   ),
                 );
               },
+              ),
             ),
           ),
         ),

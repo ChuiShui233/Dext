@@ -26,7 +26,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
   bool _loading = false;
   int? _selectedType;
   int _page = 1;
-  final int _pageSize = 10;
+  final int _pageSize = 50;
   int _total = 0;
   List<Map<String, dynamic>> _items = [];
   Timer? _debounce;
@@ -201,8 +201,6 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
         const TopSafeSpacer(desktop: 20, web: 16, mobile: 8),
         Expanded(
           child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -215,7 +213,6 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
               ),
             ),
           ),
-        ),
         _buildPagination(context),
       ],
     );
@@ -225,19 +222,8 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     
-    return Container(
+    return Padding(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: isDark 
-          ? Colors.white.withValues(alpha: 0.05)
-          : Colors.white.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark 
-            ? Colors.white.withValues(alpha: 0.1)
-            : Colors.black.withValues(alpha: 0.1),
-        ),
-      ),
       child: Row(
         children: [
           Icon(
@@ -276,19 +262,8 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     
-    return Container(
+    return Padding(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: isDark 
-          ? Colors.white.withValues(alpha: 0.05)
-          : Colors.white.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark 
-            ? Colors.white.withValues(alpha: 0.1)
-            : Colors.black.withValues(alpha: 0.1),
-        ),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -473,110 +448,182 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     final surveyType = (item['surveyType'] as num?)?.toInt() ?? 0;
     final surveyStatus = (item['surveyStatus'] as num?)?.toInt() ?? 0;
     
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: isDark 
-            ? Colors.white.withValues(alpha: 0.05)
-            : Colors.white.withValues(alpha: 0.6),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark 
-              ? Colors.white.withValues(alpha: 0.1)
-              : Colors.black.withValues(alpha: 0.1),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    final String title = (item['surveyName'] ?? '') as String;
+    final String description = (item['description'] ?? '') as String;
+    final String creator = (item['creator'] ?? '') as String;
+    final String submitTime = (item['submitTime'] ?? '') as String;
+
+    return Dismissible(
+      key: ValueKey('history_${answerId ?? index}_${surveyId ?? 'x'}'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        color: Colors.red.withValues(alpha: 0.9),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            Row(
+            Icon(Icons.delete_forever, color: Colors.white),
+            SizedBox(width: 6),
+            Text('删除', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+      confirmDismiss: (direction) async {
+        bool animateIn = false;
+        bool isClosing = false;
+        const animationDuration = Duration(milliseconds: 200);
+        return await showDialog<bool>(
+          context: context,
+          barrierDismissible: true,
+          builder: (dialogContext) {
+            return StatefulBuilder(
+              builder: (context, setState) {
+                if (!animateIn && !isClosing) {
+                  Future.microtask(() {
+                    if (dialogContext.mounted) setState(() => animateIn = true);
+                  });
+                }
+                Future<void> close([bool? result]) async {
+                  if (!dialogContext.mounted) return;
+                  setState(() { animateIn = false; isClosing = true; });
+                  await Future.delayed(animationDuration);
+                  if (dialogContext.mounted) Navigator.of(dialogContext).pop(result);
+                }
+                return AnimatedOpacity(
+                  opacity: animateIn ? 1.0 : 0.0,
+                  duration: animationDuration,
+                  child: Center(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: FDialog(
+                        title: const Text('确认删除'),
+                        body: const Text('确定要删除该记录吗？此操作不可撤销。'),
+                        actions: [
+                          FButton(
+                            style: context.theme.buttonStyles.ghost.call,
+                            onPress: () => close(false),
+                            child: const Text('取消'),
+                          ),
+                          FButton(
+                            style: context.theme.buttonStyles.primary.call,
+                            onPress: () => close(true),
+                            child: const Text('删除'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ) ?? false;
+      },
+      child: Column(
+        children: [
+          ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            leading: Icon(
+              FIcons.fileText,
+              color: theme.colorScheme.primary,
+            ),
+            title: Row(
               children: [
                 Expanded(
                   child: Text(
-                    (item['surveyName'] ?? '') as String,
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
                       color: isDark ? Colors.white : Colors.black87,
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
                 _buildStatusBadge(surveyStatus, isDark),
               ],
             ),
-            const SizedBox(height: 8),
-            if ((item['description'] ?? '').toString().isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  (item['description'] ?? '') as String,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isDark ? Colors.white.withValues(alpha: 0.7) : Colors.black54,
-                    height: 1.4,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 16,
-              runSpacing: 8,
-              children: [
-                _buildInfoChip(
-                  FIcons.tag,
-                  '类型',
-                  _typeText(surveyType),
-                  isDark,
-                ),
-                _buildInfoChip(
-                  FIcons.user,
-                  '创建人',
-                  (item['creator'] ?? '') as String,
-                  isDark,
-                ),
-                _buildInfoChip(
-                  FIcons.clock,
-                  '提交时间',
-                  (item['submitTime'] ?? '') as String,
-                  isDark,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                SizedBox(
-                  child: FButton(
-                    onPress: answerId == null ? null : () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => SubmissionDetailPage(
-                            apiService: widget.apiService,
-                            answerId: answerId,
-                            surveyId: surveyId,
-                          ),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (description.isNotEmpty)
+                    Text(
+                      description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.3,
+                        color: isDark ? Colors.white70 : Colors.black54,
+                      ),
+                    ),
+                  const SizedBox(height: 6),
+                  DefaultTextStyle(
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                    child: Wrap(
+                      spacing: 12,
+                      runSpacing: 4,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(FIcons.tag, size: 12),
+                            const SizedBox(width: 4),
+                            Text(_typeText(surveyType)),
+                          ],
                         ),
-                      );
-                    },
-                    child: const Text('查看详细'),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(FIcons.user, size: 12),
+                            const SizedBox(width: 4),
+                            Text(creator),
+                          ],
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(FIcons.clock, size: 12),
+                            const SizedBox(width: 4),
+                            Text(submitTime),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ],
-        ),
+            onTap: answerId == null
+                ? null
+                : () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => SubmissionDetailPage(
+                          apiService: widget.apiService,
+                          answerId: answerId,
+                          surveyId: surveyId,
+                        ),
+                      ),
+                    );
+                  },
+          ),
+          const Divider(height: 1),
+        ],
       ),
     );
   }
 
   Widget _buildPagination(BuildContext context) {
     final totalPages = (_total / _pageSize).ceil();
-    final bool isCompactWidth = MediaQuery.of(context).size.width < 1025;
 
     return Column(
       children: [
@@ -586,10 +633,9 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
           totalPages: totalPages,
           totalItems: _total,
           onPageChange: _handlePageChange,
-          margin: const EdgeInsets.fromLTRB(0, 16, 0, 16),
-          padding: const EdgeInsets.all(16.0),
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
         ),
-        if (isCompactWidth) const SizedBox(height: 40),
       ],
     );
   }
@@ -637,46 +683,4 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     );
   }
 
-  Widget _buildInfoChip(IconData icon, String label, String value, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: isDark 
-          ? Colors.white.withValues(alpha: 0.05)
-          : Colors.black.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isDark 
-            ? Colors.white.withValues(alpha: 0.1)
-            : Colors.black.withValues(alpha: 0.1),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 14,
-            color: isDark ? Colors.white60 : Colors.black54,
-          ),
-          const SizedBox(width: 6),
-          Text(
-            '$label: ',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white60 : Colors.black54,
-            ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 12,
-              color: isDark ? Colors.white.withValues(alpha: 0.8) : Colors.black87,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

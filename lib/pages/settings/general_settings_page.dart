@@ -7,7 +7,8 @@ import 'package:forui/forui.dart';
 
 import '../../components/loading_indicator.dart';
 import '../../services/settings_service.dart';
-import '../frame_page.dart' show mobileSidebarOpen;
+import '../frame_page.dart';
+import '../../widgets/top_safe_spacer.dart';
 
 class GeneralSettingsPage extends StatelessWidget {
   final Function(ThemeMode) onThemeModeChange;
@@ -36,214 +37,243 @@ class GeneralSettingsPage extends StatelessWidget {
     final bool isDesktopLayout = MediaQuery.of(context).size.width >= 1025;
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      appBar: isDesktopLayout
-          ? null
-          : AppBar(
-              title: const Text('通用'),
-              centerTitle: true,
-              backgroundColor: theme.colorScheme.surface,
-              surfaceTintColor: theme.colorScheme.surface,
-              elevation: 0,
-              scrolledUnderElevation: 0,
-            ),
-      body: FutureBuilder<Map<String, dynamic>>(
-        future: _loadSettings(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: LoadingIndicator.page());
-          }
-
-          final settings = snapshot.data!;
-          final currentEdgeDragWidth = settings['edge_drag_width'] as double;
-          final currentDpiScale = (settings['dpi_scale'] as double);
-          final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
-
-          final List<FItem> items = [];
-
-          // 主题模式
-          items.add(
-            FItem(
-              title: const Text('主题模式'),
-              details: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      () {
-                        final mode = SettingsService().themeMode;
-                        return '当前: ${mode == 'light' ? '浅色模式' : mode == 'dark' ? '深色模式' : '跟随系统'}';
-                      }(),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: theme.colorScheme.primary.withValues(alpha: 0.7),
-                      ),
-                    ),
-                  ),
-                  FSelect<String>(
-                    hint: '选择主题模式',
-                    items: const {
-                      '跟随系统': '跟随系统',
-                      '浅色模式': '浅色模式',
-                      '深色模式': '深色模式',
-                    },
-                    onChange: (mode) async {
-                      if (mode == null) return;
-                      String pref;
-                      ThemeMode themeMode;
-                      switch (mode) {
-                        case '浅色模式':
-                          themeMode = ThemeMode.light;
-                          pref = 'light';
-                          break;
-                        case '深色模式':
-                          themeMode = ThemeMode.dark;
-                          pref = 'dark';
-                          break;
-                        case '跟随系统':
-                        default:
-                          themeMode = ThemeMode.system;
-                          pref = 'system';
+      body: Stack(
+        children: [
+          // 纯色背景
+          Container(color: theme.colorScheme.surface),
+          Column(
+            children: [
+              const TopSafeSpacer(),
+              FHeader.nested(
+                title: Row(
+                  children: const [
+                    SizedBox(width: 16),
+                    Text('通用'),
+                  ],
+                ),
+                prefixes: [
+                  FHeaderAction(
+                    icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+                    onPress: () {
+                      final nav = Navigator.maybeOf(context);
+                      if (nav != null && nav.canPop()) {
+                        nav.pop();
+                        return;
                       }
-                      await SettingsService().setThemeMode(pref);
-                      onThemeModeChange(themeMode);
+                      final frameState = context.findAncestorStateOfType<FramePageState>();
+                      if (frameState != null) {
+                        frameState.handleTabChange(0);
+                        return;
+                      }
+                      Navigator.of(context).maybePop();
                     },
                   ),
                 ],
               ),
-            ),
-          );
+              Expanded(
+                child: FutureBuilder<Map<String, dynamic>>(
+                  future: _loadSettings(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: LoadingIndicator.page());
+                    }
 
-          // 侧滑触发范围
-          items.add(
-            FItem(
-              title: const Text('侧滑触发范围'),
-              details: _EdgeDragWidgetCard(
-                key: ValueKey(currentEdgeDragWidth),
-                initialValue: currentEdgeDragWidth,
-                theme: theme,
-                onChanged: (v) => SettingsService().setEdgeDragWidth(v),
-              ),
-            ),
-          );
+                    final settings = snapshot.data!;
+                    final currentEdgeDragWidth = settings['edge_drag_width'] as double;
+                    final currentDpiScale = (settings['dpi_scale'] as double);
+                    final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
 
-          // DPI 缩放
-          items.add(
-            FItem(
-              title: const Text('DPI 缩放'),
-              details: _DpiScaleCard(
-                initialValue: currentDpiScale,
-                theme: theme,
-                onChanged: (v) {
-                  SettingsService().setDpiScale(v);
-                  onDpiScaleChange?.call(v);
-                },
-              ),
-            ),
-          );
+                    final List<FItem> items = [];
 
-          // 窗口关闭行为（桌面端）
-          if (isDesktop) {
-            final currentAction = settings['window_close_default_action'] as String;
-            String currentDisplayValue;
-            switch (currentAction) {
-              case 'hide':
-                currentDisplayValue = '隐藏到托盘';
-                break;
-              case 'close':
-                currentDisplayValue = '直接关闭';
-                break;
-              case 'ask':
-              default:
-                currentDisplayValue = '每次询问';
-            }
-            items.add(
-              FItem(
-                title: const Text('窗口关闭行为'),
-                details: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '当前: $currentDisplayValue',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: theme.colorScheme.primary.withValues(alpha: 0.7),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    FSelect<String>(
-                      hint: '选择关闭行为',
-                      items: const {
-                        '每次询问': '每次询问',
-                        '隐藏到托盘': '隐藏到托盘',
-                        '直接关闭': '直接关闭',
-                      },
-                      onChange: (displayValue) async {
-                        if (displayValue == null) return;
-                        String actionValue;
-                        switch (displayValue) {
-                          case '每次询问':
-                            actionValue = 'ask';
-                            break;
-                          case '隐藏到托盘':
-                            actionValue = 'hide';
-                            break;
-                          case '直接关闭':
-                            actionValue = 'close';
-                            break;
-                          default:
-                            actionValue = 'ask';
-                        }
-                        final s = SettingsService();
-                        if (actionValue == 'ask') {
-                          await s.setWindowCloseDontAsk(false);
-                          await s.setWindowCloseDefaultAction('ask');
-                        } else {
-                          await s.setWindowCloseDontAsk(true);
-                          await s.setWindowCloseDefaultAction(actionValue);
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          // 页面主体
-          return SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(isDesktopLayout ? 12 : 16, 12, isDesktopLayout ? 12 : 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.tune_outlined, size: 20, color: theme.colorScheme.primary),
-                      const SizedBox(width: 8),
-                      Text(
-                        '通用',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSurface,
+                    // 主题模式
+                    items.add(
+                      FItem(
+                        title: const Text('主题模式'),
+                        details: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Text(
+                                () {
+                                  final mode = SettingsService().themeMode;
+                                  return '当前: ${mode == 'light' ? '浅色模式' : mode == 'dark' ? '深色模式' : '跟随系统'}';
+                                }(),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: theme.colorScheme.primary.withValues(alpha: 0.7),
+                                ),
+                              ),
+                            ),
+                            FSelect<String>(
+                              hint: '选择主题模式',
+                              items: const {
+                                '跟随系统': '跟随系统',
+                                '浅色模式': '浅色模式',
+                                '深色模式': '深色模式',
+                              },
+                              onChange: (mode) async {
+                                if (mode == null) return;
+                                String pref;
+                                ThemeMode themeMode;
+                                switch (mode) {
+                                  case '浅色模式':
+                                    themeMode = ThemeMode.light;
+                                    pref = 'light';
+                                    break;
+                                  case '深色模式':
+                                    themeMode = ThemeMode.dark;
+                                    pref = 'dark';
+                                    break;
+                                  case '跟随系统':
+                                  default:
+                                    themeMode = ThemeMode.system;
+                                    pref = 'system';
+                                }
+                                await SettingsService().setThemeMode(pref);
+                                onThemeModeChange(themeMode);
+                              },
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
+                    );
+
+                    // 侧滑触发范围
+                    items.add(
+                      FItem(
+                        title: const Text('侧滑触发范围'),
+                        details: _EdgeDragWidgetCard(
+                          key: ValueKey(currentEdgeDragWidth),
+                          initialValue: currentEdgeDragWidth,
+                          theme: theme,
+                          onChanged: (v) => SettingsService().setEdgeDragWidth(v),
+                        ),
+                      ),
+                    );
+
+                    // DPI 缩放
+                    items.add(
+                      FItem(
+                        title: const Text('DPI 缩放'),
+                        details: _DpiScaleCard(
+                          initialValue: currentDpiScale,
+                          theme: theme,
+                          onChanged: (v) {
+                            SettingsService().setDpiScale(v);
+                            onDpiScaleChange?.call(v);
+                          },
+                        ),
+                      ),
+                    );
+
+                    // 窗口关闭行为（桌面端）
+                    if (isDesktop) {
+                      final currentAction = settings['window_close_default_action'] as String;
+                      String currentDisplayValue;
+                      switch (currentAction) {
+                        case 'hide':
+                          currentDisplayValue = '隐藏到托盘';
+                          break;
+                        case 'close':
+                          currentDisplayValue = '直接关闭';
+                          break;
+                        case 'ask':
+                        default:
+                          currentDisplayValue = '每次询问';
+                      }
+                      items.add(
+                        FItem(
+                          title: const Text('窗口关闭行为'),
+                          details: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '当前: $currentDisplayValue',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: theme.colorScheme.primary.withValues(alpha: 0.7),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              FSelect<String>(
+                                hint: '选择关闭行为',
+                                items: const {
+                                  '每次询问': '每次询问',
+                                  '隐藏到托盘': '隐藏到托盘',
+                                  '直接关闭': '直接关闭',
+                                },
+                                onChange: (displayValue) async {
+                                  if (displayValue == null) return;
+                                  String actionValue;
+                                  switch (displayValue) {
+                                    case '每次询问':
+                                      actionValue = 'ask';
+                                      break;
+                                    case '隐藏到托盘':
+                                      actionValue = 'hide';
+                                      break;
+                                    case '直接关闭':
+                                      actionValue = 'close';
+                                      break;
+                                    default:
+                                      actionValue = 'ask';
+                                  }
+                                  final s = SettingsService();
+                                  if (actionValue == 'ask') {
+                                    await s.setWindowCloseDontAsk(false);
+                                    await s.setWindowCloseDefaultAction('ask');
+                                  } else {
+                                    await s.setWindowCloseDontAsk(true);
+                                    await s.setWindowCloseDefaultAction(actionValue);
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+
+                    // 页面主体
+                    return SingleChildScrollView(
+                      padding: EdgeInsets.fromLTRB(isDesktopLayout ? 12 : 16, 12, isDesktopLayout ? 12 : 16, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                            child: Row(
+                              children: [
+                                Icon(Icons.tune_outlined, size: 20, color: theme.colorScheme.primary),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '通用',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.colorScheme.onSurface,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: isDesktopLayout ? 4 : 8),
+                            child: FItemGroup(
+                              divider: FItemDivider.indented,
+                              children: items,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: isDesktopLayout ? 4 : 8),
-                  child: FItemGroup(
-                    divider: FItemDivider.indented,
-                    children: items,
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -274,6 +304,8 @@ class _EdgeDragWidgetCardState extends State<_EdgeDragWidgetCard> {
   final ValueNotifier<double> _overlayWidth = ValueNotifier<double>(0);
   final ValueNotifier<double> _overlayOpacity = ValueNotifier<double>(0);
   Timer? _deferredShowTimer;
+  // 拖动结束后自动隐藏
+  Timer? _autoHideTimer;
 
   @override
   void initState() {
@@ -284,12 +316,8 @@ class _EdgeDragWidgetCardState extends State<_EdgeDragWidgetCard> {
         max: (_currentValue - 16) / 48,
       ),
     );
-    // 页面进入时即展示预览（手机端持久显示，直到页面销毁）
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _showGlobalPreview(_currentValue);
-      }
-    });
+    // 监听移动端侧栏状态变化：打开时立即隐藏预览
+    mobileSidebarOpen.addListener(_onMobileSidebarChanged);
   }
 
   @override
@@ -298,6 +326,8 @@ class _EdgeDragWidgetCardState extends State<_EdgeDragWidgetCard> {
     _removeOverlay();
     _overlayWidth.dispose();
     _overlayOpacity.dispose();
+    _autoHideTimer?.cancel();
+    mobileSidebarOpen.removeListener(_onMobileSidebarChanged);
     super.dispose();
   }
 
@@ -397,6 +427,19 @@ class _EdgeDragWidgetCardState extends State<_EdgeDragWidgetCard> {
     });
   }
 
+  void _onMobileSidebarChanged() {
+    if (!mounted) return;
+    if (mobileSidebarOpen.value) {
+      // 侧栏打开：立即隐藏并移除预览
+      _overlayOpacity.value = 0;
+      _deferredShowTimer?.cancel();
+      _autoHideTimer?.cancel();
+      Future.delayed(const Duration(milliseconds: 120), () {
+        if (mounted) _removeOverlay();
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -445,6 +488,15 @@ class _EdgeDragWidgetCardState extends State<_EdgeDragWidgetCard> {
                 });
                 _showGlobalPreview(pixels);
                 widget.onChanged(pixels);
+                // 停止拖动后自动隐藏预览
+                _autoHideTimer?.cancel();
+                _autoHideTimer = Timer(const Duration(milliseconds: 800), () {
+                  if (!mounted) return;
+                  _overlayOpacity.value = 0;
+                  Future.delayed(const Duration(milliseconds: 150), () {
+                    if (mounted) _removeOverlay();
+                  });
+                });
               });
             },
             marks: const [

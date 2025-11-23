@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui';
 import 'package:dext/services/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
@@ -67,12 +66,19 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
   
   Map<String, int>? _cachedAnalytics;
   bool _isLoadingAnalytics = false;
+  bool _showMobileNav = false; // 控制移动端导航张开动画
   
   @override
   void initState() {
     super.initState();
     _loadCachedAnalytics();
     _loadAnalytics();
+    // 等首帧完成后触发展开动画
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() => _showMobileNav = true);
+      }
+    });
   }
   
   Future<void> _loadCachedAnalytics() async {
@@ -133,64 +139,20 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
     }
   }
 
-  Widget _buildNavItem(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required int index,
-    required bool isSelected,
-  }) {
-    return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => widget.onTabChanged?.call(index),
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  icon,
-                  size: 24,
-                  color: isSelected
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                    color: isSelected
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // 必须调用以支持 AutomaticKeepAliveClientMixin
+    super.build(context);
     showSidebarInDrawer.resolve(context);
     final bool showDesktopLayout = showSidebarInline.resolve(context);
     final EdgeInsets padding = contentPadding.resolve(context);
 
-    final totals = _cachedAnalytics ?? const {'totalViews': 0, 'totalSubmits': 0, 'totalSurveys': 0, 'activeSurveys': 0};
+    final overview = _cachedAnalytics ?? const {'totalViews': 0, 'totalSubmits': 0, 'totalSurveys': 0, 'activeSurveys': 0};
     Widget dashboardContent = HomeMainContent(
-      projectCount: totals['totalSurveys'] ?? 0,
-      surveyCount: totals['activeSurveys'] ?? 0,
-      totalViews: totals['totalViews'] ?? 0,
-      totalSubmits: totals['totalSubmits'] ?? 0,
+      projectCount: overview['totalSurveys'] ?? 0,
+      surveyCount: overview['activeSurveys'] ?? 0,
+      totalViews: overview['totalViews'] ?? 0,
+      totalSubmits: overview['totalSubmits'] ?? 0,
       onProjectTap: widget.onProjectTap,
       onSurveyTap: widget.onSurveyTap,
       fetchTrend: (range) => widget.apiService.getSubmitTrend(range: range),
@@ -214,13 +176,16 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
     return Scaffold(
       body: Stack(
         children: [
-          const FrostedGlassBackground(
-            count: 8,
-            blurSigma: 120,
-            blobOpacity: 0.5,
-            animated: true,
-            vignette: true,
-          ),
+          if (widget.currentIndex == 2)
+            Container(color: Theme.of(context).colorScheme.surface)
+          else
+            const FrostedGlassBackground(
+              count: 8,
+              blurSigma: 120,
+              blobOpacity: 0.5,
+              animated: true,
+              vignette: true,
+            ),
           Scaffold(
             backgroundColor: Colors.transparent,
             extendBody: true,
@@ -240,83 +205,67 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
                         child: current,
                       );
                 
-                // 桌面端不显示底部导航栏
                 if (showDesktopLayout) {
                   return contentWidget;
                 }
                 
-                // 手机端：使用覆盖式底部导航栏
-                return Stack(
-                  children: [
-                    // 主内容（全屏显示，可以滚动到导航栏后面）
-                    contentWidget,
-                    
-                    // 覆盖式导航栏
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        height: 68 + MediaQuery.of(context).padding.bottom,
-                        padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
-                        child: ClipRRect(
-                          borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(24),
-                            topRight: Radius.circular(24),
-                          ),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                            child: Container(
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.6),
-                                  borderRadius: const BorderRadius.only(
-                                    topLeft: Radius.circular(24),
-                                    topRight: Radius.circular(24),
-                                  ),
-                                  border: Border.all(
-                                    color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-                                    width: 1,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.15),
-                                      blurRadius: 40,
-                                      offset: const Offset(0, -6),
-                                    ),
-                                  ],
-                                ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                children: [
-                                  _buildNavItem(
-                                    context,
-                                    icon: FIcons.house,
-                                    label: '主页',
-                                    index: 0,
-                                    isSelected: widget.currentIndex == 0,
-                                  ),
-                                  _buildNavItem(
-                                    context,
-                                    icon: FIcons.clock,
-                                    label: '历史',
-                                    index: 1,
-                                    isSelected: widget.currentIndex == 1,
-                                  ),
-                                  _buildNavItem(
-                                    context,
-                                    icon: FIcons.settings,
-                                    label: '设置',
-                                    index: 2,
-                                    isSelected: widget.currentIndex == 2,
-                                  ),
-                                ],
-                              ),
-                            ),
+                final double safeBottom = MediaQuery.of(context).padding.bottom;
+                final double fullHeight = 64 + safeBottom; // 导航栏期望高度
+                return Scaffold(
+                  backgroundColor: Colors.transparent,
+                  body: contentWidget,
+                  bottomNavigationBar: TweenAnimationBuilder<double>(
+                    tween: Tween<double>(begin: 0, end: _showMobileNav ? fullHeight : 0),
+                    duration: const Duration(milliseconds: 320),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, value, child) {
+                      final double t = (value / (fullHeight == 0 ? 1 : fullHeight)).clamp(0.0, 1.0);
+                      return SizedBox(
+                        height: value,
+                        child: Opacity(
+                          opacity: t,
+                          child: Transform.translate(
+                            offset: Offset(0, (1 - t) * 12),
+                            child: child,
                           ),
                         ),
+                      );
+                    },
+                    child: NavigationBarTheme(
+                      data: NavigationBarThemeData(
+                        indicatorColor: Theme.of(context).brightness == Brightness.light
+                            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.24)
+                            : Theme.of(context).colorScheme.primary.withValues(alpha: 0.20),
+                        iconTheme: WidgetStateProperty.resolveWith<IconThemeData>((states) {
+                          if (states.contains(WidgetState.selected)) {
+                            return IconThemeData(color: Theme.of(context).colorScheme.primary);
+                          }
+                          return IconThemeData(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6));
+                        }),
+                        labelTextStyle: WidgetStateProperty.resolveWith<TextStyle>((states) {
+                          if (states.contains(WidgetState.selected)) {
+                            return TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            );
+                          }
+                          return TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                            fontWeight: FontWeight.w500,
+                          );
+                        }),
+                      ),
+                      child: NavigationBar(
+                        selectedIndex: widget.currentIndex,
+                        onDestinationSelected: (index) => widget.onTabChanged?.call(index),
+                        destinations: const [
+                          NavigationDestination(icon: Icon(FIcons.house), label: '主页', tooltip: ''),
+                          NavigationDestination(icon: Icon(FIcons.clock), label: '历史', tooltip: ''),
+                          NavigationDestination(icon: Icon(FIcons.settings), label: '设置', tooltip: ''),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 );
               },
             ),

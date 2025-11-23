@@ -9,7 +9,7 @@ class PushService {
   factory PushService() => _instance;
   PushService._internal();
 
-  bool _isInitialized = false;
+  bool _initialized = false;
   String? _clientId;
   String? _deviceToken;
   
@@ -32,7 +32,7 @@ class PushService {
     required String appKey,
     required String appSecret,
   }) async {
-    if (_isInitialized) {
+    if (_initialized) {
       debugPrint('[PushService] 已经初始化，跳过');
       return true;
     }
@@ -44,11 +44,11 @@ class PushService {
         appSecret: appSecret,
       );
       
-      _isInitialized = status;
+      _initialized = status;
       
       if (status) {
         debugPrint('[PushService] 初始化成功');
-        _setupEventHandlers();
+        _setupListeners();
         
         // 检查并请求通知权限
         await _checkAndRequestNotificationPermission();
@@ -64,7 +64,7 @@ class PushService {
   }
 
   /// 设置事件监听
-  void _setupEventHandlers() {
+  void _setupListeners() {
     FlGeTui().addEventHandler(
       // 在线状态变化
       onReceiveOnlineState: (bool? state) {
@@ -120,7 +120,7 @@ class PushService {
 
   /// 绑定别名 (通常用于绑定用户ID)
   Future<void> bindAlias(String alias, {String? sn}) async {
-    if (!_isInitialized) {
+    if (!_initialized) {
       debugPrint('[PushService] SDK未初始化');
       return;
     }
@@ -135,7 +135,7 @@ class PushService {
 
   /// 解绑别名
   Future<void> unbindAlias(String alias, {String? sn}) async {
-    if (!_isInitialized) {
+    if (!_initialized) {
       debugPrint('[PushService] SDK未初始化');
       return;
     }
@@ -150,7 +150,7 @@ class PushService {
 
   /// 设置标签
   Future<void> setTags(List<String> tags, {String? sn}) async {
-    if (!_isInitialized) {
+    if (!_initialized) {
       debugPrint('[PushService] SDK未初始化');
       return;
     }
@@ -165,7 +165,7 @@ class PushService {
 
   /// 启动推送服务
   Future<void> startPush() async {
-    if (!_isInitialized) {
+    if (!_initialized) {
       debugPrint('[PushService] SDK未初始化');
       return;
     }
@@ -180,7 +180,7 @@ class PushService {
 
   /// 停止推送服务
   Future<void> stopPush() async {
-    if (!_isInitialized) {
+    if (!_initialized) {
       debugPrint('[PushService] SDK未初始化');
       return;
     }
@@ -195,7 +195,7 @@ class PushService {
 
   /// 设置应用角标 (iOS)
   Future<void> setBadge(int badge) async {
-    if (!_isInitialized) return;
+    if (!_initialized) return;
     
     try {
       await FlGeTui().setBadge(badge);
@@ -207,7 +207,7 @@ class PushService {
 
   /// 重置角标 (iOS)
   Future<void> resetBadge() async {
-    if (!_isInitialized) return;
+    if (!_initialized) return;
     
     try {
       await FlGeTui().resetBadgeWithIOS();
@@ -264,7 +264,7 @@ class PushService {
 
   /// 检查通知权限是否已开启 (Android)
   Future<bool> checkNotificationPermission() async {
-    if (!_isInitialized) return false;
+    if (!_initialized) return false;
     
     try {
       final isEnabled = await FlGeTui().checkNotificationsEnabledWithAndroid();
@@ -277,7 +277,7 @@ class PushService {
 
   /// 打开通知权限设置页面 (Android)
   Future<void> openNotificationSettings() async {
-    if (!_isInitialized) return;
+    if (!_initialized) return;
     
     try {
       await FlGeTui().openNotificationWithAndroid();
@@ -289,7 +289,7 @@ class PushService {
 
   /// 检查集成配置 (Android)
   Future<void> checkManifest() async {
-    if (!_isInitialized) return;
+    if (!_initialized) return;
     
     try {
       await FlGeTui().checkManifestWithAndroid();
@@ -301,7 +301,7 @@ class PushService {
 
   /// 获取推送服务状态 (Android)
   Future<bool> getPushStatus() async {
-    if (!_isInitialized) return false;
+    if (!_initialized) return false;
     
     try {
       final status = await FlGeTui().getPushStatusWithAndroid();

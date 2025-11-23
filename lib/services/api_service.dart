@@ -62,7 +62,7 @@ class ApiService {
   late final core.PasswordService _passwordService;
   late final core.UserService _userService;
   late final core.CaptchaService _captchaService;
-  // late final core.FileService _fileService;  // NOTE: 现有上传逻辑已在 api_service 中直接实现
+  // 现有上传逻辑已在 ApiService 中直接实现
   late final core.QuestionService _questionService;
   late final core.SurveyStatsService _statsService;
   late final core.CacheService _cacheService;
@@ -88,13 +88,11 @@ class ApiService {
   Stream<Map<String, dynamic>> get dataUpdateStream => _dataUpdateController.stream;
 
   ApiService({this.authToken}) {
-    // Initialize core and sub-services for modularization facade
     _core = core.ApiCore(authToken: authToken);
     _authService = AuthService(_core);
     _projectService = ProjectService(_core);
     _surveyService = SurveyService(_core);
     
-    // Initialize new services with wrapper functions
     _analyticsService = core.AnalyticsService(
       baseUrl: baseUrl,
       httpRequest: (method, url, {onStatus}) => _httpRequest(method, url, onStatus: onStatus),
@@ -161,51 +159,47 @@ class ApiService {
       httpRequest: (method, url, {onStatus}) => _httpRequest(method, url, onStatus: onStatus),
     );
 
-    // Pipe core message/data streams to maintain compatibility with existing listeners
-    _coreMsgSub = _core.messageStream.listen((m) => _messageController.add(m));
-    _coreDataSub = _core.dataUpdateStream.listen((d) => _dataUpdateController.add(d));
+    _coreMsgSub = _core.messageStream.listen((message) => _messageController.add(message));
+    _coreDataSub = _core.dataUpdateStream.listen((payload) => _dataUpdateController.add(payload));
   }
 
   Future<void> _ensureAuthTokenLoaded() async {
     if (authToken == null || authToken!.isEmpty) {
       try {
         final prefs = await SharedPreferences.getInstance();
-        final t = prefs.getString('auth_token');
-        if (t != null && t.isNotEmpty) {
-          authToken = t;
+        final tokenInPrefs = prefs.getString('auth_token');
+        if (tokenInPrefs != null && tokenInPrefs.isNotEmpty) {
+          authToken = tokenInPrefs;
           _core.updateAuthToken(authToken);
-          _tokenService.updateAuthToken(t);
-          
-          // 加载令牌过期时间
-          final expiresStr = prefs.getString('auth_token_expires');
-          if (expiresStr != null) {
-            final expires = DateTime.tryParse(expiresStr);
-            if (expires != null) {
-              _tokenService.setTokenExpires(expires);
+          _tokenService.updateAuthToken(tokenInPrefs);
+
+          final expiryStr = prefs.getString('auth_token_expires');
+          if (expiryStr != null) {
+            final expiry = DateTime.tryParse(expiryStr);
+            if (expiry != null) {
+              _tokenService.setTokenExpires(expiry);
             }
           }
         }
-        if ((authToken == null || authToken!.isEmpty)) {
+        if (authToken == null || authToken!.isEmpty) {
           try {
             const storage = FlutterSecureStorage();
-            final st = await storage.read(key: 'auth_token');
-            if (st != null && st.isNotEmpty) {
-              authToken = st;
-              await prefs.setString('auth_token', st);
+            final tokenInSecure = await storage.read(key: 'auth_token');
+            if (tokenInSecure != null && tokenInSecure.isNotEmpty) {
+              authToken = tokenInSecure;
+              await prefs.setString('auth_token', tokenInSecure);
               _core.updateAuthToken(authToken);
-              _tokenService.updateAuthToken(st);
+              _tokenService.updateAuthToken(tokenInSecure);
             }
           } catch (_) {}
         }
       } catch (_) {}
     }
-    
-    // 检查是否需要主动刷新令牌
+
     if (authToken != null && _tokenService.shouldRefreshToken()) {
       try {
         await _refreshToken();
       } catch (e) {
-        // 预刷新失败，继续使用当前令牌，等待API调用时再处理
         if (kDebugMode) print('[ApiService] 主动刷新失败: $e');
       }
     }

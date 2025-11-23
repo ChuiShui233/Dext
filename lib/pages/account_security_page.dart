@@ -7,7 +7,6 @@ import '../services/oauth_service.dart';
 import '../services/uri_handler_service.dart';
 import '../models/user.dart';
 import 'dart:async';
-import '../widgets/frosted_glass_background.dart';
 import '../widgets/top_safe_spacer.dart';
 
 class AccountSecurityPage extends StatefulWidget {
@@ -61,7 +60,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
     return Scaffold(
       body: Stack(
         children: [
-          const FrostedGlassBackground(),
           Column(
             children: [
               const TopSafeSpacer(),

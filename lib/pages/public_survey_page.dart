@@ -50,7 +50,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
   String? errorMessage;
   bool isSubmitted = false;
   final Map<int, double?> _hoverRatings = {};
-  bool _backgroundLoaded = false;
+  bool _bgReady = false;
   
   // 存储自定义填写选项的输入内容：key: questionId_optionIndex, value: 输入文本
   final Map<String, String> _customInputValues = {};
@@ -199,7 +199,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
       if (!mounted) return;
       setState(() {
         isLoading = false;
-        _backgroundLoaded = true;
+        _bgReady = true;
       });
     } on TokenExpired catch (_) {
       if (!mounted) return;
@@ -214,7 +214,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
       setState(() {
         isLoading = false;
         errorMessage = ErrorFormatter.format(e);
-        _backgroundLoaded = true;
+        _bgReady = true;
       });
     }
   }
@@ -681,8 +681,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
     final isWide = screenWidth > 800;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // 背景加载中，显示加载界面
-    if (isLoading && !_backgroundLoaded) {
+    if (isLoading && !_bgReady) {
       return Scaffold(
         body: Container(
           decoration: BoxDecoration(
@@ -758,7 +757,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
             child: TweenAnimationBuilder<double>(
               duration: const Duration(milliseconds: 800),
               curve: Curves.easeOutCubic,
-              tween: Tween(begin: _backgroundLoaded ? 0.0 : 1.0, end: 0.0),
+              tween: Tween(begin: _bgReady ? 0.0 : 1.0, end: 0.0),
               builder: (context, value, child) {
                 return Transform.translate(
                   offset: Offset(MediaQuery.of(context).size.width * value, 0),
