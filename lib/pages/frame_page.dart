@@ -1106,7 +1106,7 @@ Widget _buildSidebarHeader(BuildContext context) {
         ),
         FSidebarItem(
           icon: const Icon(FIcons.settings),
-          label: const Text('人家设置'),
+          label: const Text('软件设置'),
           selected: _currentTabIndex == 2,
           onPress: () {
             handleTabChange(2);

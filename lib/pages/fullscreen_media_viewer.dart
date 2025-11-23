@@ -16,7 +16,6 @@ class FullscreenMediaViewer extends StatefulWidget {
   final List<String>? allMediaUrls;
   final int? currentIndex;
   final String? authToken;
-  /// 外部传入的 VideoPlayerController，用于视频全屏时复用已加载的控制器
   final VideoPlayerController? externalVideoController;
 
   const FullscreenMediaViewer({

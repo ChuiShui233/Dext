@@ -15,6 +15,8 @@ import '../widgets/crop_image_dialog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'account_security_page.dart';
 import '../components/loading_indicator.dart';
+import '../widgets/top_safe_spacer.dart';
+import 'settings/general_settings_page.dart';
 
 class HomeSettingsContent extends StatefulWidget {
   final VoidCallback onLogout;
@@ -41,6 +43,12 @@ class HomeSettingsContent extends StatefulWidget {
 class _HomeSettingsContentState extends State<HomeSettingsContent> {
   User? _currentUser;
   String _appVersion = '加载中...';
+  // 桌面布局：左侧设置栏可调整宽度
+  double _settingsPanelWidth = 420.0;
+  static const double _settingsPanelMinWidth = 320.0;
+  static const double _settingsPanelMaxWidth = 640.0;
+  // 桌面布局：右侧内容区域的本地 Navigator，用于在右侧空白区域打开页面
+  final GlobalKey<NavigatorState> _rightPaneNavigator = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
@@ -284,40 +292,100 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
     final bool isCompactWidth = MediaQuery.of(context).size.width < 1025;
-    final double horizontalPadding = isMobile ? 12.0 : 4.0;
+    final bool isDesktopLayout = !isCompactWidth; // 与整体布局一致：md及以上为“桌面”
+    // 桌面端横向留白更小；移动端更宽松
+    final double horizontalPadding = isDesktopLayout ? 4.0 : 12.0;
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      // 移动布局（窄屏）使用纯色背景；桌面布局透明以显示右侧已打开页面
+      backgroundColor: isDesktopLayout ? Colors.transparent : theme.colorScheme.surface,
       appBar: AppBar(
         centerTitle: true,
         elevation: 0,
-        backgroundColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
+        backgroundColor: isDesktopLayout ? Colors.transparent : theme.colorScheme.surface,
+        surfaceTintColor: isDesktopLayout ? Colors.transparent : theme.colorScheme.surface,
         scrolledUnderElevation: 0,
         title: const Text('设置'),
       ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 8),
-        child: Column(
-          children: [
-            const SizedBox(height: 8),
-            _buildUserInfoCard(theme),
-            const SizedBox(height: 12),
-            _buildThemeCard(context),
-            const SizedBox(height: 8),
-            _buildClientSettingsCard(context, theme),
-            const SizedBox(height: 8),
-            _buildAccountCard(context, theme),
-            const SizedBox(height: 8),
-            _buildAppearanceEffectsCard(context),
-            const SizedBox(height: 8),
-            _buildAppInfoCard(context, theme),
-            if (isMobile || isCompactWidth) const SizedBox(height: 50),
-          ],
-        ),
-      ),
+      body: !isDesktopLayout
+          ? ColoredBox(
+              color: theme.colorScheme.surface,
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 8),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 8),
+                    _buildUserInfoCard(theme),
+                    const SizedBox(height: 12),
+                    _buildClientSettingsCard(context, theme),
+                    const SizedBox(height: 8),
+                    _buildAccountCard(context, theme),
+                    const SizedBox(height: 8),
+                    _buildAppearanceEffectsCard(context),
+                    const SizedBox(height: 8),
+                    _buildAppInfoCard(context, theme),
+                    if (!isDesktopLayout) const SizedBox(height: 50),
+                  ],
+                ),
+              ),
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: _settingsPanelWidth,
+                  color: theme.colorScheme.surface,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 8),
+                        _buildUserInfoCard(theme),
+                        const SizedBox(height: 12),
+                        _buildClientSettingsCard(context, theme),
+                        const SizedBox(height: 8),
+                        _buildAccountCard(context, theme),
+                        const SizedBox(height: 8),
+                        _buildAppearanceEffectsCard(context),
+                        const SizedBox(height: 8),
+                        _buildAppInfoCard(context, theme),
+                      ],
+                    ),
+                  ),
+                ),
+                MouseRegion(
+                  cursor: SystemMouseCursors.resizeColumn,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onHorizontalDragUpdate: (details) {
+                      setState(() {
+                        _settingsPanelWidth = (_settingsPanelWidth + details.delta.dx)
+                            .clamp(_settingsPanelMinWidth, _settingsPanelMaxWidth);
+                      });
+                    },
+                    child: SizedBox(
+                      width: 8,
+                      height: double.infinity,
+                      child: VerticalDivider(
+                        width: 8,
+                        thickness: 1,
+                        color: theme.dividerColor.withValues(alpha: 0.1),
+                      ),
+                    ),
+                  ),
+                ),
+                // 右侧本地 Navigator：用于在桌面布局中打开目标页面
+                Expanded(
+                  child: Navigator(
+                    key: _rightPaneNavigator,
+                    onGenerateInitialRoutes: (_, __) => [
+                      MaterialPageRoute(builder: (_) => const SizedBox.shrink()),
+                    ],
+                  ),
+                ),
+              ],
+            ),
     );
   }
 
@@ -424,298 +492,115 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
 
   // ==================== 桌面端设置卡片 ====================
   Widget _buildClientSettingsCard(BuildContext context, ThemeData theme) {
-    final settingsService = SettingsService();
-    final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
-    
-    return FutureBuilder<Map<String, dynamic>>(
-      future: _loadClientSettings(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return _buildSectionCard(
-            context,
-            title: '客户端设置',
-            icon: Icons.tune_outlined,
-            children: const [
-              Padding(
-                padding: EdgeInsets.all(20),
-                child: LoadingIndicator.page(),
-              ),
-            ],
-          );
-        }
-        
-        final settings = snapshot.data!;
-        final currentEdgeDragWidth = settings['edge_drag_width'] as double;
-        final currentDpiScale = settings['dpi_scale'] as double;
-        
-        final List<Widget> children = [];
-        
-        // 侧滑触发范围设置（所有端可见）
-        children.add(
-          _EdgeDragWidgetCard(
-            key: ValueKey(currentEdgeDragWidth),
-            initialValue: currentEdgeDragWidth,
-            theme: theme,
-            onChanged: (value) {
-              settingsService.setEdgeDragWidth(value);
-              // 不需要立即 setState，避免频繁重建
-            },
-          ),
-        );
-        
-        // DPI 缩放设置（所有端可见）
-        children.add(
-          _DpiScaleCard(
-            initialValue: currentDpiScale,
-            theme: theme,
-            onChanged: (value) {
-              settingsService.setDpiScale(value);
-              // 通知主应用实时更新 DPI 缩放
-              widget.onDpiScaleChange?.call(value);
-            },
-          ),
-        );
-        
-        // 窗口关闭行为设置（仅桌面端显示）
-        if (isDesktop) {
-          final currentAction = settings['window_close_default_action'] as String;
-          String currentDisplayValue;
-          
-          switch (currentAction) {
-            case 'hide':
-              currentDisplayValue = '隐藏到托盘';
-              break;
-            case 'close':
-              currentDisplayValue = '直接关闭';
-              break;
-            case 'ask':
-            default:
-              currentDisplayValue = '每次询问';
-          }
-          
-          children.add(
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Text(
-                        '窗口关闭行为',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '当前: $currentDisplayValue',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: theme.colorScheme.primary.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  FSelect<String>(
-                    hint: '选择关闭行为',
-                    items: const {
-                      '每次询问': '每次询问',
-                      '隐藏到托盘': '隐藏到托盘',
-                      '直接关闭': '直接关闭',
-                    },
-                    onChange: (displayValue) async {
-                      if (displayValue != null) {
-                        String actionValue;
-                        switch (displayValue) {
-                          case '每次询问':
-                            actionValue = 'ask';
-                            break;
-                          case '隐藏到托盘':
-                            actionValue = 'hide';
-                            break;
-                          case '直接关闭':
-                            actionValue = 'close';
-                            break;
-                          default:
-                            actionValue = 'ask';
-                        }
-                        
-                        final settings = SettingsService();
-                        if (actionValue == 'ask') {
-                          await settings.setWindowCloseDontAsk(false);
-                          await settings.setWindowCloseDefaultAction('ask');
-                        } else {
-                          await settings.setWindowCloseDontAsk(true);
-                          await settings.setWindowCloseDefaultAction(actionValue);
-                        }
-                        
-                        if (mounted && context.mounted) {
-                          setState(() {}); // 刷新UI
-                        }
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-        
-        return _buildSectionCard(
-          context,
-          title: '客户端设置',
-          icon: Icons.tune_outlined,
-          children: children,
-        );
-      },
-    );
-  }
-
-  Future<Map<String, dynamic>> _loadClientSettings() async {
-    final settings = SettingsService();
-    return {
-      'edge_drag_width': settings.edgeDragWidth,
-      'window_close_dont_ask': settings.windowCloseDontAsk,
-      'window_close_default_action': settings.windowCloseDefaultAction,
-      'dpi_scale': settings.dpiScale,
-    };
-  }
-
-
-  // ==================== 主题设置卡片 ====================
-  Widget _buildThemeCard(BuildContext context) {
-    return _buildSectionCard(
+    return _buildSectionGroup(
       context,
-      title: '主题设置',
-      icon: Icons.color_lens_outlined,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  // 直接从 SettingsService 获取，以便在外部变更主题后也能即时反映
-                  () {
-                    final mode = SettingsService().themeMode;
-                    return '当前: ${mode == 'light' ? '浅色模式' : mode == 'dark' ? '深色模式' : '跟随系统'}';
-                  }(),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
-                  ),
-                ),
-              ),
-              FSelect<String>(
-                hint: '选择主题模式',
-                items: const {
-                  '跟随系统': '跟随系统',
-                  '浅色模式': '浅色模式',
-                  '深色模式': '深色模式',
-                },
-                onChange: (mode) async {
-                  if (mode != null) {
-                    String pref;
-                    ThemeMode themeMode;
-                    switch (mode) {
-                      case '浅色模式':
-                        themeMode = ThemeMode.light;
-                        pref = 'light';
-                        break;
-                      case '深色模式':
-                        themeMode = ThemeMode.dark;
-                        pref = 'dark';
-                        break;
-                      case '跟随系统':
-                      default:
-                        themeMode = ThemeMode.system;
-                        pref = 'system';
-                    }
-                    // 先持久化设置，再触发主题切换
-                    await SettingsService().setThemeMode(pref);
-                    if (mounted) {
-                      widget.onThemeModeChange(themeMode);
-                      setState(() {}); // 触发重建以刷新展示
-                    }
-                  }
-                },
-              ),
-            ],
-          ),
+      title: '设置',
+      icon: null,
+      items: [
+        FItem(
+          prefix: const Icon(FIcons.settings),
+          title: const Text('通用'),
+          suffix: const Icon(FIcons.chevronRight),
+          onPress: () => _navigateToGeneralSettings(context),
         ),
       ],
     );
   }
 
+  
+
+  void _navigateToGeneralSettings(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final bool isDesktopLayout = width >= 1025;
+
+    final page = GeneralSettingsPage(
+      onThemeModeChange: widget.onThemeModeChange,
+      onDpiScaleChange: widget.onDpiScaleChange,
+    );
+
+    if (isDesktopLayout && _rightPaneNavigator.currentState != null) {
+      _rightPaneNavigator.currentState!.push(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => page,
+          transitionDuration: const Duration(milliseconds: 200),
+          reverseTransitionDuration: const Duration(milliseconds: 200),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            final fade = CurvedAnimation(parent: animation, curve: Curves.easeInOut);
+            return FadeTransition(opacity: fade, child: child);
+          },
+        ),
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => page),
+    );
+  }
+
   // ==================== 账户操作卡片 ====================
   Widget _buildAccountCard(BuildContext context, ThemeData theme) {
-    return _buildSectionCard(
+    return _buildSectionGroup(
       context,
       title: '账户操作',
       icon: Icons.settings_outlined,
-      children: [
-        _buildNoHighlightListTile(
-          leading: Icon(Icons.security, color: theme.colorScheme.primary),
+      items: [
+        FItem(
           title: const Text('账号安全'),
-          trailing: Icon(Icons.arrow_forward_ios,
-              size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
-          onTap: () => _navigateToAccountSecurity(context),
+          suffix: const Icon(FIcons.chevronRight),
+          onPress: () => _navigateToAccountSecurity(context),
         ),
-        Divider(
-          height: 1,
-          thickness: 1,
-          color: theme.dividerColor.withValues(alpha: 0.1),
-        ),
-        _buildNoHighlightListTile(
-          leading: Icon(Icons.person_outline, color: theme.colorScheme.primary),
+        FItem(
           title: const Text('修改头像'),
-          trailing: Icon(Icons.arrow_forward_ios,
-              size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
-          onTap: _changeAvatar,
+          suffix: const Icon(FIcons.chevronRight),
+          onPress: _changeAvatar,
         ),
-        Divider(
-          height: 1,
-          thickness: 1,
-          color: theme.dividerColor.withValues(alpha: 0.1),
-        ),
-        _buildNoHighlightListTile(
-          leading: Icon(Icons.edit_outlined, color: theme.colorScheme.primary),
+        FItem(
           title: const Text('修改用户名'),
-          trailing: Icon(Icons.arrow_forward_ios,
-              size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
-          onTap: () => _showUpdateUsernameDialog(context),
+          suffix: const Icon(FIcons.chevronRight),
+          onPress: () => _showUpdateUsernameDialog(context),
         ),
-        Divider(
-          height: 1,
-          thickness: 1,
-          color: theme.dividerColor.withValues(alpha: 0.1),
-        ),
-        _buildNoHighlightListTile(
-          leading: Icon(Icons.logout, color: theme.colorScheme.error),
-          title: Text('退出登录',
-              style: TextStyle(color: theme.colorScheme.error)),
-          trailing: Icon(Icons.arrow_forward_ios,
-              size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
-          onTap: () => _confirmLogout(context, widget.onLogout),
+        FItem(
+          title: Text(
+            '退出登录',
+            style: TextStyle(color: theme.colorScheme.error),
+          ),
+          suffix: const Icon(FIcons.chevronRight),
+          onPress: () => _confirmLogout(context, widget.onLogout),
         ),
       ],
     );
   }
 
   void _navigateToAccountSecurity(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isWide = screenWidth > 800;
+    final width = MediaQuery.of(context).size.width;
+    final bool isDesktopLayout = width >= 1025;
+
+    final page = AccountSecurityPage(
+      apiService: widget.apiService,
+      currentUser: _currentUser,
+      onUserUpdated: _fetchUserData,
+    );
+
+    if (isDesktopLayout && _rightPaneNavigator.currentState != null) {
+      _rightPaneNavigator.currentState!.push(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => page,
+          transitionDuration: const Duration(milliseconds: 200),
+          reverseTransitionDuration: const Duration(milliseconds: 200),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            final fade = CurvedAnimation(parent: animation, curve: Curves.easeInOut);
+            return FadeTransition(opacity: fade, child: child);
+          },
+        ),
+      );
+      return;
+    }
 
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => AccountSecurityPage(
-          apiService: widget.apiService,
-          currentUser: _currentUser,
-          onUserUpdated: _fetchUserData,
-        ),
+        pageBuilder: (context, animation, secondaryAnimation) => page,
         transitionDuration: const Duration(milliseconds: 400),
         reverseTransitionDuration: const Duration(milliseconds: 400),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
@@ -723,29 +608,13 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
             parent: animation,
             curve: Curves.easeInOut,
           );
-
-          // 桌面端：淡入淡出 + 缩放
-          if (isWide) {
-            return FadeTransition(
-              opacity: fadeAnimation,
-              child: ScaleTransition(
-                scale: Tween<double>(begin: 0.95, end: 1.0).animate(
-                  CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-                ),
-                child: child,
-              ),
-            );
-          }
-          // 移动端：淡入淡出 + 滑动
           return FadeTransition(
             opacity: fadeAnimation,
             child: SlideTransition(
               position: Tween<Offset>(
                 begin: const Offset(0.0, 0.1),
                 end: Offset.zero,
-              ).animate(
-                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-              ),
+              ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
               child: child,
             ),
           );
@@ -756,49 +625,34 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
 
   // ==================== 应用信息卡片 ====================
   Widget _buildAppInfoCard(BuildContext context, ThemeData theme) {
-    return _buildSectionCard(
+    return _buildSectionGroup(
       context,
       title: '应用信息',
-      icon: Icons.info_outline,
-      children: [
-        _buildNoHighlightListTile(
+      icon: null,
+      items: [
+        FItem(
           title: const Text('版本'),
-          trailing: Text(_appVersion,
-              style: TextStyle(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5))),
+          details: Text(
+            _appVersion,
+            style: TextStyle(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
+          ),
         ),
-        Divider(
-          height: 1,
-          thickness: 1,
-          color: theme.dividerColor.withValues(alpha: 0.1),
-        ),
-        _buildNoHighlightListTile(
+        FItem(
           title: const Text('清空缓存'),
-          trailing: Icon(Icons.arrow_forward_ios,
-              size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
-          onTap: () => _clearCache(context),
+          suffix: const Icon(FIcons.chevronRight),
+          onPress: () => _clearCache(context),
         ),
-        Divider(
-          height: 1,
-          thickness: 1,
-          color: theme.dividerColor.withValues(alpha: 0.1),
-        ),
-        _buildNoHighlightListTile(
+        FItem(
           title: const Text('恢复默认设置'),
-          trailing: Icon(Icons.arrow_forward_ios,
-              size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
-          onTap: () => _resetToDefaults(context),
+          suffix: const Icon(FIcons.chevronRight),
+          onPress: () => _resetToDefaults(context),
         ),
-        Divider(
-          height: 1,
-          thickness: 1,
-          color: theme.dividerColor.withValues(alpha: 0.1),
-        ),
-        _buildNoHighlightListTile(
+        FItem(
           title: const Text('隐私政策'),
-          trailing: Icon(Icons.arrow_forward_ios,
-              size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
-          onTap: _launchPrivacyPolicy,
+          suffix: const Icon(FIcons.chevronRight),
+          onPress: _launchPrivacyPolicy,
         ),
       ],
     );
@@ -932,57 +786,54 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
   }
 
   // ==================== 工具方法 ====================
-  Widget _buildSectionCard(BuildContext context,
-      {required String title,
-      required IconData icon,
-      required List<Widget> children}) {
-    final theme = Theme.of(context);
+  
 
-    return Theme(
-      data: theme.copyWith(dividerColor: Colors.transparent),
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        decoration: const BoxDecoration(
-          color: Colors.transparent,
-        ),
-        child: ExpansionTile(
-          leading: Icon(icon, size: 20, color: theme.colorScheme.primary),
-          title: Text(
-            title,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface,
+  // 使用 ForUI Item Group 渲染分组列表
+  Widget _buildSectionGroup(
+    BuildContext context, {
+    required String title,
+    required IconData? icon,
+    required List<FItem> items,
+  }) {
+    final theme = Theme.of(context);
+    final bool isDesktopLayout = MediaQuery.of(context).size.width >= 1025;
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      color: Colors.transparent,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 20, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                ],
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ],
             ),
           ),
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          initiallyExpanded: false,
-          children: children,
-        ),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: isDesktopLayout ? 4 : 8),
+            child: FItemGroup(
+              divider: FItemDivider.indented,
+              children: items,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildNoHighlightListTile(
-      {Widget? leading,
-      required Widget title,
-      Widget? subtitle,
-      Widget? trailing,
-      VoidCallback? onTap}) {
-    return ListTile(
-      leading: leading,
-      title: title,
-      subtitle: subtitle,
-      trailing: trailing,
-      dense: true,
-      visualDensity: VisualDensity.compact,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-      onTap: onTap,
-      hoverColor: Colors.transparent,
-      tileColor: Colors.transparent,
-    );
-  }
 
   void _confirmLogout(BuildContext context, VoidCallback onLogout) async {
     bool isLoading = false;
@@ -1044,31 +895,30 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
   // ==================== 界面效果设置卡片 ====================
   Widget _buildAppearanceEffectsCard(BuildContext context) {
     final theme = Theme.of(context);
-    return _buildSectionCard(
+    return _buildSectionGroup(
       context,
       title: '界面效果',
       icon: Icons.blur_on_outlined,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-          child: _buildNoHighlightListTile(
-            leading: Icon(Icons.layers_outlined, color: theme.colorScheme.primary),
-            title: const Text('毛玻璃卡片'),
-            subtitle: Text(
-              '开启后卡片将采用毛玻璃效果，关闭则使用普通半透明卡片',
-              style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 12),
+      items: [
+        FItem(
+          title: const Text('毛玻璃卡片'),
+          details: Text(
+            '开启后卡片将采用毛玻璃效果，关闭则使用普通半透明卡片',
+            style: TextStyle(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              fontSize: 12,
             ),
-            trailing: _FrostedSwitch(onChanged: (v) async {
-              final settings = SettingsService();
-              await settings.setGlassCardEnabled(v);
-              if (!mounted || !context.mounted) return;
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted && context.mounted) {
-                  setState(() {});
-                }
-              });
-            }),
           ),
+          suffix: _FrostedSwitch(onChanged: (v) async {
+            final settings = SettingsService();
+            await settings.setGlassCardEnabled(v);
+            if (!mounted || !context.mounted) return;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && context.mounted) {
+                setState(() {});
+              }
+            });
+          }),
         ),
       ],
     );
@@ -1083,7 +933,6 @@ class _EdgeDragWidgetCard extends StatefulWidget {
   final ValueChanged<double> onChanged;
 
   const _EdgeDragWidgetCard({
-    super.key,
     required this.initialValue,
     required this.theme,
     required this.onChanged,
@@ -1303,6 +1152,8 @@ class _EdgeDragWidgetCardState extends State<_EdgeDragWidgetCard> {
     );
   }
 }
+
+ 
 
 // DPI 缩放设置卡片
 class _DpiScaleCard extends StatefulWidget {
