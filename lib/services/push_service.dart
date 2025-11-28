@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_getui/flutter_getui.dart';
+import 'package:getuiflut/getuiflut.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 /// 个推推送服务封装
@@ -12,15 +12,16 @@ class PushService {
   bool _initialized = false;
   String? _clientId;
   String? _deviceToken;
+  final Getuiflut _gt = Getuiflut();
   
   // 消息回调
-  final StreamController<GTMessageModel> _messageController = StreamController<GTMessageModel>.broadcast();
-  final StreamController<GTMessageModel> _notificationArrivedController = StreamController<GTMessageModel>.broadcast();
-  final StreamController<GTMessageModel> _notificationClickedController = StreamController<GTMessageModel>.broadcast();
+  final StreamController<Map<String, dynamic>> _messageController = StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _notificationArrivedController = StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _notificationClickedController = StreamController<Map<String, dynamic>>.broadcast();
   
-  Stream<GTMessageModel> get onMessageReceived => _messageController.stream;
-  Stream<GTMessageModel> get onNotificationArrived => _notificationArrivedController.stream;
-  Stream<GTMessageModel> get onNotificationClicked => _notificationClickedController.stream;
+  Stream<Map<String, dynamic>> get onMessageReceived => _messageController.stream;
+  Stream<Map<String, dynamic>> get onNotificationArrived => _notificationArrivedController.stream;
+  Stream<Map<String, dynamic>> get onNotificationClicked => _notificationClickedController.stream;
 
   /// 初始化个推SDK
   /// 
@@ -38,25 +39,18 @@ class PushService {
     }
 
     try {
-      final status = await FlGeTui().init(
-        appId: appId,
-        appKey: appKey,
-        appSecret: appSecret,
-      );
-      
-      _initialized = status;
-      
-      if (status) {
-        debugPrint('[PushService] 初始化成功');
-        _setupListeners();
-        
-        // 检查并请求通知权限
-        await _checkAndRequestNotificationPermission();
-      } else {
-        debugPrint('[PushService] 初始化失败');
+      // 自定义SDK：Android/ohos 需先 initGetuiSdk；iOS 需要 startSdk
+      _gt.initGetuiSdk;
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        _gt.startSdk(appId: appId, appKey: appKey, appSecret: appSecret);
       }
-      
-      return status;
+
+      _setupListeners();
+      await _checkAndRequestNotificationPermission();
+
+      _initialized = true;
+      debugPrint('[PushService] 初始化成功');
+      return true;
     } catch (e) {
       debugPrint('[PushService] 初始化异常: $e');
       return false;
@@ -65,56 +59,46 @@ class PushService {
 
   /// 设置事件监听
   void _setupListeners() {
-    FlGeTui().addEventHandler(
-      // 在线状态变化
-      onReceiveOnlineState: (bool? state) {
+    _gt.addEventHandler(
+      onReceiveClientId: (String res) async {
+        _clientId = res;
+        debugPrint('[PushService] ClientId: $res');
+      },
+      onNotificationMessageArrived: (Map<String, dynamic> msg) async {
+        debugPrint('[PushService] 通知消息到达: $msg');
+        _notificationArrivedController.add(msg);
+      },
+      onNotificationMessageClicked: (Map<String, dynamic> msg) async {
+        debugPrint('[PushService] 通知消息点击: $msg');
+        _notificationClickedController.add(msg);
+      },
+      onTransmitUserMessageReceive: (Map<String, dynamic> msg) async {
+        debugPrint('[PushService] 透传消息: $msg');
+        _messageController.add(msg);
+      },
+      onReceiveOnlineState: (String state) async {
         debugPrint('[PushService] Push online status: $state');
       },
-      
-      // 收到透传消息
-      onReceiveMessageData: (GTMessageModel? msg) {
-        if (msg != null) {
-          debugPrint('[PushService] 收到透传消息: ${msg.toMap()}');
-          _messageController.add(msg);
-        }
-      },
-      
-      // 通知消息到达
-      onNotificationMessageArrived: (GTMessageModel? msg) {
-        if (msg != null) {
-          debugPrint('[PushService] 通知消息到达: ${msg.toMap()}');
-          _notificationArrivedController.add(msg);
-        }
-      },
-      
-      // 通知消息点击
-      onNotificationMessageClicked: (GTMessageModel? msg) {
-        if (msg != null) {
-          debugPrint('[PushService] 通知消息点击: ${msg.toMap()}');
-          _notificationClickedController.add(msg);
-        }
-      },
-      
-      // 获取设备Token (iOS)
-      onReceiveDeviceToken: (String? token) {
+      onRegisterDeviceToken: (String token) async {
         _deviceToken = token;
         debugPrint('[PushService] Device Token: $token');
       },
-      
-      // 设置标签结果
-      onSetTagResult: (GTResultModel result) {
-        debugPrint('[PushService] 设置标签结果: ${result.toMap()}');
+      onReceivePayload: (Map<String, dynamic> payload) async {},
+      onReceiveNotificationResponse: (Map<String, dynamic> resp) async {},
+      onAppLinkPayload: (String res) async {},
+      onPushModeResult: (Map<String, dynamic> res) async {},
+      onSetTagResult: (Map<String, dynamic> res) async {
+        debugPrint('[PushService] 设置标签结果: $res');
       },
-      
-      // 绑定别名结果
-      onBindAliasResult: (GTResultModel result) {
-        debugPrint('[PushService] 绑定别名结果: ${result.toMap()}');
+      onAliasResult: (Map<String, dynamic> res) async {
+        debugPrint('[PushService] 别名结果: $res');
       },
-      
-      // 解绑别名结果
-      onUnBindAliasResult: (GTResultModel result) {
-        debugPrint('[PushService] 解绑别名结果: ${result.toMap()}');
-      },
+      onQueryTagResult: (Map<String, dynamic> res) async {},
+      onWillPresentNotification: (Map<String, dynamic> res) async {},
+      onOpenSettingsForNotification: (Map<String, dynamic> res) async {},
+      onGrantAuthorization: (String res) async {},
+      onLiveActivityResult: (Map<String, dynamic> res) async {},
+      onRegisterPushToStartTokenResult: (Map<String, dynamic> res) async {},
     );
   }
 
@@ -126,7 +110,7 @@ class PushService {
     }
     
     try {
-      await FlGeTui().bindAlias(alias, sn ?? '');
+      _gt.bindAlias(alias, sn ?? '');
       debugPrint('[PushService] 绑定别名: $alias');
     } catch (e) {
       debugPrint('[PushService] 绑定别名失败: $e');
@@ -141,7 +125,7 @@ class PushService {
     }
     
     try {
-      await FlGeTui().unbindAlias(alias, sn ?? '');
+      _gt.unbindAlias(alias, sn ?? '', true);
       debugPrint('[PushService] 解绑别名: $alias');
     } catch (e) {
       debugPrint('[PushService] 解绑别名失败: $e');
@@ -156,7 +140,7 @@ class PushService {
     }
     
     try {
-      await FlGeTui().setTag(tags, sn ?? '');
+      _gt.setTag(tags, sn ?? '');
       debugPrint('[PushService] 设置标签: $tags');
     } catch (e) {
       debugPrint('[PushService] 设置标签失败: $e');
@@ -171,7 +155,7 @@ class PushService {
     }
     
     try {
-      await FlGeTui().startPush();
+      _gt.turnOnPush();
       debugPrint('[PushService] 启动推送服务');
     } catch (e) {
       debugPrint('[PushService] 启动推送服务失败: $e');
@@ -186,7 +170,7 @@ class PushService {
     }
     
     try {
-      await FlGeTui().stopPush();
+      _gt.turnOffPush();
       debugPrint('[PushService] 停止推送服务');
     } catch (e) {
       debugPrint('[PushService] 停止推送服务失败: $e');
@@ -198,7 +182,7 @@ class PushService {
     if (!_initialized) return;
     
     try {
-      await FlGeTui().setBadge(badge);
+      _gt.setBadge(badge);
       debugPrint('[PushService] 设置角标: $badge');
     } catch (e) {
       debugPrint('[PushService] 设置角标失败: $e');
@@ -210,7 +194,7 @@ class PushService {
     if (!_initialized) return;
     
     try {
-      await FlGeTui().resetBadgeWithIOS();
+      _gt.resetBadge();
       debugPrint('[PushService] 重置角标');
     } catch (e) {
       debugPrint('[PushService] 重置角标失败: $e');
@@ -251,12 +235,6 @@ class PushService {
       } else if (status.isPermanentlyDenied) {
         debugPrint('[PushService] 通知权限被永久拒绝');
       }
-      
-      // 使用个推的方法再次检查
-      final isEnabled = await FlGeTui().checkNotificationsEnabledWithAndroid();
-      if (isEnabled != true) {
-        debugPrint('[PushService] 个推检测到通知权限未开启');
-      }
     } catch (e) {
       debugPrint('[PushService] 检查/请求通知权限失败: $e');
     }
@@ -267,8 +245,9 @@ class PushService {
     if (!_initialized) return false;
     
     try {
-      final isEnabled = await FlGeTui().checkNotificationsEnabledWithAndroid();
-      return isEnabled;
+      // 自定义插件无直接方法，这里仅依据系统权限返回
+      final status = await Permission.notification.status;
+      return status.isGranted;
     } catch (e) {
       debugPrint('[PushService] 检查通知权限失败: $e');
       return false;
@@ -277,26 +256,13 @@ class PushService {
 
   /// 打开通知权限设置页面 (Android)
   Future<void> openNotificationSettings() async {
-    if (!_initialized) return;
-    
-    try {
-      await FlGeTui().openNotificationWithAndroid();
-      debugPrint('[PushService] 打开通知权限设置页面');
-    } catch (e) {
-      debugPrint('[PushService] 打开通知权限设置失败: $e');
-    }
+    // 自定义插件无直接方法，这里可以引导到系统设置（如有需要可集成额外插件）
+    // await openAppSettings();
   }
 
   /// 检查集成配置 (Android)
   Future<void> checkManifest() async {
-    if (!_initialized) return;
-    
-    try {
-      await FlGeTui().checkManifestWithAndroid();
-      debugPrint('[PushService] 检查集成配置');
-    } catch (e) {
-      debugPrint('[PushService] 检查集成配置失败: $e');
-    }
+    // 自定义插件不提供该方法
   }
 
   /// 获取推送服务状态 (Android)
@@ -304,8 +270,9 @@ class PushService {
     if (!_initialized) return false;
     
     try {
-      final status = await FlGeTui().getPushStatusWithAndroid();
-      return status;
+      // 自定义插件不提供该方法，这里返回系统通知权限作为近似
+      final status = await Permission.notification.status;
+      return status.isGranted;
     } catch (e) {
       debugPrint('[PushService] 获取推送服务状态失败: $e');
       return false;

@@ -34,7 +34,10 @@ dependencies:
   cached_network_image: ^3.4.1
   shared_preferences: ^2.5.3
   permission_handler: ^11.3.1
-  flutter_getui: ^4.1.0
+  getuiflut:
+    git:
+      url: https://github.com/ChuiShui233/getuiflut_fix.git
+      ref: main
   flutter_launcher_icons: ^0.13.1
   provider: ^6.1.5+1
   http_parser: ^4.1.2

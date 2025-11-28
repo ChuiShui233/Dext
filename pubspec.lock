@@ -359,14 +359,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.4.1"
-  flutter_getui:
-    dependency: "direct main"
-    description:
-      name: flutter_getui
-      sha256: "50aa57624937c93743e3e7c80a774e8f29f30d92a0b054e578b5be4ec7246a2d"
-      url: "https://pub.dev"
-    source: hosted
-    version: "4.1.0"
   flutter_launcher_icons:
     dependency: "direct main"
     description:
@@ -505,6 +497,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.1"
+  getuiflut:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: main
+      resolved-ref: b8c407f158bd0c9ef50b9af243422094ed55ac62
+      url: "https://github.com/ChuiShui233/getuiflut_fix.git"
+    source: git
+    version: "0.2.39"
   glob:
     dependency: transitive
     description:
