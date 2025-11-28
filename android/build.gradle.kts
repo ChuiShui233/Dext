@@ -36,6 +36,9 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        maven {
+            url = uri("https://mvn.getui.com/nexus/content/repositories/releases/")
+        }
     }
 }
 

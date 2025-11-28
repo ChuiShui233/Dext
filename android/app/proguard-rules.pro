@@ -69,3 +69,13 @@
 -dontwarn org.apache.tika.**
 -dontwarn org.xml.sax.**
 -dontwarn javax.xml.**
+
+# ---- Getui SDK & Plugin Keep Rules ----
+-keep class com.igexin.** { *; }
+-dontwarn com.igexin.**
+
+-keep class com.getui.** { *; }
+-dontwarn com.getui.**
+
+# Keep your plugin Activity/Service if referenced by manifest via reflection
+-keep class com.getui.getuiflut.** { *; }
