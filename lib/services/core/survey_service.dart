@@ -45,8 +45,19 @@ class SurveyService {
     final response = await httpRequest('GET', '$baseUrl/api/surveys', onStatus: onStatus);
     if (response.statusCode == 200) {
       prefs.setString(cacheKey, response.body);
-      final data = json.decode(response.body) as Map<String, dynamic>;
-      return (data['surveys'] as List).map((e) => Survey.fromJson(e)).toList();
+      final raw = response.body.trim();
+      if (raw.isEmpty || raw.toLowerCase() == 'null') {
+        return <Survey>[];
+      }
+      final dynamic data = json.decode(raw);
+      if (data is Map<String, dynamic>) {
+        final list = (data['surveys'] as List?) ?? const [];
+        return list.map((e) => Survey.fromJson(e)).toList();
+      }
+      if (data is List) {
+        return data.map((e) => Survey.fromJson(e)).toList();
+      }
+      return <Survey>[];
     }
     throw '获取问卷列表失败: ${response.statusCode}';
   }

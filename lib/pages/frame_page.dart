@@ -18,6 +18,7 @@ import 'home_page.dart';
 import 'project_page.dart';
 import 'survey_page.dart';
 import 'public_survey_page.dart';
+import 'public_access_page.dart';
 import '../utils/error_formatter.dart';
 import '../services/config.dart';
 
@@ -129,6 +130,7 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
     Widget _buildPublicSurveyPage(String surveyId) {
       return PublicSurveyPage(surveyUID: surveyId);
     }
+    
     
     bool _hasLoadedData = false;
     bool _hasLoadedUser = false;
@@ -798,6 +800,7 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
           surveyCount: _surveyCount,
           onProjectTap: _handleProjectTap,
           onSurveyTap: _handleSurveyTap,
+          onFillSurveyTab: () => handleTabChange(5),
           onLogout: widget.onLogout,  // 直接传递 main.dart 的 onLogout，不要传递 _handleLogout
           onThemeModeChange: widget.onThemeModeChange,
           onDpiScaleChange: widget.onDpiScaleChange,
@@ -808,6 +811,10 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
         return ProjectPage(token: widget.apiService?.authToken ?? '');
       case 4:
         return SurveyPage(token: widget.apiService?.authToken ?? '');
+      case 5:
+        return PublicAccessPage(
+          onBackToHome: () => handleTabChange(0),
+        );
       default:
         return const Center(child: Text('未知页面'));
     }
@@ -1109,6 +1116,21 @@ Widget _buildSidebarHeader(BuildContext context) {
           selected: _currentTabIndex == 4,
           onPress: () {
             handleTabChange(4);
+          },
+        ),
+        FSidebarItem(
+          icon: AnimatedSlide(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOutCubic,
+            offset: _sidebarCollapsed ? const Offset(-0.1, 0) : Offset.zero,
+            child: const Icon(Icons.edit),
+          ),
+          label: _sidebarCollapsed
+              ? const SizedBox.shrink()
+              : const Text('填写问卷', maxLines: 1, overflow: TextOverflow.ellipsis),
+          selected: _currentTabIndex == 5,
+          onPress: () {
+            handleTabChange(5);
           },
         ),
       ],

@@ -16,9 +16,10 @@ class EmailService {
     required String captchaValue,
     StatusCallback? onStatus,
   }) async {
-    final response = await httpRequest(
+    // 后端需加密的公开接口: POST /api/auth/email/send-code
+    final response = await encryptedRequest(
       'POST',
-      '$baseUrl/api/auth/send-email-code',
+      '$baseUrl/api/auth/email/send-code',
       {
         'email': email,
         'purpose': purpose,
@@ -47,9 +48,10 @@ class EmailService {
   }) async {
     final response = await encryptedRequest(
       'POST',
-      '$baseUrl/api/user/send-change-email-code',
+      '$baseUrl/api/user/send-email-code',
       {
-        'newEmail': email,
+        'email': email,
+        'purpose': 'change_email',
         'captchaId': captchaId,
         'captchaValue': captchaValue,
       },
@@ -68,10 +70,13 @@ class EmailService {
   }
 
   Future<void> sendEmailCodeForPasswordChange({StatusCallback? onStatus}) async {
+    // 发送修改密码用途的验证码到当前用户绑定邮箱
     final response = await encryptedRequest(
       'POST',
-      '$baseUrl/api/user/send-password-change-code',
-      {},
+      '$baseUrl/api/user/send-email-code',
+      {
+        'purpose': 'reset_password',
+      },
       onStatus: onStatus,
     );
 
@@ -92,9 +97,10 @@ class EmailService {
     required String purpose,
     StatusCallback? onStatus,
   }) async {
-    final response = await httpRequest(
+    // 后端需加密的公开接口: POST /api/auth/email/verify-code
+    final response = await encryptedRequest(
       'POST',
-      '$baseUrl/api/auth/verify-email-code',
+      '$baseUrl/api/auth/email/verify-code',
       {'email': email, 'code': code, 'purpose': purpose},
       onStatus: onStatus,
     );
@@ -116,8 +122,8 @@ class EmailService {
     StatusCallback? onStatus,
   }) async {
     final response = await encryptedRequest(
-      'PUT',
-      '$baseUrl/api/user/email',
+      'POST',
+      '$baseUrl/api/user/change-email',
       {'newEmail': newEmail, 'password': password, 'code': code},
       onStatus: onStatus,
     );

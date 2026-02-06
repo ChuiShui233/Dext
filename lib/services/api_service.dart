@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:http/http.dart' as http;
@@ -8,6 +9,8 @@ import 'package:dio/dio.dart' as dio;
 import 'config.dart';
 import '/services/crypto_service.dart';
 import 'core/api_core.dart' as core;
+import 'core/XChaCha.dart';
+import 'package:cryptography/cryptography.dart';
 import 'core/analytics_service.dart' as core;
 import 'core/auth_service.dart' as core;
 import 'core/email_service.dart' as core;
@@ -52,6 +55,7 @@ class ApiService {
   static VoidCallback? onUnauthorized;
   String? authToken;
   final CryptoService _cryptoService = CryptoService();
+  String? _remotePublicKeyBase64; // 缓存的远程公钥
   late final core.ApiCore _core;
   late final AuthService _authService;
   late final ProjectService _projectService;
@@ -254,6 +258,36 @@ class ApiService {
            url.contains('/upload') || 
            url.contains('/files/');
   }
+
+  /// 获取远程公钥（用于 XChaCha 加密）
+  /// 如果缓存中没有，则尝试从服务器获取
+  Future<String> _getRemotePublicKey() async {
+    if (_remotePublicKeyBase64 != null && _remotePublicKeyBase64!.isNotEmpty) {
+      return _remotePublicKeyBase64!;
+    }
+
+    try {
+      // 尝试从服务器获取公钥
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/crypto/public-key'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(timeoutDuration);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['publicKey'] != null) {
+          _remotePublicKeyBase64 = data['publicKey'] as String;
+          return _remotePublicKeyBase64!;
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('[ApiService] 获取远程公钥失败: $e');
+    }
+
+    // 如果获取失败，使用默认公钥（这里需要根据实际情况设置）
+    // 注意：在生产环境中，应该确保从服务器获取公钥
+    throw Exception('无法获取远程公钥，请检查网络连接');
+  }
   
   // 通知数据更新
   void _notifyDataUpdate(String dataType, dynamic data) {
@@ -341,13 +375,27 @@ class ApiService {
         Map<String, dynamic> responseData;
         
         // 检查响应是否加密
+        final encryptionType = response.headers['x-encrypted'] ?? response.headers['X-Encrypted'];
         
-        // 检查响应内容是否为二进制数据（可能是加密的）
-        bool isEncrypted = response.headers['x-encrypted'] == 'aes' || 
-                          response.body.contains('\u0000') || 
-                          response.body.codeUnits.any((unit) => unit > 127);
-        
-        if (isEncrypted) {
+        if (encryptionType == 'xchacha') {
+          // XChaCha 加密的响应已经在 _hybridEncryptedRequest 中解密
+          try {
+            if (kDebugMode) {
+              print('[Login] XChaCha 响应体: ${response.body}');
+              print('[Login] 响应体长度: ${response.body.length}');
+            }
+            responseData = json.decode(response.body);
+            if (kDebugMode) {
+              print('[Login] 解析后的响应数据: $responseData');
+            }
+          } catch (e) {
+            if (kDebugMode) {
+              print('[Login] JSON 解析失败: $e');
+              print('[Login] 响应体内容: ${response.body}');
+            }
+            throw '响应解析失败: $e';
+          }
+        } else if (encryptionType == 'aes') {
           // 解密AES加密的响应
           onStatus?.call(RequestStatus.loading, '正在解密响应...');
           _updateStatus(RequestStatus.loading, '正在解密响应...');
@@ -368,7 +416,11 @@ class ApiService {
         }
         
         final token = responseData['token'];
-        final expires = DateTime.parse(responseData['expires']);
+        final expiresStr = responseData['expires'];
+        if (expiresStr == null) {
+          throw '响应中缺少 expires 字段';
+        }
+        final expires = DateTime.parse(expiresStr.toString());
         final refreshToken = responseData['refresh_token'];
         final refreshExpiresStr = responseData['refresh_expires'];
         final DateTime? refreshExpires = refreshExpiresStr != null && refreshExpiresStr.toString().isNotEmpty
@@ -426,7 +478,16 @@ class ApiService {
         
         Map<String, dynamic> responseData;
         
-        if (response.headers['x-encrypted'] == 'aes') {
+        final encryptionType = response.headers['x-encrypted'] ?? response.headers['X-Encrypted'];
+        
+        if (encryptionType == 'xchacha') {
+          // XChaCha 加密的响应已经在 _hybridEncryptedRequest 中解密
+          try {
+            responseData = json.decode(response.body);
+          } catch (e) {
+            responseData = {'message': '响应解析失败', 'error': response.body};
+          }
+        } else if (encryptionType == 'aes') {
           try {
             final encryptedResponse = response.bodyBytes;
             final decryptedBytes = _cryptoService.decryptWithAES(encryptedResponse, sessionKey);
@@ -687,7 +748,7 @@ class ApiService {
         if (authToken != null) 'Authorization': 'Bearer $authToken',
       };
 
-  // 加密请求方法（带实时响应）
+  // 加密请求方法（带实时响应）- 使用 XChaCha 加密
   Future<http.Response> _encryptedRequest(
     String method,
     String url,
@@ -703,17 +764,43 @@ class ApiService {
       
       await _cryptoService.initialize();
       
+      // 获取远程公钥
+      onStatus?.call(RequestStatus.loading, '正在获取加密密钥...');
+      _updateStatus(RequestStatus.loading, '正在获取加密密钥...');
+      final remotePublicKey = await _getRemotePublicKey();
+      
       onStatus?.call(RequestStatus.loading, '正在加密数据...');
       _updateStatus(RequestStatus.loading, '正在加密数据...');
       
       final headers = {
         ..._headers,
-        'X-Encrypted': 'rsa',
+        'X-Encrypted': 'xchacha',
+        'Content-Type': 'application/json',
       };
 
       String? encryptedBody;
+      SimpleKeyPair? localEphemeralKeyPair; // 保存本地临时密钥对用于响应解密
       if (data != null) {
-        encryptedBody = await _cryptoService.encryptBody(data);
+        // 使用 XChaCha 加密，与 _hybridEncryptedRequest 保持一致
+        final remotePublicKeyBytes = base64Decode(remotePublicKey);
+        localEphemeralKeyPair = await SecurePacketFormatter.generateEphemeralKeyPair();
+        final sessionKey = await SecurePacketFormatter.deriveSessionKey(
+          localEphemeralKeyPair,
+          remotePublicKeyBytes,
+        );
+
+        final jsonBytes = utf8.encode(json.encode(data));
+        final encryptedPacket = await SecurePacketFormatter.encryptPacket(
+          sessionKey,
+          jsonBytes,
+        );
+
+        final localPublicKey = await localEphemeralKeyPair.extractPublicKey();
+        final encryptedPayload = XChaChaEncryptedPayload(
+          ephemeralPublicKey: base64Encode(localPublicKey.bytes),
+          packet: base64Encode(encryptedPacket),
+        );
+        encryptedBody = json.encode(encryptedPayload.toJson());
       }
 
       onStatus?.call(RequestStatus.loading, '正在发送请求...');
@@ -733,7 +820,50 @@ class ApiService {
       
       final response = await http.Response.fromStream(streamedResponse);
       
+      // 处理加密响应
+      http.Response decryptedResponse = response;
       if (response.statusCode >= 200 && response.statusCode < 300) {
+        // 检查响应是否加密
+        if (response.headers['x-encrypted'] == 'xchacha' || 
+            response.headers['X-Encrypted'] == 'xchacha') {
+          try {
+            onStatus?.call(RequestStatus.loading, '正在解密响应...');
+            _updateStatus(RequestStatus.loading, '正在解密响应...');
+            
+            final responseData = json.decode(response.body);
+            if (responseData['ephemeralPublicKey'] != null && responseData['packet'] != null) {
+              // 解密响应
+              final remoteEphemeralKey = base64Decode(responseData['ephemeralPublicKey'] as String);
+              final encryptedPacket = base64Decode(responseData['packet'] as String);
+              
+              // 使用请求时保存的本地临时密钥对解密响应
+              if (localEphemeralKeyPair == null) {
+                throw '缺少本地临时密钥对，无法解密响应';
+              }
+              final responseSessionKey = await SecurePacketFormatter.deriveSessionKey(
+                localEphemeralKeyPair,
+                remoteEphemeralKey,
+              );
+              
+              final decryptedBytes = await SecurePacketFormatter.decryptPacket(
+                responseSessionKey,
+                encryptedPacket,
+              );
+              
+              final decryptedBody = utf8.decode(decryptedBytes);
+              decryptedResponse = http.Response(
+                decryptedBody,
+                response.statusCode,
+                headers: response.headers,
+                request: response.request,
+              );
+            }
+          } catch (e) {
+            if (kDebugMode) print('[ApiService] 解密响应失败: $e');
+            // 如果解密失败，返回原始响应
+          }
+        }
+        
         onStatus?.call(RequestStatus.success, '请求成功');
         _updateStatus(RequestStatus.success, '请求成功');
       } else if (response.statusCode == 401 && allowRetry) {
@@ -753,7 +883,7 @@ class ApiService {
         _updateStatus(RequestStatus.error, errorMsg);
       }
       
-      return response;
+      return decryptedResponse;
     } catch (e) {
       final errorMsg = _formatErrorMessage(e);
       onStatus?.call(RequestStatus.error, errorMsg);
@@ -773,7 +903,7 @@ class ApiService {
     return _encryptedRequest(method, url, data, onProgress: onProgress, onStatus: onStatus);
   }
 
-  // 混合加密请求方法（RSA+AES）
+  // 混合加密请求方法（使用 XChaCha）
   Future<http.Response> _hybridEncryptedRequest(
     String method,
     String url,
@@ -785,24 +915,61 @@ class ApiService {
   }) async {
     try {
       await _ensureAuthTokenLoaded();
-      onStatus?.call(RequestStatus.loading, '正在准备混合加密请求...');
-      _updateStatus(RequestStatus.loading, '正在准备混合加密请求...');
+      onStatus?.call(RequestStatus.loading, '正在准备加密请求...');
+      _updateStatus(RequestStatus.loading, '正在准备加密请求...');
       
       await _cryptoService.initialize();
+      
+      // 获取远程公钥
+      onStatus?.call(RequestStatus.loading, '正在获取加密密钥...');
+      _updateStatus(RequestStatus.loading, '正在获取加密密钥...');
+      final remotePublicKey = await _getRemotePublicKey();
       
       onStatus?.call(RequestStatus.loading, '正在加密数据...');
       _updateStatus(RequestStatus.loading, '正在加密数据...');
       
       final headers = {
         ..._headers,
-        'X-Encrypted': 'hybrid',
+        'X-Encrypted': 'xchacha',
         'Content-Type': 'application/json',
       };
 
       String? encryptedBody;
+      SimpleKeyPair? localEphemeralKeyPair; // 保存本地临时密钥对用于响应解密
       if (data != null) {
-        // 使用传统RSA加密方式（向后兼容登录接口）
-        encryptedBody = await _cryptoService.encryptBody(data);
+        // 使用 XChaCha 加密
+        final remotePublicKeyBytes = base64Decode(remotePublicKey);
+        localEphemeralKeyPair = await SecurePacketFormatter.generateEphemeralKeyPair();
+        final xSessionKey = await SecurePacketFormatter.deriveSessionKey(
+          localEphemeralKeyPair,
+          remotePublicKeyBytes,
+        );
+        
+        final jsonBytes = utf8.encode(json.encode(data));
+        final encryptedPacket = await SecurePacketFormatter.encryptPacket(
+          xSessionKey,
+          jsonBytes,
+        );
+        
+        final localPublicKey = await localEphemeralKeyPair.extractPublicKey();
+        final encryptedPayload = XChaChaEncryptedPayload(
+          ephemeralPublicKey: base64Encode(localPublicKey.bytes),
+          packet: base64Encode(encryptedPacket),
+        );
+        encryptedBody = json.encode(encryptedPayload.toJson());
+        
+        if (kDebugMode) {
+          final keyBytes = await xSessionKey.extractBytes();
+          print('[ApiService] 加密请求: sessionKey长度=${keyBytes.length}, packet长度=${encryptedPacket.length}, localPublicKey长度=${localPublicKey.bytes.length}');
+          print('[ApiService] 服务器公钥前8字节: ${remotePublicKeyBytes.sublist(0, min(8, remotePublicKeyBytes.length)).map((b) => b.toRadixString(16).padLeft(2, '0')).join('')}');
+          print('[ApiService] 客户端临时公钥前8字节: ${localPublicKey.bytes.sublist(0, min(8, localPublicKey.bytes.length)).map((b) => b.toRadixString(16).padLeft(2, '0')).join('')}');
+          if (keyBytes.length >= 8) {
+            print('[ApiService] 派生出的sessionKey前8字节: ${keyBytes.sublist(0, 8).map((b) => b.toRadixString(16).padLeft(2, '0')).join('')}');
+          }
+          if (encryptedPacket.length >= 24) {
+            print('[ApiService] packet前24字节(nonce): ${encryptedPacket.sublist(0, 24).map((b) => b.toRadixString(16).padLeft(2, '0')).join('')}');
+          }
+        }
       }
 
       onStatus?.call(RequestStatus.loading, '正在发送请求...');
@@ -822,7 +989,54 @@ class ApiService {
       
       final response = await http.Response.fromStream(streamedResponse);
       
+      // 处理加密响应
+      http.Response decryptedResponse = response;
       if (response.statusCode >= 200 && response.statusCode < 300) {
+        // 检查响应是否加密
+        if (response.headers['x-encrypted'] == 'xchacha' || 
+            response.headers['X-Encrypted'] == 'xchacha') {
+          try {
+            onStatus?.call(RequestStatus.loading, '正在解密响应...');
+            _updateStatus(RequestStatus.loading, '正在解密响应...');
+            
+            final responseData = json.decode(response.body);
+            if (responseData['ephemeralPublicKey'] != null && responseData['packet'] != null) {
+              // 解密响应
+              final serverEphemeralKey = base64Decode(responseData['ephemeralPublicKey'] as String);
+              final encryptedPacket = base64Decode(responseData['packet'] as String);
+              
+              // 使用请求时保存的本地临时密钥对解密响应
+              if (localEphemeralKeyPair == null) {
+                throw '缺少本地临时密钥对，无法解密响应';
+              }
+              
+              final responseSessionKey = await SecurePacketFormatter.deriveSessionKey(
+                localEphemeralKeyPair,
+                serverEphemeralKey,
+              );
+              
+              final decryptedBytes = await SecurePacketFormatter.decryptPacket(
+                responseSessionKey,
+                encryptedPacket,
+              );
+              
+              final decryptedBody = utf8.decode(decryptedBytes);
+              if (kDebugMode) {
+                print('[ApiService] 解密后的响应体: $decryptedBody');
+              }
+              decryptedResponse = http.Response(
+                decryptedBody,
+                response.statusCode,
+                headers: response.headers,
+                request: response.request,
+              );
+            }
+          } catch (e) {
+            if (kDebugMode) print('[ApiService] 解密响应失败: $e');
+            // 如果解密失败，返回原始响应
+          }
+        }
+        
         onStatus?.call(RequestStatus.success, '请求成功');
         _updateStatus(RequestStatus.success, '请求成功');
       } else if (response.statusCode == 401 && allowRetry) {
@@ -848,7 +1062,7 @@ class ApiService {
         _updateStatus(RequestStatus.error, errorMsg);
       }
       
-      return response;
+      return decryptedResponse;
     } catch (e) {
       final errorMsg = _formatErrorMessage(e);
       onStatus?.call(RequestStatus.error, errorMsg);
@@ -858,7 +1072,7 @@ class ApiService {
   }
 
 
-  // 公共API请求方法
+  // 公共API请求方法（使用 XChaCha 加密）
   Future<http.Response> _publicRequest(
     String method,
     String url, {
@@ -866,85 +1080,55 @@ class ApiService {
     StatusCallback? onStatus,
   }) async {
     try {
-      onStatus?.call(RequestStatus.loading, '正在发送请求...');
-      _updateStatus(RequestStatus.loading, '正在发送请求...');
+      onStatus?.call(RequestStatus.loading, '正在准备请求...');
+      _updateStatus(RequestStatus.loading, '正在准备请求...');
       
       final uri = Uri.parse(url);
       http.Response response;
+      SimpleKeyPair? localEphemeralKeyPair; // 保存本地临时密钥对用于响应解密
 
-      final headers = <String, String>{
-        'Content-Type': 'application/json',
-      };
-
-      final upperMethod = method.toUpperCase();
-      switch (upperMethod) {
-        case 'GET':
-          response = await http
-              .get(uri, headers: headers)
-              .timeout(timeoutDuration);
-          break;
-        case 'POST':
-          response = await http
-              .post(uri, headers: headers, body: data != null ? json.encode(data) : null)
-              .timeout(timeoutDuration);
-          break;
-        case 'PUT':
-          response = await http
-              .put(uri, headers: headers, body: data != null ? json.encode(data) : null)
-              .timeout(timeoutDuration);
-          break;
-        case 'DELETE':
-          response = await http
-              .delete(uri, headers: headers, body: data != null ? json.encode(data) : null)
-              .timeout(timeoutDuration);
-          break;
-        default:
-          throw '不支持的HTTP方法: $method';
-      }
-
-      return response;
-    } catch (e) {
-      final errorMsg = _formatErrorMessage(e);
-      onStatus?.call(RequestStatus.error, errorMsg);
-      _updateStatus(RequestStatus.error, errorMsg);
-      rethrow;
-    }
-  }
-
-  // 普通HTTP请求方法（带实时响应）
-  Future<http.Response> _httpRequest(
-    String method,
-    String url, {
-    Map<String, dynamic>? data,
-    StatusCallback? onStatus,
-    bool allowRetry = true,
-  }) async {
-    try {
-      await _ensureAuthTokenLoaded();
-      onStatus?.call(RequestStatus.loading, '正在发送请求...');
-      _updateStatus(RequestStatus.loading, '正在发送请求...');
-      
-      final uri = Uri.parse(url);
-      http.Response response;
-
-      // 仅对有请求体的方法（POST/PUT/DELETE）尝试AES加密；GET保持原样
       final upperMethod = method.toUpperCase();
       final isBodyMethod = (upperMethod == 'POST' || upperMethod == 'PUT' || upperMethod == 'DELETE');
-      final needsEncryption = isBodyMethod && data != null && !_isMediaUrl(url);
-      final canEncryptBody = needsEncryption && _cryptoService.currentSessionKey != null;
+      final hasData = data != null;
 
-      if (canEncryptBody) {
-        // 使用AES-GCM加密请求体
-        final sessionKey = _cryptoService.currentSessionKey!;
-        final jsonData = json.encode(data);
-        final bodyBytes = Uint8List.fromList(utf8.encode(jsonData));
-        final encryptedBody = _cryptoService.encryptWithAES(bodyBytes, sessionKey);
-
+      if (isBodyMethod && hasData) {
+        // 对于有请求体的公共请求，使用 XChaCha 加密
+        await _cryptoService.initialize();
+        
+        onStatus?.call(RequestStatus.loading, '正在获取加密密钥...');
+        _updateStatus(RequestStatus.loading, '正在获取加密密钥...');
+        final remotePublicKey = await _getRemotePublicKey();
+        
+        onStatus?.call(RequestStatus.loading, '正在加密数据...');
+        _updateStatus(RequestStatus.loading, '正在加密数据...');
+        
+        // 生成本地临时密钥对并使用 XChaCha 加密
+        localEphemeralKeyPair = await SecurePacketFormatter.generateEphemeralKeyPair();
+        final remotePublicKeyBytes = base64Decode(remotePublicKey);
+        final sessionKey = await SecurePacketFormatter.deriveSessionKey(
+          localEphemeralKeyPair,
+          remotePublicKeyBytes,
+        );
+        final jsonBytes = utf8.encode(json.encode(data));
+        final encryptedPacket = await SecurePacketFormatter.encryptPacket(
+          sessionKey,
+          jsonBytes,
+        );
+        final localPublicKey = await localEphemeralKeyPair.extractPublicKey();
+        final encryptedBody = json.encode(
+          XChaChaEncryptedPayload(
+            ephemeralPublicKey: base64Encode(localPublicKey.bytes),
+            packet: base64Encode(encryptedPacket),
+          ).toJson(),
+        );
+        
         final headers = <String, String>{
-          ..._headers,
-          'X-Encrypted': 'aes',
-          'Content-Type': 'application/octet-stream',
+          'Content-Type': 'application/json',
+          'X-Encrypted': 'xchacha',
         };
+
+        onStatus?.call(RequestStatus.loading, '正在发送请求...');
+        _updateStatus(RequestStatus.loading, '正在发送请求...');
 
         switch (upperMethod) {
           case 'POST':
@@ -965,12 +1149,216 @@ class ApiService {
           default:
             throw '不支持的HTTP方法: $method';
         }
-      } else if (needsEncryption) {
-        // 需要加密但当前没有会话密钥时，回退到 RSA 加密，避免被后端拒绝为未加密请求
-        return await _encryptedRequest(method, url, data, onStatus: onStatus, allowRetry: allowRetry);
       } else {
-        // 非加密路径（GET、无数据、媒体相关）保持原逻辑
+        // GET 请求或没有数据的请求 —— 为支持响应加密，生成本地临时密钥对并携带到请求头
+        await _cryptoService.initialize();
+        final epk = await SecurePacketFormatter.generateEphemeralKeyPair();
+        localEphemeralKeyPair = epk;
+        final localPubForHeader = await epk.extractPublicKey();
+        final headers = <String, String>{
+          'Content-Type': 'application/json',
+          'X-Encrypted': 'xchacha',
+          'X-Client-Ephemeral-Key': base64Encode(localPubForHeader.bytes),
+        };
+
+        switch (upperMethod) {
+          case 'GET':
+            response = await http
+                .get(uri, headers: headers)
+                .timeout(timeoutDuration);
+            break;
+          case 'POST':
+            response = await http
+                .post(uri, headers: headers, body: data != null ? json.encode(data) : null)
+                .timeout(timeoutDuration);
+            break;
+          case 'PUT':
+            response = await http
+                .put(uri, headers: headers, body: data != null ? json.encode(data) : null)
+                .timeout(timeoutDuration);
+            break;
+          case 'DELETE':
+            response = await http
+                .delete(uri, headers: headers, body: data != null ? json.encode(data) : null)
+                .timeout(timeoutDuration);
+            break;
+          default:
+            throw '不支持的HTTP方法: $method';
+        }
+      }
+
+      // 处理加密响应
+      http.Response decryptedResponse = response;
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        // 检查响应是否加密
+        if (response.headers['x-encrypted'] == 'xchacha' || 
+            response.headers['X-Encrypted'] == 'xchacha') {
+          try {
+            onStatus?.call(RequestStatus.loading, '正在解密响应...');
+            _updateStatus(RequestStatus.loading, '正在解密响应...');
+            
+            final responseData = json.decode(response.body);
+            if (responseData['ephemeralPublicKey'] != null && responseData['packet'] != null) {
+              // 解密响应
+              final remoteEphemeralKey = base64Decode(responseData['ephemeralPublicKey'] as String);
+              final encryptedPacket = base64Decode(responseData['packet'] as String);
+              
+              // 使用请求时保存的本地临时密钥对解密响应
+              final responseSessionKey = await SecurePacketFormatter.deriveSessionKey(
+                localEphemeralKeyPair,
+                remoteEphemeralKey,
+              );
+              
+              final decryptedBytes = await SecurePacketFormatter.decryptPacket(
+                responseSessionKey,
+                encryptedPacket,
+              );
+              
+              final decryptedBody = utf8.decode(decryptedBytes);
+              decryptedResponse = http.Response(
+                decryptedBody,
+                response.statusCode,
+                headers: response.headers,
+                request: response.request,
+              );
+            }
+          } catch (e) {
+            if (kDebugMode) print('[ApiService] 解密响应失败: $e');
+            // 如果解密失败，返回原始响应
+          }
+        }
+      }
+
+      return decryptedResponse;
+    } catch (e) {
+      final errorMsg = _formatErrorMessage(e);
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
+    }
+  }
+
+  // 普通HTTP请求方法（带实时响应）- 所有请求使用 XChaCha 加密
+  Future<http.Response> _httpRequest(
+    String method,
+    String url, {
+    Map<String, dynamic>? data,
+    StatusCallback? onStatus,
+    bool allowRetry = true,
+  }) async {
+    try {
+      await _ensureAuthTokenLoaded();
+      onStatus?.call(RequestStatus.loading, '正在准备请求...');
+      _updateStatus(RequestStatus.loading, '正在准备请求...');
+      
+      final uri = Uri.parse(url);
+      http.Response response;
+      SimpleKeyPair? localEphemeralKeyPair; // 保存本地临时密钥对用于响应解密（仅在加密请求时使用）
+
+      final upperMethod = method.toUpperCase();
+      final isBodyMethod = (upperMethod == 'POST' || upperMethod == 'PUT' || upperMethod == 'DELETE');
+      final hasData = data != null;
+      final isMediaRequest = _isMediaUrl(url);
+
+      // 对于媒体上传请求，保持原逻辑（multipart/form-data 不适合加密）
+      if (isMediaRequest) {
         final headers = _headers;
+        switch (upperMethod) {
+          case 'GET':
+            response = await http.get(uri, headers: headers).timeout(timeoutDuration);
+            break;
+          case 'POST':
+            response = await http
+                .post(uri, headers: headers, body: data != null ? json.encode(data) : null)
+                .timeout(timeoutDuration);
+            break;
+          case 'PUT':
+            response = await http
+                .put(uri, headers: headers, body: data != null ? json.encode(data) : null)
+                .timeout(timeoutDuration);
+            break;
+          case 'DELETE':
+            if (data != null) {
+              response = await http
+                  .delete(uri, headers: headers, body: json.encode(data))
+                  .timeout(timeoutDuration);
+            } else {
+              response = await http.delete(uri, headers: headers).timeout(timeoutDuration);
+            }
+            break;
+          default:
+            throw '不支持的HTTP方法: $method';
+        }
+      } else if (isBodyMethod && hasData) {
+        // 对于有请求体的请求，使用 XChaCha 加密
+        await _cryptoService.initialize();
+        
+        onStatus?.call(RequestStatus.loading, '正在获取加密密钥...');
+        _updateStatus(RequestStatus.loading, '正在获取加密密钥...');
+        final remotePublicKey = await _getRemotePublicKey();
+        
+        onStatus?.call(RequestStatus.loading, '正在加密数据...');
+        _updateStatus(RequestStatus.loading, '正在加密数据...');
+        
+        // 生成本地临时密钥对并进行 XChaCha 加密
+        localEphemeralKeyPair = await SecurePacketFormatter.generateEphemeralKeyPair();
+        final remotePublicKeyBytes = base64Decode(remotePublicKey);
+        final sessionKey = await SecurePacketFormatter.deriveSessionKey(
+          localEphemeralKeyPair,
+          remotePublicKeyBytes,
+        );
+        final jsonBytes = utf8.encode(json.encode(data));
+        final encryptedPacket = await SecurePacketFormatter.encryptPacket(
+          sessionKey,
+          jsonBytes,
+        );
+        final localPublicKey = await localEphemeralKeyPair.extractPublicKey();
+        final encryptedBody = json.encode(
+          XChaChaEncryptedPayload(
+            ephemeralPublicKey: base64Encode(localPublicKey.bytes),
+            packet: base64Encode(encryptedPacket),
+          ).toJson(),
+        );
+        
+        final headers = {
+          ..._headers,
+          'X-Encrypted': 'xchacha',
+          'Content-Type': 'application/json',
+        };
+
+        onStatus?.call(RequestStatus.loading, '正在发送请求...');
+        _updateStatus(RequestStatus.loading, '正在发送请求...');
+
+        switch (upperMethod) {
+          case 'POST':
+            response = await http
+                .post(uri, headers: headers, body: encryptedBody)
+                .timeout(timeoutDuration);
+            break;
+          case 'PUT':
+            response = await http
+                .put(uri, headers: headers, body: encryptedBody)
+                .timeout(timeoutDuration);
+            break;
+          case 'DELETE':
+            response = await http
+                .delete(uri, headers: headers, body: encryptedBody)
+                .timeout(timeoutDuration);
+            break;
+          default:
+            throw '不支持的HTTP方法: $method';
+        }
+      } else {
+        // GET 请求或没有数据的请求，仍需支持加密响应：携带客户端临时公钥
+        await _cryptoService.initialize();
+        final epk = await SecurePacketFormatter.generateEphemeralKeyPair();
+        localEphemeralKeyPair = epk;
+        final localPubForHeader = await epk.extractPublicKey();
+        final headers = {
+          ..._headers,
+          'X-Encrypted': 'xchacha',
+          'X-Client-Ephemeral-Key': base64Encode(localPubForHeader.bytes),
+        };
         switch (upperMethod) {
           case 'GET':
             response = await http.get(uri, headers: headers).timeout(timeoutDuration);
@@ -999,7 +1387,50 @@ class ApiService {
         }
       }
       
+      // 处理加密响应
+      http.Response decryptedResponse = response;
       if (response.statusCode >= 200 && response.statusCode < 300) {
+        // 检查响应是否加密
+        if (response.headers['x-encrypted'] == 'xchacha' || 
+            response.headers['X-Encrypted'] == 'xchacha') {
+          try {
+            onStatus?.call(RequestStatus.loading, '正在解密响应...');
+            _updateStatus(RequestStatus.loading, '正在解密响应...');
+            
+            final responseData = json.decode(response.body);
+            if (responseData['ephemeralPublicKey'] != null && responseData['packet'] != null) {
+              // 解密响应
+              final remoteEphemeralKey = base64Decode(responseData['ephemeralPublicKey'] as String);
+              final encryptedPacket = base64Decode(responseData['packet'] as String);
+              
+              // 使用请求时保存的本地临时密钥对解密响应
+              if (localEphemeralKeyPair == null) {
+                throw '缺少本地临时密钥对，无法解密响应';
+              }
+              final responseSessionKey = await SecurePacketFormatter.deriveSessionKey(
+                localEphemeralKeyPair,
+                remoteEphemeralKey,
+              );
+              
+              final decryptedBytes = await SecurePacketFormatter.decryptPacket(
+                responseSessionKey,
+                encryptedPacket,
+              );
+              
+              final decryptedBody = utf8.decode(decryptedBytes);
+              decryptedResponse = http.Response(
+                decryptedBody,
+                response.statusCode,
+                headers: response.headers,
+                request: response.request,
+              );
+            }
+          } catch (e) {
+            if (kDebugMode) print('[ApiService] 解密响应失败: $e');
+            // 如果解密失败，返回原始响应
+          }
+        }
+        
         onStatus?.call(RequestStatus.success, '请求成功');
         _updateStatus(RequestStatus.success, '请求成功');
       } else if (response.statusCode == 401 && allowRetry) {
@@ -1021,7 +1452,7 @@ class ApiService {
         _updateStatus(RequestStatus.error, errorMsg);
       }
 
-      return response;
+      return decryptedResponse;
     } catch (e) {
       final errorMsg = _formatErrorMessage(e);
       onStatus?.call(RequestStatus.error, errorMsg);
@@ -2854,7 +3285,14 @@ Future<Question> addQuestion(
       );
       
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+        final raw = response.body.trim();
+        if (raw.isEmpty || raw.toLowerCase() == 'null') {
+          onStatus?.call(RequestStatus.success, '问卷信息获取成功');
+          _updateStatus(RequestStatus.success, '问卷信息获取成功');
+          return <String, dynamic>{};
+        }
+        final dynamic decoded = json.decode(raw);
+        final data = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
         onStatus?.call(RequestStatus.success, '问卷信息获取成功');
         _updateStatus(RequestStatus.success, '问卷信息获取成功');
         return data;

@@ -1,6 +1,5 @@
 import 'dart:ui';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../widgets/top_safe_spacer.dart';
 import 'package:flutter/services.dart';
@@ -10,7 +9,9 @@ import '../widgets/frosted_glass_background.dart';
 import '../components/loading_indicator.dart';
 
 class PublicAccessPage extends StatefulWidget {
-  const PublicAccessPage({super.key});
+  final VoidCallback? onBackToHome;
+
+  const PublicAccessPage({super.key, this.onBackToHome});
 
   @override
   State<PublicAccessPage> createState() => _PublicAccessPageState();
@@ -140,17 +141,16 @@ class _PublicAccessPageState extends State<PublicAccessPage> {
                           padding: const EdgeInsets.all(24),
                           child: Column(
                             children: [
-                              Image.asset(
-                                'assets/images/c1.png',
-                                width: iconSize,
-                                height: iconSize,
-                                fit: BoxFit.contain,
+                              Icon(
+                                CupertinoIcons.doc_text,
+                                size: iconSize,
+                                color: isDark ? Colors.white : Colors.black87,
                               ),
                               const SizedBox(height: 16),
                               Text(
                                 '访问公开问卷',
                                 style: TextStyle(
-                                  fontSize: 28,
+                                  fontSize: 23,
                                   fontWeight: FontWeight.bold,
                                   color: isDark ? Colors.white : Colors.black87,
                                 ),
@@ -360,12 +360,19 @@ class _PublicAccessPageState extends State<PublicAccessPage> {
     );
   }
 
-  /// 导航到主页，避免Web端路由SecurityError
-  void _navigateToHome() {
-    if (kIsWeb) {
-      // Web平台直接使用路由替换，清除历史记录
-      Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
-    } else {
+  /// 导航到主页或后退：
+  /// 1) 若提供了 onBackToHome，则优先调用它（用于切换 Tab）
+  /// 2) 否则尝试 maybePop 返回上一页
+  /// 3) 仍不可返回时，作为兜底回到根路由 '/'
+  void _navigateToHome() async {
+    if (widget.onBackToHome != null) {
+      widget.onBackToHome!();
+      return;
+    }
+
+    final popped = await Navigator.maybePop(context);
+    if (!mounted) return;
+    if (!popped) {
       Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
     }
   }

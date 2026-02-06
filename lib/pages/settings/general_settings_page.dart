@@ -9,6 +9,7 @@ import '../../components/loading_indicator.dart';
 import '../../services/settings_service.dart';
 import '../frame_page.dart';
 import '../../widgets/top_safe_spacer.dart';
+import '../../services/power_service.dart';
 
 class GeneralSettingsPage extends StatelessWidget {
   final Function(ThemeMode) onThemeModeChange;
@@ -31,6 +32,8 @@ class GeneralSettingsPage extends StatelessWidget {
     };
   }
 
+
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -43,7 +46,7 @@ class GeneralSettingsPage extends StatelessWidget {
           Container(color: theme.colorScheme.surface),
           Column(
             children: [
-              const TopSafeSpacer(),
+              if (!isDesktopLayout) const TopSafeSpacer(),
               FHeader.nested(
                 title: Row(
                   children: const [
@@ -167,6 +170,31 @@ class GeneralSettingsPage extends StatelessWidget {
                       ),
                     );
 
+                    // 保持后台运行（Android）
+                    if (!kIsWeb && Platform.isAndroid) {
+                      items.add(
+                        FItem(
+                          title: const Text('保持后台运行'),
+                          details: _KeepAliveAndroidCard(theme: theme),
+                        ),
+                      );
+                    }
+
+                    // 界面效果：毛玻璃卡片
+                    items.add(
+                      FItem(
+                        title: const Text('毛玻璃效果'),
+                        details: Text(
+                          '开启后卡片将采用毛玻璃效果，关闭则使用普通半透明',
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            fontSize: 12,
+                          ),
+                        ),
+                        suffix: const _FrostedSwitchGeneral(),
+                      ),
+                    );
+
                     // 窗口关闭行为（桌面端）
                     if (isDesktop) {
                       final currentAction = settings['window_close_default_action'] as String;
@@ -184,19 +212,12 @@ class GeneralSettingsPage extends StatelessWidget {
                       }
                       items.add(
                         FItem(
-                          title: const Text('窗口关闭行为'),
+                          title: const Text(''),
                           details: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                '当前: $currentDisplayValue',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: theme.colorScheme.primary.withValues(alpha: 0.7),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
                               FSelect<String>(
+                                label: const Text('窗口关闭行为'),
                                 hint: '选择关闭行为',
                                 items: const {
                                   '每次询问': '每次询问',
@@ -229,6 +250,14 @@ class GeneralSettingsPage extends StatelessWidget {
                                   }
                                 },
                               ),
+                              const SizedBox(height: 8),
+                              Text(
+                                '当前: $currentDisplayValue',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: theme.colorScheme.primary.withValues(alpha: 0.7),
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -241,23 +270,6 @@ class GeneralSettingsPage extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                            child: Row(
-                              children: [
-                                Icon(Icons.tune_outlined, size: 20, color: theme.colorScheme.primary),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '通用',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: theme.colorScheme.onSurface,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
                           Padding(
                             padding: EdgeInsets.symmetric(horizontal: isDesktopLayout ? 4 : 8),
                             child: FItemGroup(
@@ -275,6 +287,141 @@ class GeneralSettingsPage extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ---- 控件：Android 保持后台运行（忽略电池优化） ----
+class _KeepAliveAndroidCard extends StatefulWidget {
+  final ThemeData theme;
+  const _KeepAliveAndroidCard({required this.theme});
+
+  @override
+  State<_KeepAliveAndroidCard> createState() => _KeepAliveAndroidCardState();
+}
+
+class _KeepAliveAndroidCardState extends State<_KeepAliveAndroidCard> {
+  bool? _isExempt;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final ok = await PowerService.isIgnoringBatteryOptimizations();
+    if (!mounted) return;
+    setState(() => _isExempt = ok);
+  }
+
+  Future<void> _request() async {
+    setState(() => _loading = true);
+    final started = await PowerService.requestIgnoreBatteryOptimizations();
+    // 无论是否成功，尝试刷新状态
+    await Future.delayed(const Duration(milliseconds: 300));
+    await _refresh();
+    if (!mounted) return;
+    setState(() => _loading = false);
+    if (!(_isExempt ?? false) && !started) {
+      // 失败时尝试打开设置列表作为降级
+      await PowerService.openBatteryOptimizationSettings();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final statusKnown = _isExempt != null;
+    final exempt = _isExempt == true;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                '保持后台运行',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              ),
+              if (statusKnown)
+                Text(
+                  exempt ? '已开启' : '未开启',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: (exempt
+                            ? Colors.green
+                            : widget.theme.colorScheme.primary)
+                        .withValues(alpha: 0.8),
+                  ),
+                )
+              else
+                const SizedBox.shrink(),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '为避免系统电池优化在后台杀死应用，请为 Dext 关闭电池优化。',
+            style: TextStyle(
+              fontSize: 12,
+              color: widget.theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              FButton(
+                style: context.theme.buttonStyles.primary.call,
+                onPress: _loading ? null : _request,
+                child: Text(
+                  exempt
+                      ? '重新申请/检查'
+                      : (_loading ? '申请中…' : '申请忽略电池优化'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FButton(
+                style: context.theme.buttonStyles.ghost.call,
+                onPress: () async {
+                  await PowerService.openBatteryOptimizationSettings();
+                  await Future.delayed(const Duration(milliseconds: 300));
+                  if (mounted) _refresh();
+                },
+                child: const Text('打开系统设置'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+class _FrostedSwitchGeneral extends StatefulWidget {
+  const _FrostedSwitchGeneral();
+
+  @override
+  State<_FrostedSwitchGeneral> createState() => _FrostedSwitchGeneralState();
+}
+
+class _FrostedSwitchGeneralState extends State<_FrostedSwitchGeneral> {
+  late bool _value;
+
+  @override
+  void initState() {
+    super.initState();
+    _value = SettingsService().glassCardEnabled;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FSwitch(
+      value: _value,
+      onChange: (v) async {
+        setState(() => _value = v);
+        await SettingsService().setGlassCardEnabled(v);
+      },
     );
   }
 }

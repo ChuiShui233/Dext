@@ -132,10 +132,7 @@
         }, 450);
       }
 
-      // Flutter Web 会在首帧绘制时触发该事件
       window.addEventListener('flutter-first-frame', hideLoader);
-
-      // 如果因为异常未触发事件，超时自动隐藏，避免卡住
       setTimeout(hideLoader, 20000);
     })();
   </script>

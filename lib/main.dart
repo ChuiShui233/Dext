@@ -118,7 +118,7 @@ Future<void> _initDesktopWindowAndTray() async {
   WindowOptions windowOptions = const WindowOptions(
     size: Size(1500, 880),
     center: true,
-    minimumSize: Size(600, 329),
+    minimumSize: Size(400, 329),
     backgroundColor: Colors.transparent,
     titleBarStyle: TitleBarStyle.hidden,
   );

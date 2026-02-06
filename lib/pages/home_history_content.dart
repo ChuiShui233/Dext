@@ -8,7 +8,7 @@ import 'submission_detail_page.dart';
 import '../main.dart' show isDesktop;
 import '../widgets/top_safe_spacer.dart';
 import '../utils/error_formatter.dart';
-import '../components/loading_indicator.dart';
+import '../components/loading_indicator.dart'; 
 import '../components/flexible_pagination.dart';
 
 class HomeHistoryContent extends StatefulWidget {
@@ -59,14 +59,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
           _loading = false;
         });
         if (!mounted) return;
-        
-        final totalPages = (_total / _pageSize).ceil().clamp(1, 999999);
-        // 只在页数变化时才重新创建控制器
-        if (_paginationController.pages != totalPages) {
-          _paginationController.dispose();
-          _paginationController = FPaginationController(pages: totalPages);
-        }
-        _paginationController.page = (_page - 1).clamp(0, totalPages - 1);
+        _syncPaginationController();
       }
     } catch (_) {
     }
@@ -76,6 +69,20 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     final q = _searchController.text.trim();
     final type = _selectedType?.toString() ?? 'all';
     return 'history_${q}_${type}_${_page}_$_pageSize';
+  }
+
+  void _syncPaginationController() {
+    final int totalPages = ((_total + _pageSize - 1) ~/ _pageSize).clamp(1, 999999);
+    if (_page > totalPages) {
+      _page = totalPages;
+    }
+    if (_paginationController.pages != totalPages) {
+      _paginationController.dispose();
+      _paginationController = FPaginationController(pages: totalPages);
+    }
+    _isProgrammaticPageChange = true;
+    _paginationController.page = (_page - 1).clamp(0, totalPages - 1);
+    _isProgrammaticPageChange = false;
   }
 
   @override
@@ -124,18 +131,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
       } catch (_) {}
       
       if (!mounted) return;
-      
-      final totalPages = (_total / _pageSize).ceil().clamp(1, 999999);
-      // 只在页数变化时才重新创建控制器
-      if (_paginationController.pages != totalPages) {
-        _paginationController.dispose();
-        _paginationController = FPaginationController(pages: totalPages);
-      }
-      // 同步当前页码到分页控制器（转换为0-based）
-      // 使用标志位防止触发onChange回调
-      _isProgrammaticPageChange = true;
-      _paginationController.page = (_page - 1).clamp(0, totalPages - 1);
-      _isProgrammaticPageChange = false;
+      _syncPaginationController();
     } catch (e) {
       loadingTimer.cancel();
       if (!mounted) return;
@@ -439,6 +435,156 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
       }).toList(),
     );
   }
+
+  Future<bool> _showDeleteConfirmationDialog(BuildContext context) async {
+    bool animateIn = false;
+    bool isClosing = false;
+    const animationDuration = Duration(milliseconds: 200);
+
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            if (!animateIn && !isClosing) {
+              Future.microtask(() {
+                if (dialogContext.mounted) setState(() => animateIn = true);
+              });
+            }
+
+            Future<void> close([bool? result]) async {
+              if (!dialogContext.mounted) return;
+              setState(() {
+                animateIn = false;
+                isClosing = true;
+              });
+              await Future.delayed(animationDuration);
+              if (dialogContext.mounted) Navigator.of(dialogContext).pop(result);
+            }
+
+            return AnimatedOpacity(
+              opacity: animateIn ? 1.0 : 0.0,
+              duration: animationDuration,
+              child: Center(
+                child: Material(
+                  color: Colors.transparent,
+                  child: FDialog(
+                    title: const Text('确认删除'),
+                    body: const Text('确定要删除该记录吗？此操作不可撤销。'),
+                    actions: [
+                      FButton(
+                        style: context.theme.buttonStyles.ghost.call,
+                        onPress: () => close(false),
+                        child: const Text('取消'),
+                      ),
+                      FButton(
+                        style: context.theme.buttonStyles.primary.call,
+                        onPress: () => close(true),
+                        child: const Text('删除'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    ) ?? false;
+  }
+
+  Future<bool> _deleteHistoryItem(BuildContext context, int? answerId, int index) async {
+    if (answerId == null) {
+      showFToast(
+        context: context,
+        alignment: FToastAlignment.bottomRight,
+        title: const Text('无法删除'),
+        description: const Text('该记录缺少答案ID，无法执行删除操作。'),
+        suffixBuilder: (ctx, entry) => IntrinsicHeight(
+          child: FButton(
+            style: ctx.theme.buttonStyles.primary.call,
+            onPress: entry.dismiss.call,
+            child: const Text('关闭'),
+          ),
+        ),
+      );
+      return false;
+    }
+
+    try {
+      await widget.apiService.deleteAnswer(answerId);
+    } catch (e) {
+      final error = ErrorFormatter.format(e);
+      if (!mounted || !context.mounted) return false;
+      showFToast(
+        context: context,
+        alignment: FToastAlignment.bottomRight,
+        title: const Text('删除失败'),
+        description: Text(error),
+        suffixBuilder: (ctx, entry) => IntrinsicHeight(
+          child: FButton(
+            style: ctx.theme.buttonStyles.primary.call,
+            onPress: entry.dismiss.call,
+            child: const Text('关闭'),
+          ),
+        ),
+      );
+      return false;
+    }
+
+    if (!mounted) return false;
+
+    final int newTotal = _total > 0 ? _total - 1 : 0;
+    final int totalPages = ((newTotal + _pageSize - 1) ~/ _pageSize).clamp(1, 999999);
+    int newPage = _page;
+    if (newPage > totalPages) {
+      newPage = totalPages;
+    }
+    if (newPage < 1) {
+      newPage = 1;
+    }
+
+    setState(() {
+      if (index >= 0 && index < _items.length) {
+        _items.removeAt(index);
+      }
+      _total = newTotal;
+      _page = newPage;
+    });
+
+    _syncPaginationController();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_buildCacheKey());
+    } catch (_) {}
+
+    if (!context.mounted) return false;
+    showFToast(
+      context: context,
+      alignment: FToastAlignment.bottomRight,
+      title: const Text('删除成功'),
+      description: const Text('提交记录已被删除。'),
+      suffixBuilder: (ctx, entry) => IntrinsicHeight(
+        child: FButton(
+          style: ctx.theme.buttonStyles.primary.call,
+          onPress: entry.dismiss.call,
+          child: const Text('关闭'),
+        ),
+      ),
+    );
+
+    // 刷新当前页数据，确保补齐后续记录
+    Future.microtask(() {
+      if (!mounted) return;
+      if (_total > 0) {
+        _fetch();
+      }
+    });
+
+    return true;
+  }
   
   Widget _buildTimelineItem(BuildContext context, Map<String, dynamic> item, int index) {
     final theme = Theme.of(context);
@@ -470,55 +616,15 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
         ),
       ),
       confirmDismiss: (direction) async {
-        bool animateIn = false;
-        bool isClosing = false;
-        const animationDuration = Duration(milliseconds: 200);
-        return await showDialog<bool>(
-          context: context,
-          barrierDismissible: true,
-          builder: (dialogContext) {
-            return StatefulBuilder(
-              builder: (context, setState) {
-                if (!animateIn && !isClosing) {
-                  Future.microtask(() {
-                    if (dialogContext.mounted) setState(() => animateIn = true);
-                  });
-                }
-                Future<void> close([bool? result]) async {
-                  if (!dialogContext.mounted) return;
-                  setState(() { animateIn = false; isClosing = true; });
-                  await Future.delayed(animationDuration);
-                  if (dialogContext.mounted) Navigator.of(dialogContext).pop(result);
-                }
-                return AnimatedOpacity(
-                  opacity: animateIn ? 1.0 : 0.0,
-                  duration: animationDuration,
-                  child: Center(
-                    child: Material(
-                      color: Colors.transparent,
-                      child: FDialog(
-                        title: const Text('确认删除'),
-                        body: const Text('确定要删除该记录吗？此操作不可撤销。'),
-                        actions: [
-                          FButton(
-                            style: context.theme.buttonStyles.ghost.call,
-                            onPress: () => close(false),
-                            child: const Text('取消'),
-                          ),
-                          FButton(
-                            style: context.theme.buttonStyles.primary.call,
-                            onPress: () => close(true),
-                            child: const Text('删除'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            );
-          },
-        ) ?? false;
+        final confirmed = await _showDeleteConfirmationDialog(context);
+        if (!confirmed) {
+          return false;
+        }
+        final dialogContext = context;
+        if (!dialogContext.mounted) {
+          return false;
+        }
+        return await _deleteHistoryItem(dialogContext, answerId, index);
       },
       child: Column(
         children: [

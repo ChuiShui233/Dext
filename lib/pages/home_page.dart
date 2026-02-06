@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import 'home_main_content.dart';
 import 'home_history_content.dart';
-import 'home_settings_content.dart';
+import 'settings/home_settings_content.dart';
 import '../widgets/frosted_glass_background.dart';
 
 final contentPadding = LayoutValue(
@@ -34,6 +34,7 @@ class HomePage extends StatefulWidget {
   final int surveyCount;
   final VoidCallback onProjectTap;
   final VoidCallback onSurveyTap;
+  final VoidCallback onFillSurveyTab;
   final VoidCallback onLogout;
   final Function(ThemeMode) onThemeModeChange;
   final Function(double)? onDpiScaleChange;
@@ -48,6 +49,7 @@ class HomePage extends StatefulWidget {
     required this.surveyCount,
     required this.onProjectTap,
     required this.onSurveyTap,
+    required this.onFillSurveyTab,
     required this.onLogout,
     required this.onThemeModeChange,
     this.onDpiScaleChange,
@@ -66,19 +68,12 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
   
   Map<String, int>? _cachedAnalytics;
   bool _isLoadingAnalytics = false;
-  bool _showMobileNav = false; // 控制移动端导航张开动画
   
   @override
   void initState() {
     super.initState();
     _loadCachedAnalytics();
     _loadAnalytics();
-    // 等首帧完成后触发展开动画
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        setState(() => _showMobileNav = true);
-      }
-    });
   }
   
   Future<void> _loadCachedAnalytics() async {
@@ -87,10 +82,8 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
       final cached = prefs.getString('analytics_overview');
       if (cached != null) {
         final data = json.decode(cached) as Map<String, dynamic>;
-        // 检查缓存是否包含新字段，如果没有则清除旧缓存并强制刷新
         if (!data.containsKey('totalSurveys') || !data.containsKey('activeSurveys')) {
           await prefs.remove('analytics_overview');
-          // 不设置 _cachedAnalytics，让 _loadAnalytics 重新获取
           return;
         }
         if (mounted) {
@@ -155,6 +148,7 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
       totalSubmits: overview['totalSubmits'] ?? 0,
       onProjectTap: widget.onProjectTap,
       onSurveyTap: widget.onSurveyTap,
+      onFillSurveyTab: widget.onFillSurveyTab,
       fetchTrend: (range) => widget.apiService.getSubmitTrend(range: range),
       apiService: widget.apiService,
     );
@@ -176,16 +170,16 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
     return Scaffold(
       body: Stack(
         children: [
-          if (widget.currentIndex == 2)
-            Container(color: Theme.of(context).colorScheme.surface)
-          else
+          if (widget.currentIndex == 0)
             const FrostedGlassBackground(
               count: 8,
               blurSigma: 120,
               blobOpacity: 0.5,
               animated: true,
               vignette: true,
-            ),
+            )
+          else
+            Container(color: Theme.of(context).colorScheme.surface),
           Scaffold(
             backgroundColor: Colors.transparent,
             extendBody: true,
@@ -214,23 +208,8 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
                 return Scaffold(
                   backgroundColor: Colors.transparent,
                   body: contentWidget,
-                  bottomNavigationBar: TweenAnimationBuilder<double>(
-                    tween: Tween<double>(begin: 0, end: _showMobileNav ? fullHeight : 0),
-                    duration: const Duration(milliseconds: 320),
-                    curve: Curves.easeOutCubic,
-                    builder: (context, value, child) {
-                      final double t = (value / (fullHeight == 0 ? 1 : fullHeight)).clamp(0.0, 1.0);
-                      return SizedBox(
-                        height: value,
-                        child: Opacity(
-                          opacity: t,
-                          child: Transform.translate(
-                            offset: Offset(0, (1 - t) * 12),
-                            child: child,
-                          ),
-                        ),
-                      );
-                    },
+                  bottomNavigationBar: SizedBox(
+                    height: fullHeight,
                     child: NavigationBarTheme(
                       data: NavigationBarThemeData(
                         indicatorColor: Theme.of(context).brightness == Brightness.light

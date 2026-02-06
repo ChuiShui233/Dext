@@ -7,7 +7,6 @@ import '../widgets/top_safe_spacer.dart';
 import '../widgets/dashboard_stats_card.dart';
 import '../widgets/dashboard_chart.dart';
 import '../widgets/recent_survey_responses_list.dart';
-import 'public_access_page.dart';
 
 class HomeMainContent extends StatelessWidget {
   final int projectCount;
@@ -16,6 +15,7 @@ class HomeMainContent extends StatelessWidget {
   final int totalViews;
   final VoidCallback onProjectTap;
   final VoidCallback onSurveyTap;
+  final VoidCallback onFillSurveyTab;
   final FetchTrend? fetchTrend;
   final ApiService? apiService;
 
@@ -27,6 +27,7 @@ class HomeMainContent extends StatelessWidget {
     this.totalViews = 0,
     required this.onProjectTap,
     required this.onSurveyTap,
+    required this.onFillSurveyTab,
     this.fetchTrend,
     this.apiService,
   });
@@ -58,7 +59,7 @@ class HomeMainContent extends StatelessWidget {
                       Row(
                             children: [
                               FButton(
-                                onPress: () => Navigator.of(context).pushNamed('/public_survey'),
+                                onPress: onFillSurveyTab,
                                 style: context.theme.buttonStyles.primary.call,
                                 child: const Text('填写问卷'),
                               ),
@@ -218,15 +219,8 @@ class HomeMainContent extends StatelessWidget {
         if (isMobile)
           Positioned.fill(
             child: GlassFabMenu(
-              padding: const EdgeInsets.only(right: 12, bottom: 72),
-              onFillSurvey: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const PublicAccessPage(),
-                  ),
-                );
-              },
+              padding: const EdgeInsets.only(right: 12, bottom: 24),
+              onFillSurvey: onFillSurveyTab,
               onProjectTap: onProjectTap,
               onSurveyTap: onSurveyTap,
             ),

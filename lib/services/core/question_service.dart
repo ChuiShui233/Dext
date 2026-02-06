@@ -18,12 +18,29 @@ class QuestionService {
     
     if (cached != null) {
       try {
-        final data = json.decode(cached);
+        final trimmed = cached.trim();
+        if (trimmed.isEmpty || trimmed.toLowerCase() == 'null') {
+          return <Question>[];
+        }
+        final dynamic data = json.decode(trimmed);
         List<Question> questions;
         if (data is List) {
-          questions = data.map((e) => Question.fromJson(e)).toList();
+          questions = data
+              .whereType<Map<String, dynamic>>()
+              .map((e) => Question.fromJson(e))
+              .toList();
+        } else if (data is Map<String, dynamic>) {
+          final q = data['questions'];
+          if (q is List) {
+            questions = q
+                .whereType<Map<String, dynamic>>()
+                .map((e) => Question.fromJson(e))
+                .toList();
+          } else {
+            questions = <Question>[];
+          }
         } else {
-          questions = (data['questions'] as List).map((e) => Question.fromJson(e)).toList();
+          questions = <Question>[];
         }
         _refreshQuestionsSilently(prefs, cacheKey, surveyId);
         return questions;
@@ -50,14 +67,36 @@ class QuestionService {
   }) async {
     final response = await httpRequest('GET', '$baseUrl/api/survey/$surveyId/questions', onStatus: onStatus);
     if (response.statusCode == 200) {
+      final raw = response.body.trim();
       prefs.setString(cacheKey, response.body);
-      final data = json.decode(response.body);
+      if (raw.isEmpty || raw.toLowerCase() == 'null') {
+        return <Question>[];
+      }
+      dynamic data;
+      try {
+        data = json.decode(raw);
+      } catch (_) {
+        return <Question>[];
+      }
       // 后端直接返回数组
       if (data is List) {
-        return data.map((e) => Question.fromJson(e)).toList();
+        return data
+            .whereType<Map<String, dynamic>>()
+            .map((e) => Question.fromJson(e))
+            .toList();
       }
-      // 如果是包装对象，提取questions字段
-      return (data['questions'] as List).map((e) => Question.fromJson(e)).toList();
+      // 如果是包装对象，提取questions字段（可能缺失或为null）
+      if (data is Map<String, dynamic>) {
+        final q = data['questions'];
+        if (q is List) {
+          return q
+              .whereType<Map<String, dynamic>>()
+              .map((e) => Question.fromJson(e))
+              .toList();
+        }
+        return <Question>[];
+      }
+      return <Question>[];
     }
     throw '获取问题列表失败: ${response.statusCode}';
   }

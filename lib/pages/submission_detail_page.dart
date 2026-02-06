@@ -47,26 +47,33 @@ class _SubmissionDetailPageState extends State<SubmissionDetailPage> {
       
       final fullCached = prefs.getString('submission_detail_${widget.answerId}');
       if (fullCached != null) {
-        final d = json.decode(fullCached) as Map<String, dynamic>;
-        _applyDataToState(d);
-        
-        final surveyId = (d['surveyId'] as num?)?.toInt();
-        if (surveyId != null) {
-          final templateData = {
-            'surveyId': surveyId,
-            'surveyName': d['surveyName'],
-            'creator': d['creator'],
-            'questions': d['questions'],
-          };
-          final answerData = {
-            'surveyId': surveyId,
-            'myAnswers': d['myAnswers'],
-            'myAnswerIndices': d['myAnswerIndices'],
-          };
-          await prefs.setString(_templateCacheKey(surveyId), json.encode(templateData));
-          await prefs.setString(_answerCacheKey(), json.encode(answerData));
+        final raw = fullCached.trim();
+        if (raw.isNotEmpty && raw.toLowerCase() != 'null') {
+          try {
+            final dynamic decoded = json.decode(raw);
+            if (decoded is Map<String, dynamic>) {
+              _applyDataToState(decoded);
+              
+              final surveyId = (decoded['surveyId'] as num?)?.toInt();
+              if (surveyId != null) {
+                final templateData = {
+                  'surveyId': surveyId,
+                  'surveyName': decoded['surveyName'],
+                  'creator': decoded['creator'],
+                  'questions': decoded['questions'],
+                };
+                final answerData = {
+                  'surveyId': surveyId,
+                  'myAnswers': decoded['myAnswers'],
+                  'myAnswerIndices': decoded['myAnswerIndices'],
+                };
+                await prefs.setString(_templateCacheKey(surveyId), json.encode(templateData));
+                await prefs.setString(_answerCacheKey(), json.encode(answerData));
+              }
+              return;
+            }
+          } catch (_) {}
         }
-        return;
       }
       
       int? surveyId = widget.surveyId;
@@ -74,27 +81,44 @@ class _SubmissionDetailPageState extends State<SubmissionDetailPage> {
       
       final answerCached = prefs.getString(_answerCacheKey());
       if (answerCached != null) {
-        answerData = json.decode(answerCached) as Map<String, dynamic>;
-        surveyId ??= (answerData['surveyId'] as num?)?.toInt();
+        final raw = answerCached.trim();
+        if (raw.isNotEmpty && raw.toLowerCase() != 'null') {
+          try {
+            final dynamic decoded = json.decode(raw);
+            if (decoded is Map<String, dynamic>) {
+              answerData = decoded;
+              surveyId ??= (answerData['surveyId'] as num?)?.toInt();
+            }
+          } catch (_) {}
+        }
       }
       
       if (surveyId != null) {
         final templateCached = prefs.getString(_templateCacheKey(surveyId));
         if (templateCached != null) {
-            final templateData = json.decode(templateCached) as Map<String, dynamic>;
-            
-            if (mounted) {
-              setState(() {
-                _data = {
-                  ...templateData,
-                  'myAnswers': <String, dynamic>{},
-                  'myAnswerIndices': <String, dynamic>{},
-                };
-                _loading = false;
-                _isLoadingAnswers = true;
-                _error = null;
-              });
+            final raw = templateCached.trim();
+            Map<String, dynamic>? templateData;
+            if (raw.isNotEmpty && raw.toLowerCase() != 'null') {
+              try {
+                final dynamic decoded = json.decode(raw);
+                if (decoded is Map<String, dynamic>) {
+                  templateData = decoded;
+                }
+              } catch (_) {}
             }
+            if (templateData != null) {
+              if (mounted) {
+                setState(() {
+                  _data = {
+                    ...templateData!,
+                    'myAnswers': <String, dynamic>{},
+                    'myAnswerIndices': <String, dynamic>{},
+                  };
+                  _loading = false;
+                  _isLoadingAnswers = true;
+                  _error = null;
+                });
+              }
             
             if (answerData != null) {
               Future.delayed(const Duration(milliseconds: 100), () {
@@ -105,7 +129,7 @@ class _SubmissionDetailPageState extends State<SubmissionDetailPage> {
               final myAnswerIndices = (answerData['myAnswerIndices'] as Map?)?.map((k, v) => 
                 MapEntry(int.parse(k.toString()), (v as List).map((e) => (e as num).toInt()).toList())) ?? <int, List<int>>{};
               
-              final questions = (templateData['questions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+              final questions = (templateData!['questions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
               
               for (final q in questions) {
                 final qid = (q['id'] ?? 0) as int;
@@ -139,7 +163,7 @@ class _SubmissionDetailPageState extends State<SubmissionDetailPage> {
               
                 setState(() {
                   _data = {
-                    ...templateData,
+                    ...templateData!,
                     'myAnswers': answerData!['myAnswers'],
                     'myAnswerIndices': answerData['myAnswerIndices'],
                   };
@@ -148,6 +172,7 @@ class _SubmissionDetailPageState extends State<SubmissionDetailPage> {
               });
             }
             return;
+        }
         }
       }
     } catch (_) {}

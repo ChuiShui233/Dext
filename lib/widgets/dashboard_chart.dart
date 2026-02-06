@@ -25,6 +25,35 @@ class _DashboardChartState extends State<DashboardChart> {
     _loadTrend();
   }
 
+  String _formatLabelForWidth(String label, bool compact) {
+    if (!compact) return label;
+
+    if (_range == 'month') {
+      final parts = label.split(RegExp(r'[-/]'));
+      if (parts.isNotEmpty) {
+        final monthPart = parts.last;
+        final monthNumber = int.tryParse(monthPart);
+        if (monthNumber != null) {
+          return '$monthNumber月';
+        }
+        if (monthPart.length >= 2 && int.tryParse(monthPart.substring(monthPart.length - 2)) != null) {
+          final parsed = int.parse(monthPart.substring(monthPart.length - 2));
+          return '$parsed月';
+        }
+        return monthPart;
+      }
+    }
+
+    if (_range != '7d') {
+      final match = RegExp(r'(\d{1,2})$').firstMatch(label);
+      if (match != null) {
+        return match.group(1)!;
+      }
+    }
+
+    return label;
+  }
+
   Future<void> _loadTrend() async {
     if (widget.fetchTrend == null) return;
     
@@ -226,6 +255,7 @@ class _DashboardChartState extends State<DashboardChart> {
     final labelWidth = maxItemWidth;
 
     final items = <Widget>[];
+    final compactLabels = labelWidth < 48;
     for (int i = 0; i < labels.length; i++) {
       final ratio = maxCount > 0 ? (counts[i] / maxCount) : 0.0;
       items.add(Expanded(
@@ -246,7 +276,7 @@ class _DashboardChartState extends State<DashboardChart> {
             SizedBox(
               width: labelWidth,
               child: Text(
-                labels[i],
+                _formatLabelForWidth(labels[i], compactLabels),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,

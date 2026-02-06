@@ -16,10 +16,17 @@ class AnalyticsService {
     
     if (cached != null) {
       try {
-        final data = json.decode(cached) as Map<String, dynamic>;
-        final submissions = (data['submissions'] as List<dynamic>? ?? [])
-            .whereType<Map<String, dynamic>>()
-            .toList();
+        final dynamic data = json.decode(cached);
+        List<Map<String, dynamic>> submissions;
+        if (data is Map<String, dynamic>) {
+          submissions = (data['submissions'] as List<dynamic>? ?? [])
+              .whereType<Map<String, dynamic>>()
+              .toList();
+        } else if (data is List) {
+          submissions = data.whereType<Map<String, dynamic>>().toList();
+        } else {
+          submissions = const <Map<String, dynamic>>[];
+        }
         _refreshRecentSubmissionsSilently(prefs, cacheKey);
         return submissions;
       } catch (_) {}
@@ -47,10 +54,20 @@ class AnalyticsService {
     final response = await httpRequest('GET', url, onStatus: onStatus);
     if (response.statusCode == 200) {
       prefs.setString(cacheKey, response.body);
-      final data = json.decode(response.body) as Map<String, dynamic>;
-      return (data['submissions'] as List<dynamic>? ?? [])
-          .whereType<Map<String, dynamic>>()
-          .toList();
+      final raw = response.body.trim();
+      if (raw.isEmpty || raw.toLowerCase() == 'null') {
+        return const <Map<String, dynamic>>[];
+      }
+      final dynamic data = json.decode(raw);
+      if (data is Map<String, dynamic>) {
+        return (data['submissions'] as List<dynamic>? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+      }
+      if (data is List) {
+        return data.whereType<Map<String, dynamic>>().toList();
+      }
+      return const <Map<String, dynamic>>[];
     }
     throw '获取最近提交失败: ${response.statusCode}';
   }
@@ -146,7 +163,15 @@ class AnalyticsService {
       final url = '$baseUrl/api/analytics/submit-trend?range=$range';
       final response = await httpRequest('GET', url);
       if (response.statusCode == 200) {
-        final fresh = json.decode(response.body) as Map<String, dynamic>;
+        final raw = response.body.trim();
+        if (raw.isEmpty || raw.toLowerCase() == 'null') {
+          return;
+        }
+        final dynamic decoded = json.decode(raw);
+        if (decoded is! Map<String, dynamic>) {
+          return;
+        }
+        final Map<String, dynamic> fresh = decoded;
         final labelsA = (cached['labels'] as List?)?.join(',') ?? '';
         final countsA = (cached['counts'] as List?)?.join(',') ?? '';
         final labelsB = (fresh['labels'] as List?)?.join(',') ?? '';
@@ -168,7 +193,15 @@ class AnalyticsService {
     final response = await httpRequest('GET', url, onStatus: onStatus);
     if (response.statusCode == 200) {
       prefs.setString(cacheKey, response.body);
-      return json.decode(response.body) as Map<String, dynamic>;
+      final raw = response.body.trim();
+      if (raw.isEmpty || raw.toLowerCase() == 'null') {
+        return <String, dynamic>{};
+      }
+      try {
+        final dynamic decoded = json.decode(raw);
+        if (decoded is Map<String, dynamic>) return decoded;
+      } catch (_) {}
+      return <String, dynamic>{};
     }
     throw '获取提交趋势失败: ${response.statusCode}';
   }
@@ -177,7 +210,15 @@ class AnalyticsService {
     final url = '$baseUrl/api/survey/submissions/$answerId/detail';
     final response = await httpRequest('GET', url, onStatus: onStatus);
     if (response.statusCode == 200) {
-      return json.decode(response.body);
+      final raw = response.body.trim();
+      if (raw.isEmpty || raw.toLowerCase() == 'null') {
+        return <String, dynamic>{};
+      }
+      try {
+        final dynamic data = json.decode(raw);
+        if (data is Map<String, dynamic>) return data;
+      } catch (_) {}
+      return <String, dynamic>{};
     } else if (response.statusCode == 404) {
       throw '提交记录不存在';
     }
@@ -201,7 +242,15 @@ class AnalyticsService {
     
     final response = await httpRequest('GET', url, onStatus: onStatus);
     if (response.statusCode == 200) {
-      return json.decode(response.body);
+      final raw = response.body.trim();
+      if (raw.isEmpty || raw.toLowerCase() == 'null') {
+        return <String, dynamic>{};
+      }
+      try {
+        final dynamic data = json.decode(raw);
+        if (data is Map<String, dynamic>) return data;
+      } catch (_) {}
+      return <String, dynamic>{};
     }
     throw '获取提交历史失败: ${response.statusCode}';
   }

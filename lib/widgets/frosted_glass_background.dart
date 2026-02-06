@@ -1,3 +1,4 @@
+//绘制渐变色背景 不好看（
 import 'dart:math' as math;
 import 'dart:ui';
 

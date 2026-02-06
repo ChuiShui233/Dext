@@ -1,23 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:forui/forui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../services/settings_service.dart';
+import '../../services/settings_service.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../services/api_service.dart';
-import '../models/user.dart';
+import '../../services/api_service.dart';
+import '../../models/user.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:async';
 import 'dart:io';
-import '../services/config.dart';
-import 'frame_page.dart' show mobileSidebarOpen;
-import '../widgets/crop_image_dialog.dart';
+import '../../services/config.dart';
+import '../frame_page.dart' show mobileSidebarOpen;
+import '../../widgets/crop_image_dialog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'account_security_page.dart';
-import '../components/loading_indicator.dart';
-import 'settings/general_settings_page.dart';
+import 'account_settings_page.dart';
+import '../../components/loading_indicator.dart';
+import 'general_settings_page.dart';
 import 'package:provider/provider.dart';
-import '../providers/user_info_provider.dart';
+import '../../providers/user_info_provider.dart';
 
 class HomeSettingsContent extends StatefulWidget {
   final VoidCallback onLogout;
@@ -347,8 +348,6 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
                     const SizedBox(height: 8),
                     _buildAccountCard(context, theme),
                     const SizedBox(height: 8),
-                    _buildAppearanceEffectsCard(context),
-                    const SizedBox(height: 8),
                     _buildAppInfoCard(context, theme),
                     if (!isDesktopLayout) const SizedBox(height: 50),
                   ],
@@ -376,8 +375,6 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
                               _buildClientSettingsCard(context, theme),
                               const SizedBox(height: 8),
                               _buildAccountCard(context, theme),
-                              const SizedBox(height: 8),
-                              _buildAppearanceEffectsCard(context),
                               const SizedBox(height: 8),
                               _buildAppInfoCard(context, theme),
                             ],
@@ -569,7 +566,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
     }
 
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => page),
+      CupertinoPageRoute(builder: (_) => page),
     );
   }
 
@@ -634,27 +631,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
 
     Navigator.push(
       context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => page,
-        transitionDuration: const Duration(milliseconds: 400),
-        reverseTransitionDuration: const Duration(milliseconds: 400),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          final fadeAnimation = CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeInOut,
-          );
-          return FadeTransition(
-            opacity: fadeAnimation,
-            child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0.0, 0.1),
-                end: Offset.zero,
-              ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-              child: child,
-            ),
-          );
-        },
-      ),
+      CupertinoPageRoute(builder: (_) => page),
     );
   }
 
@@ -829,7 +806,6 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
   }
 
   // ==================== 工具方法 ====================
-  
 
   // 使用 ForUI Item Group 渲染分组列表
   Widget _buildSectionGroup(
@@ -876,7 +852,6 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
       ),
     );
   }
-
 
   void _confirmLogout(BuildContext context, VoidCallback onLogout) async {
     bool isLoading = false;
@@ -933,38 +908,6 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
     if (confirmed == true && context.mounted) {
       onLogout();
     }
-  }
-
-  // ==================== 界面效果设置卡片 ====================
-  Widget _buildAppearanceEffectsCard(BuildContext context) {
-    final theme = Theme.of(context);
-    return _buildSectionGroup(
-      context,
-      title: '界面效果',
-      icon: Icons.blur_on_outlined,
-      items: [
-        FItem(
-          title: const Text('毛玻璃卡片'),
-          details: Text(
-            '开启后卡片将采用毛玻璃效果，关闭则使用普通半透明卡片',
-            style: TextStyle(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-              fontSize: 12,
-            ),
-          ),
-          suffix: _FrostedSwitch(onChanged: (v) async {
-            final settings = SettingsService();
-            await settings.setGlassCardEnabled(v);
-            if (!mounted || !context.mounted) return;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && context.mounted) {
-                setState(() {});
-              }
-            });
-          }),
-        ),
-      ],
-    );
   }
 
 }

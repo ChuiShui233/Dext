@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:fast_rsa/fast_rsa.dart';
 import 'package:flutter/foundation.dart';
 import 'package:pointycastle/export.dart';
+import 'package:dext/services/core/XChaCha.dart';
 
 class CryptoService {
   static final CryptoService _instance = CryptoService._internal();
@@ -139,6 +140,35 @@ O5BNvaOmpC2jMYWf0NfHRX9RIobjMknwGwIDAQAB
     );
   }
 
+  /// 使用 ECDH + XChaCha20-Poly1305 的新型封装加密方式
+  ///
+  /// [remotePublicKeyBase64] 为后端提供的 X25519 公钥（Base64 编码）
+  Future<XChaChaEncryptedPayload> encryptWithXChaCha(
+    Map<String, dynamic> data,
+    String remotePublicKeyBase64,
+  ) async {
+    final remotePublicKey = base64Decode(remotePublicKeyBase64);
+    final localEphemeralKeyPair =
+        await SecurePacketFormatter.generateEphemeralKeyPair();
+    final sessionKey = await SecurePacketFormatter.deriveSessionKey(
+      localEphemeralKeyPair,
+      remotePublicKey,
+    );
+
+    final jsonBytes = utf8.encode(json.encode(data));
+    final encryptedPacket = await SecurePacketFormatter.encryptPacket(
+      sessionKey,
+      jsonBytes,
+    );
+
+    final localPublicKey = await localEphemeralKeyPair.extractPublicKey();
+
+    return XChaChaEncryptedPayload(
+      ephemeralPublicKey: base64Encode(localPublicKey.bytes),
+      packet: base64Encode(encryptedPacket),
+    );
+  }
+
   // 获取当前会话密钥
   SessionKey? get currentSessionKey => _currentSessionKey;
   
@@ -188,4 +218,19 @@ class EncryptedPayload {
     'sessionKey': sessionKey,
     'data': data,
   };
+}
+
+class XChaChaEncryptedPayload {
+  final String ephemeralPublicKey;
+  final String packet;
+
+  const XChaChaEncryptedPayload({
+    required this.ephemeralPublicKey,
+    required this.packet,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'ephemeralPublicKey': ephemeralPublicKey,
+        'packet': packet,
+      };
 }

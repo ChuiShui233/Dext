@@ -35,8 +35,16 @@ class SurveyStatsService {
     
     if (cached != null) {
       try {
-        final data = json.decode(cached) as Map<String, dynamic>;
-        final stats = (data['stats'] as List).map((e) => SurveyStats.fromJson(e)).toList();
+        final dynamic data = json.decode(cached);
+        List<SurveyStats> stats;
+        if (data is Map<String, dynamic>) {
+          final list = (data['stats'] as List?) ?? const [];
+          stats = list.map((e) => SurveyStats.fromJson(e)).toList();
+        } else if (data is List) {
+          stats = data.map((e) => SurveyStats.fromJson(e)).toList();
+        } else {
+          stats = const <SurveyStats>[];
+        }
         _refreshStatsSilently(prefs, cacheKey);
         return stats;
       } catch (_) {}
@@ -62,8 +70,19 @@ class SurveyStatsService {
     final response = await httpRequest('GET', '$baseUrl/api/survey/stats', onStatus: onStatus);
     if (response.statusCode == 200) {
       prefs.setString(cacheKey, response.body);
-      final data = json.decode(response.body) as Map<String, dynamic>;
-      return (data['stats'] as List).map((e) => SurveyStats.fromJson(e)).toList();
+      final raw = response.body.trim();
+      if (raw.isEmpty || raw.toLowerCase() == 'null') {
+        return const <SurveyStats>[];
+      }
+      final dynamic data = json.decode(raw);
+      if (data is Map<String, dynamic>) {
+        final list = (data['stats'] as List?) ?? const [];
+        return list.map((e) => SurveyStats.fromJson(e)).toList();
+      }
+      if (data is List) {
+        return data.map((e) => SurveyStats.fromJson(e)).toList();
+      }
+      return const <SurveyStats>[];
     }
     throw '获取问卷统计失败: ${response.statusCode}';
   }

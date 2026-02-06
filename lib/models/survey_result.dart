@@ -23,8 +23,10 @@ class SurveyResult {
       userAccount: json['userAccount'] as String? ?? '',
       createTime: json['createTime'] as String? ?? '',
       questions: (json['questions'] as List<dynamic>?)
-          ?.map((q) => AnswerDetail.fromJson(q))
-          .toList() ?? [],
+              ?.whereType<Map<String, dynamic>>()
+              .map((q) => AnswerDetail.fromJson(q))
+              .toList() 
+          ?? [],
     );
   }
 

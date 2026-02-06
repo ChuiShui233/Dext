@@ -1,13 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
-import '../widgets/frosted_oauth_dialog.dart';
-import '../services/api_service.dart';
-import '../services/oauth_service.dart';
-import '../services/uri_handler_service.dart';
-import '../models/user.dart';
+import '../../widgets/frosted_oauth_dialog.dart';
+import '../../services/api_service.dart';
+import '../../services/oauth_service.dart';
+import '../../services/uri_handler_service.dart';
+import '../../models/user.dart';
 import 'dart:async';
-import '../widgets/top_safe_spacer.dart';
+import '../../widgets/top_safe_spacer.dart';
 
 class AccountSecurityPage extends StatefulWidget {
   final ApiService apiService;
@@ -56,13 +56,14 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
     final theme = Theme.of(context);
     final email = _user?.email;
     final hasEmail = email != null && email.isNotEmpty;
+    final bool isDesktopLayout = MediaQuery.of(context).size.width >= 1025;
 
     return Scaffold(
       body: Stack(
         children: [
           Column(
             children: [
-              const TopSafeSpacer(),
+              if (!isDesktopLayout) const TopSafeSpacer(),
               FHeader.nested(
                 title: const Text('账号安全'),
                 prefixes: [

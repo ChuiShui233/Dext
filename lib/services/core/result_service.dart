@@ -23,10 +23,34 @@ class ResultService {
     );
 
     if (response.statusCode == 200) {
-      final data = json.decode(response.body);
+      final raw = response.body.trim();
+      if (raw.isEmpty || raw.toLowerCase() == 'null') {
+        return PaginatedResponse<SurveyResult>(
+          items: const <SurveyResult>[],
+          total: 0,
+          page: 1,
+          pageSize: 0,
+          totalPages: 0,
+        );
+      }
+      dynamic data;
+      try {
+        data = json.decode(raw);
+      } catch (_) {
+        return PaginatedResponse<SurveyResult>(
+          items: const <SurveyResult>[],
+          total: 0,
+          page: 1,
+          pageSize: 0,
+          totalPages: 0,
+        );
+      }
       // 后端直接返回数组，需要包装为分页格式
       if (data is List) {
-        final items = data.map((e) => SurveyResult.fromJson(e)).toList();
+        final items = data
+            .whereType<Map<String, dynamic>>()
+            .map((e) => SurveyResult.fromJson(e))
+            .toList();
         return PaginatedResponse<SurveyResult>(
           items: items,
           total: items.length,
@@ -35,10 +59,19 @@ class ResultService {
           totalPages: 1,
         );
       }
-      // 如果是分页对象，直接解析
-      return PaginatedResponse<SurveyResult>.fromJson(
-        data,
-        (json) => SurveyResult.fromJson(json),
+      // 如果是分页对象，直接解析；否则返回空
+      if (data is Map<String, dynamic>) {
+        return PaginatedResponse<SurveyResult>.fromJson(
+          data,
+          (json) => SurveyResult.fromJson(json),
+        );
+      }
+      return PaginatedResponse<SurveyResult>(
+        items: const <SurveyResult>[],
+        total: 0,
+        page: 1,
+        pageSize: 0,
+        totalPages: 0,
       );
     }
     throw '获取问卷结果失败: ${response.statusCode}';
@@ -56,7 +89,15 @@ class ResultService {
     );
 
     if (response.statusCode == 200) {
-      return json.decode(response.body);
+      final raw = response.body.trim();
+      if (raw.isEmpty || raw.toLowerCase() == 'null') {
+        return <String, dynamic>{};
+      }
+      try {
+        final dynamic data = json.decode(raw);
+        if (data is Map<String, dynamic>) return data;
+      } catch (_) {}
+      return <String, dynamic>{};
     }
     throw '导出结果失败: ${response.statusCode}';
   }

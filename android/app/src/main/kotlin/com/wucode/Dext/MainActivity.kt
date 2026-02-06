@@ -8,10 +8,15 @@ import android.util.Log
 import android.content.Intent
 import android.net.Uri
 import android.app.Activity
+import android.os.PowerManager
+import android.os.Build
+import android.content.Context
+import android.provider.Settings
 import java.io.File
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.chuishui.Dext/storage"
+    private val POWER_CHANNEL = "com.chuishui.Dext/power"
     private val CREATE_FILE_REQUEST = 1001
     private var pendingResult: MethodChannel.Result? = null
     private var pendingFilePath: String? = null
@@ -46,6 +51,74 @@ class MainActivity : FlutterActivity() {
                 else -> {
                     result.notImplemented()
                 }
+            }
+        }
+
+        // Power/battery optimization channel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, POWER_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "isIgnoringBatteryOptimizations" -> {
+                    try {
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+                            result.success(true)
+                        } else {
+                            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                            val isIgnoring = pm.isIgnoringBatteryOptimizations(packageName)
+                            result.success(isIgnoring)
+                        }
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "check ignore battery optimization failed", e)
+                        result.success(false)
+                    }
+                }
+                "requestIgnoreBatteryOptimizations" -> {
+                    try {
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+                            result.success(true)
+                        } else {
+                            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                            if (pm.isIgnoringBatteryOptimizations(packageName)) {
+                                result.success(true)
+                            } else {
+                                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                    data = Uri.parse("package:$packageName")
+                                }
+                                startActivity(intent)
+                                result.success(true)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "request ignore battery optimization failed", e)
+                        result.success(false)
+                    }
+                }
+                "openBatteryOptimizationSettings" -> {
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                            startActivity(intent)
+                            result.success(true)
+                        } else {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.parse("package:$packageName")
+                            }
+                            startActivity(intent)
+                            result.success(true)
+                        }
+                    } catch (e: Exception) {
+                        try {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.parse("package:$packageName")
+                            }
+                            startActivity(intent)
+                            result.success(true)
+                        } catch (ee: Exception) {
+                            Log.e("MainActivity", "open settings failed", ee)
+                            result.success(false)
+                        }
+                    }
+                }
+                else -> result.notImplemented()
             }
         }
     }
