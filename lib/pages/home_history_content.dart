@@ -471,7 +471,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
                   color: Colors.transparent,
                   child: FDialog(
                     title: const Text('确认删除'),
-                    body: const Text('确定要删除该记录吗？此操作不可撤销。'),
+                    body: const Text('确定要删除该记录吗？删除后记录将进入回收站。'),
                     actions: [
                       FButton(
                         style: context.theme.buttonStyles.ghost.call,

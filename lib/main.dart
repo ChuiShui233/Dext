@@ -27,7 +27,6 @@ import 'pages/login_page.dart';
 import 'pages/create_survey_page.dart';
 import 'pages/frame_page.dart';
 import 'pages/public_survey_page.dart';
-import 'pages/public_access_page.dart';
 import 'services/api_service.dart';
 import 'widgets/window_caption.dart';
 
@@ -398,6 +397,13 @@ class _YuMeng233AppState extends State<YuMeng233App>
       final hasToken = _token != null && _tokenExpiry != null;
       
       // 清理本地令牌
+      // 清理本地数据和缓存
+      try {
+        await ApiService().clearAllLocalData();
+      } catch (e) {
+        debugPrint('清理缓存失败: $e');
+      }
+      
       await _storage.delete(key: 'auth_token');
       await _storage.delete(key: 'token_expiry');
       if (!mounted) return;
@@ -443,6 +449,9 @@ class _YuMeng233AppState extends State<YuMeng233App>
 
       if (expiryDate == null) {
         // 存储中的过期时间异常，清理并回到登录
+        try {
+          await ApiService().clearAllLocalData();
+        } catch (_) {}
         await _storage.delete(key: 'auth_token');
         await _storage.delete(key: 'token_expiry');
         setState(() {
@@ -512,7 +521,14 @@ class _YuMeng233AppState extends State<YuMeng233App>
     // 停止定时刷新
     _tokenRefreshTimer?.cancel();
     
-    // 清理本地存储
+    // 清理本地存储 (SharedPreferences 缓存)
+    try {
+      await ApiService().clearAllLocalData();
+    } catch (e) {
+      debugPrint('清理缓存失败: $e');
+    }
+
+    // 清理安全存储 (Tokens)
     await _storage.delete(key: 'auth_token');
     await _storage.delete(key: 'token_expiry');
     
@@ -688,11 +704,6 @@ class _YuMeng233AppState extends State<YuMeng233App>
           builder: (context) => PublicSurveyPage(surveyUID: surveyUID),
         );
       }
-    } else if (settings.name == '/public/access') {
-      // 公开问卷访问入口页面
-      return MaterialPageRoute(
-        builder: (context) => const PublicAccessPage(),
-      );
     }
     
     return MaterialPageRoute(

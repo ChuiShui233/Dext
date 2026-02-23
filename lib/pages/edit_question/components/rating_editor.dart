@@ -89,20 +89,19 @@ class _RatingEditorState extends State<RatingEditor> {
                   padding: EdgeInsets.only(bottom: 8.0),
                   child: Text('表现样式'),
                 ),
-                SegmentedButton<String>(
-                  segments: const <ButtonSegment<String>>[
-                    ButtonSegment<String>(value: 'star', label: Text('星星')),
-                    ButtonSegment<String>(value: 'crumb', label: Text('条形')),
-                  ],
-                  selected: {widget.ratingStyle},
-                  onSelectionChanged: (sel) {
-                    if (sel.isNotEmpty) widget.onRatingStyleChanged(sel.first);
-                    setState(() {});
+                FSelect<String>(
+                  hint: '选择表现样式',
+                  initialValue: widget.ratingStyle,
+                  items: const {
+                    '星星 (Star)': 'star',
+                    '条形 (Crumb)': 'crumb',
                   },
-                  showSelectedIcon: false,
-                  style: ButtonStyle(
-                    visualDensity: VisualDensity.compact,
-                  ),
+                  onChange: (val) {
+                    if (val != null) {
+                      widget.onRatingStyleChanged(val);
+                      setState(() {});
+                    }
+                  },
                 ),
               ],
             ),
@@ -116,19 +115,21 @@ class _RatingEditorState extends State<RatingEditor> {
                   padding: EdgeInsets.only(bottom: 8.0),
                   child: Text('图标（星星样式）'),
                 ),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: <String>['star','favorite','circle','heart_broken']
-                      .map((name) => ChoiceChip(
-                        label: Text(name),
-                        selected: widget.ratingIcon == name,
-                        onSelected: (s) {
-                          if (s) widget.onRatingIconChanged(name);
-                          setState(() {});
-                        },
-                      ))
-                      .toList(),
+                FSelect<String>(
+                  hint: '选择图标样式',
+                  initialValue: widget.ratingIcon,
+                  items: const {
+                    '星星 (Star)': 'star',
+                    '心形 (Favorite)': 'favorite',
+                    '圆形 (Circle)': 'circle',
+                    '破碎的心 (Broken)': 'heart_broken',
+                  },
+                  onChange: (val) {
+                    if (val != null) {
+                      widget.onRatingIconChanged(val);
+                      setState(() {});
+                    }
+                  },
                 ),
               ],
             ),
@@ -187,7 +188,6 @@ class _RatingEditorState extends State<RatingEditor> {
               ? List.generate(widget.starsCount * 2, (i) {
                   final value = (i + 1) * 0.5;
                   final labelText = value % 1 == 0 ? value.toInt().toString() : value.toString();
-                  widget.onEnsurePerStarLabelCtrls(widget.starsCount * 2);
                   return SizedBox(
                     width: 220,
                     child: FTextFormField(
@@ -198,7 +198,6 @@ class _RatingEditorState extends State<RatingEditor> {
                 })
               : List.generate(widget.starsCount, (i) {
                   final idx = i + 1;
-                  widget.onEnsurePerStarLabelCtrls(widget.starsCount);
                   return SizedBox(
                     width: 220,
                     child: FTextFormField(

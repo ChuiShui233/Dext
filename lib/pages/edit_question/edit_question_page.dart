@@ -36,7 +36,26 @@ class EditQuestionPage extends StatefulWidget {
 class _EditQuestionPageState extends State<EditQuestionPage> with TickerProviderStateMixin {
   bool _enableRatingLabels = false;
   final TextEditingController _ratingLabelsController = TextEditingController();
+  final Map<String, TextEditingController> _allRatingLabelCtrls = {};
   final List<TextEditingController> _perStarLabelCtrls = [];
+
+  TextEditingController _getRatingController(String key) {
+    if (!_allRatingLabelCtrls.containsKey(key)) {
+      _allRatingLabelCtrls[key] = TextEditingController();
+    }
+    return _allRatingLabelCtrls[key]!;
+  }
+
+  void _ensurePerStarLabelCtrls(int stars) {
+    // 根据当前的 starsCount 和 allowHalf 状态，从 _allRatingLabelCtrls 中选取需要的控制器
+    _perStarLabelCtrls.clear();
+    for (int i = 0; i < stars; i++) {
+      final value = _allowHalf ? (i + 1) * 0.5 : (i + 1).toDouble();
+      final key = value % 1 == 0 ? value.toInt().toString() : value.toString();
+      _perStarLabelCtrls.add(_getRatingController(key));
+    }
+  }
+
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _minValueController = TextEditingController();
@@ -81,17 +100,17 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
   // 预览用：选项选中状态
   final Map<String, bool> _previewOptionStates = {};
 
-  void _ensurePerStarLabelCtrls(int stars) {
-    if (_perStarLabelCtrls.length < stars) {
-      for (int i = _perStarLabelCtrls.length; i < stars; i++) {
-        _perStarLabelCtrls.add(TextEditingController());
+  void _handleAllowHalfChanged(bool allowHalf) {
+    if (_allowHalf == allowHalf) return;
+
+    setState(() {
+      _allowHalf = allowHalf;
+      
+      if (_enableRatingLabels) {
+        final totalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
+        _ensurePerStarLabelCtrls(totalSteps);
       }
-    } else if (_perStarLabelCtrls.length > stars) {
-      for (int i = stars; i < _perStarLabelCtrls.length; i++) {
-        _perStarLabelCtrls[i].dispose();
-      }
-      _perStarLabelCtrls.removeRange(stars, _perStarLabelCtrls.length);
-    }
+    });
   }
 
   // 将大图压缩到最大边<=1920；
@@ -219,12 +238,13 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
                 _enableRatingLabels = true;
                 final totalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
                 _ensurePerStarLabelCtrls(totalSteps);
-                for (int i = 0; i < totalSteps; i++) {
-                  final value = _allowHalf ? (i + 1) * 0.5 : (i + 1).toDouble();
-                  final key = value % 1 == 0 ? value.toInt().toString() : value.toString();
-                  final val = m[key]?.toString() ?? '';
-                  if (val.isNotEmpty) _perStarLabelCtrls[i].text = val;
-                }
+                
+                // 加载所有保存的标签文本到统一存储中
+                m.forEach((key, val) {
+                  if (val != null && val.toString().isNotEmpty) {
+                    _getRatingController(key).text = val.toString();
+                  }
+                });
               }
             } catch (_) {}
           }
@@ -260,7 +280,10 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
   @override
   void dispose() {
     _ratingLabelsController.dispose();
-    for (final c in _perStarLabelCtrls) { c.dispose(); }
+    for (final c in _allRatingLabelCtrls.values) {
+      c.dispose();
+    }
+    _allRatingLabelCtrls.clear();
     _titleController.dispose();
     _minValueController.dispose();
     _maxValueController.dispose();
@@ -507,17 +530,13 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
         ];
 
         if (_enableRatingLabels) {
-          final totalSteps = _allowHalf ? starsCount * 2 : starsCount;
-          _ensurePerStarLabelCtrls(totalSteps);
           final Map<String, String> map = {};
-          for (int i = 0; i < totalSteps; i++) {
-            final value = _allowHalf ? (i + 1) * 0.5 : (i + 1).toDouble();
-            final key = value % 1 == 0 ? value.toInt().toString() : value.toString();
-            final val = _perStarLabelCtrls[i].text.trim();
+          _allRatingLabelCtrls.forEach((key, controller) {
+            final val = controller.text.trim();
             if (val.isNotEmpty) {
               map[key] = val;
             }
-          }
+          });
           if (map.isNotEmpty) {
             final jsonStr = jsonEncode(map);
             finalOptions.add(QuestionOption(id: 11, text: jsonStr));
@@ -800,15 +819,7 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
             _ratingIcon = value;
           });
         },
-        onAllowHalfChanged: (value) {
-          setState(() {
-            _allowHalf = value;
-            if (_enableRatingLabels) {
-              final totalSteps = _allowHalf ? _starsCount * 2 : _starsCount;
-              _ensurePerStarLabelCtrls(totalSteps);
-            }
-          });
-        },
+        onAllowHalfChanged: _handleAllowHalfChanged,
         onStarsCountChanged: (value) {
           setState(() {
             _starsCount = value;
@@ -931,22 +942,18 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
       ];
 
       if (_enableRatingLabels) {
-        final totalSteps = _allowHalf ? starsCount * 2 : starsCount;
-        _ensurePerStarLabelCtrls(totalSteps);
-        final Map<String, String> map = {};
-        for (int i = 0; i < totalSteps; i++) {
-          final value = _allowHalf ? (i + 1) * 0.5 : (i + 1).toDouble();
-          final key = value % 1 == 0 ? value.toInt().toString() : value.toString();
-          final val = _perStarLabelCtrls[i].text.trim();
-          if (val.isNotEmpty) {
-            map[key] = val;
-          }
+      final Map<String, String> map = {};
+      _allRatingLabelCtrls.forEach((key, controller) {
+        final val = controller.text.trim();
+        if (val.isNotEmpty) {
+          map[key] = val;
         }
-        if (map.isNotEmpty) {
-          final jsonStr = jsonEncode(map);
-          previewOptions.add(QuestionOption(id: 11, text: jsonStr));
-        }
+      });
+      if (map.isNotEmpty) {
+        final jsonStr = jsonEncode(map);
+        previewOptions.add(QuestionOption(id: 11, text: jsonStr));
       }
+    }
     } else if (_selectedType == QuestionType.textInput) {
       final configText = 'placeholder:$_textInputPlaceholder|maxLength:$_textInputMaxLength|multiline:$_textInputMultiline';
       previewOptions = [

@@ -27,6 +27,7 @@ import '../services/config.dart';
 import '../components/loading_indicator.dart';
 import '../components/adaptive_message_card.dart';
 import '../components/glass_button.dart';
+import 'recycle_bin_page.dart';
 
 class SurveyResultsPage extends StatefulWidget {
   final String token;
@@ -1712,48 +1713,79 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 16,
+              runSpacing: 12,
               children: [
-                const Text(
-                  '统计概览',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      '统计概览',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    FButton(
+                      style: context.theme.buttonStyles.ghost.call,
+                      onPress: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => RecycleBinPage(
+                              token: widget.token,
+                              surveyId: widget.survey.id,
+                              surveyName: widget.survey.surveyName,
+                              desktopBackground: _desktopBackground,
+                              mobileBackground: _mobileBackground,
+                            ),
+                          ),
+                        ).then((_) => _loadData()); // 返回时刷新数据
+                      },
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.delete_outline, size: 18),
+                          SizedBox(width: 4),
+                          Text('回收站', style: TextStyle(fontSize: 14)),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      FButton(
-                        style: context.theme.buttonStyles.ghost.call,
-                        onPress: () {
-                          setState(() => _exportFmtExpanded = !_exportFmtExpanded);
-                          _exportFmtCtl.toggle();
-                        },
-                        child: Row(
-                          children: [
-                            const Icon(FIcons.arrowBigUpDash, size: 24),
-                            const SizedBox(width: 6),
-                            const Text('导出为...'),
-                          ],
-                        ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FButton(
+                      style: context.theme.buttonStyles.ghost.call,
+                      onPress: () {
+                        setState(() => _exportFmtExpanded = !_exportFmtExpanded);
+                        _exportFmtCtl.toggle();
+                      },
+                      child: Row(
+                        children: [
+                          const Icon(FIcons.arrowBigUpDash, size: 24),
+                          const SizedBox(width: 6),
+                          const Text('导出为...'),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      FSwitch(
-                        label: const Text('饼图'),
-                        value: _usePieChart,
-                        onChange: (value) {
-                          setState(() {
-                            _usePieChart = value;
-                            _statisticsCache = null;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 8),
+                    FSwitch(
+                      label: const Text('饼图'),
+                      value: _usePieChart,
+                      onChange: (value) {
+                        setState(() {
+                          _usePieChart = value;
+                          _statisticsCache = null;
+                        });
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1776,34 +1808,34 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
                         LayoutBuilder(
                           builder: (context, constraints) {
                             final isNarrow = constraints.maxWidth < 420;
-                            final buttons = [
-                              Expanded(
-                                child: _buildActionButton(
-                                  onTap: _exportCsv,
-                                  icon: Icons.table_rows,
-                                  label: '导出 CSV',
-                                  colors: const [Color(0xFF4CAF50), Color(0xFF2E7D32)],
-                                ),
-                              ),
-                              const SizedBox(width: 12, height: 12),
-                              Expanded(
-                                child: _buildActionButton(
-                                  onTap: _exportXlsx,
-                                  icon: Icons.table_chart,
-                                  label: '导出 Excel',
-                                  colors: const [Color(0xFF1976D2), Color(0xFF0D47A1)],
-                                ),
-                              ),
-                            ];
+                            final csvBtn = _buildActionButton(
+                              onTap: _exportCsv,
+                              icon: Icons.table_rows,
+                              label: '导出 CSV',
+                              colors: const [Color(0xFF4CAF50), Color(0xFF2E7D32)],
+                            );
+                            final xlsxBtn = _buildActionButton(
+                              onTap: _exportXlsx,
+                              icon: Icons.table_chart,
+                              label: '导出 Excel',
+                              colors: const [Color(0xFF1976D2), Color(0xFF0D47A1)],
+                            );
+
                             return isNarrow
                                 ? Column(
                                     children: [
-                                      buttons[0],
+                                      csvBtn,
                                       const SizedBox(height: 12),
-                                      buttons[2],
+                                      xlsxBtn,
                                     ],
                                   )
-                                : Row(children: buttons);
+                                : Row(
+                                    children: [
+                                      Expanded(child: csvBtn),
+                                      const SizedBox(width: 12),
+                                      Expanded(child: xlsxBtn),
+                                    ],
+                                  );
                           },
                         ),
                       ],

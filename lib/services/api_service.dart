@@ -526,6 +526,109 @@ class ApiService {
     }
   }
 
+  // 获取回收站列表
+  Future<List<Map<String, dynamic>>> getRecycleBinAnswers(
+    int surveyId, {
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在获取回收站列表...');
+      _updateStatus(RequestStatus.loading, '正在获取回收站列表...');
+      
+      final response = await _httpRequest(
+        'GET',
+        '$baseUrl/api/answer/recycle-bin/$surveyId',
+        onStatus: onStatus,
+      );
+      
+      if (response.statusCode == 200) {
+      final dynamic decodedData = json.decode(response.body);
+      final List<dynamic> data = decodedData is List ? decodedData : [];
+      onStatus?.call(RequestStatus.success, '获取成功');
+      _updateStatus(RequestStatus.success, '获取成功');
+      return data.cast<Map<String, dynamic>>();
+    } else if (response.statusCode == 401) {
+        throw TokenExpired('未登录或登录已过期');
+      } else if (response.statusCode == 403) {
+        throw '无权限查看回收站';
+      } else {
+        throw '获取回收站列表失败: ${response.statusCode}';
+      }
+    } catch (e) {
+      final errorMsg = e.toString();
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
+    }
+  }
+
+  // 恢复单个答卷
+  Future<void> restoreAnswer(
+    int answerId, {
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在恢复答卷...');
+      _updateStatus(RequestStatus.loading, '正在恢复答卷...');
+      
+      final response = await _httpRequest(
+        'POST',
+        '$baseUrl/api/answer/recycle-bin/restore/$answerId',
+        onStatus: onStatus,
+      );
+      
+      if (response.statusCode == 200) {
+        onStatus?.call(RequestStatus.success, '答卷恢复成功');
+        _updateStatus(RequestStatus.success, '答卷恢复成功');
+      } else if (response.statusCode == 401) {
+        throw TokenExpired('未登录或登录已过期');
+      } else if (response.statusCode == 403) {
+        throw '无权限恢复此答卷';
+      } else {
+        throw '恢复答卷失败: ${response.statusCode}';
+      }
+    } catch (e) {
+      final errorMsg = e.toString();
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
+    }
+  }
+
+  // 批量恢复答卷
+  Future<void> batchRestoreAnswers(
+    List<int> answerIds, {
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在批量恢复答卷...');
+      _updateStatus(RequestStatus.loading, '正在批量恢复答卷...');
+      
+      final response = await _httpRequest(
+        'POST',
+        '$baseUrl/api/answers/recycle-bin/batch-restore',
+        data: {'answerIds': answerIds},
+        onStatus: onStatus,
+      );
+      
+      if (response.statusCode == 200) {
+        onStatus?.call(RequestStatus.success, '批量恢复成功');
+        _updateStatus(RequestStatus.success, '批量恢复成功');
+      } else if (response.statusCode == 401) {
+        throw TokenExpired('未登录或登录已过期');
+      } else if (response.statusCode == 403) {
+        throw '无权限恢复这些答卷';
+      } else {
+        throw '批量恢复失败: ${response.statusCode}';
+      }
+    } catch (e) {
+      final errorMsg = e.toString();
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
+    }
+  }
+
   // 发送邮箱验证码（注册/重置密码，无需登录）
   Future<void> sendEmailVerificationCode({
     required String email,
@@ -1480,22 +1583,21 @@ class ApiService {
 
   // 退出登录并清除本地令牌
   Future<void> logoutAndClear({StatusCallback? onStatus}) async {
-    try {
-      await _httpRequest('POST', '$baseUrl/api/auth/logout', onStatus: onStatus, allowRetry: false);
-    } catch (_) {}
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('auth_token');
-      await prefs.remove('auth_token_expires');
-    } catch (_) {}
+    await _userService.logout(onStatus: onStatus);
     authToken = null;
-    // rely on ApiService.authToken for headers
     _updateStatus(RequestStatus.success, '已退出登录');
   }
 
   /// 严格注销：先调用服务端注销，成功后清理所有本地令牌和会话数据
   Future<void> logoutStrict({StatusCallback? onStatus}) async {
-    return await _userService.logout(onStatus: onStatus);
+    await _userService.logout(onStatus: onStatus);
+    authToken = null;
+  }
+
+  /// 清除所有本地缓存数据
+  Future<void> clearAllLocalData() async {
+    await _userService.clearAllLocalData();
+    authToken = null;
   }
 
   Future<List<Project>> getProjects({StatusCallback? onStatus}) async {
@@ -3250,26 +3352,8 @@ Future<Question> addQuestion(
 
   /// 注销用户并使令牌失效
   Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('authToken');
-    if (token == null) {
-      throw '未找到令牌';
-    }
-
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/auth/logout'),
-      headers: {
-        'Authorization': token,
-        'Content-Type': 'application/json',
-      },
-    );
-
-    if (response.statusCode != 200) {
-      throw '注销失败: ${response.body}';
-    }
-
-    // 注销成功后清除本地存储的令牌
-    await prefs.remove('authToken');
+    await _userService.logout();
+    authToken = null;
   }
 
   // 公开访问问卷信息（无需认证）
@@ -3359,7 +3443,7 @@ Future<Question> addQuestion(
   }
   
 
-  // 删除单个答案
+  // 逻辑删除单个答案
   Future<void> deleteAnswer(
     int answerId, {
     StatusCallback? onStatus,
@@ -3369,8 +3453,8 @@ Future<Question> addQuestion(
       _updateStatus(RequestStatus.loading, '正在删除答案...');
       
       final response = await _httpRequest(
-        'DELETE',
-        '$baseUrl/api/answer/$answerId',
+        'POST',
+        '$baseUrl/api/answer/logic-delete/$answerId',
         onStatus: onStatus,
       );
       
@@ -3392,7 +3476,7 @@ Future<Question> addQuestion(
     }
   }
 
-  // 批量删除答案
+  // 批量逻辑删除答案
   Future<void> batchDeleteAnswers(
     List<int> answerIds, {
     StatusCallback? onStatus,
@@ -3402,8 +3486,8 @@ Future<Question> addQuestion(
       _updateStatus(RequestStatus.loading, '正在批量删除答案...');
       
       final response = await _httpRequest(
-        'DELETE',
-        '$baseUrl/api/answers/batch',
+        'POST',
+        '$baseUrl/api/answers/batch-logic-delete',
         data: {'answerIds': answerIds},
         onStatus: onStatus,
       );
@@ -3419,6 +3503,39 @@ Future<Question> addQuestion(
         throw '无权限删除这些答案';
       } else {
         throw '批量删除答案失败: ${response.statusCode}';
+      }
+    } catch (e) {
+      final errorMsg = e.toString();
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
+    }
+  }
+
+  // 物理删除单个答案（仅限创建者）
+  Future<void> physicalDeleteAnswer(
+    int answerId, {
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在物理删除答案...');
+      _updateStatus(RequestStatus.loading, '正在物理删除答案...');
+      
+      final response = await _httpRequest(
+        'DELETE',
+        '$baseUrl/api/answer/$answerId',
+        onStatus: onStatus,
+      );
+      
+      if (response.statusCode == 200) {
+        onStatus?.call(RequestStatus.success, '答案物理删除成功');
+        _updateStatus(RequestStatus.success, '答案物理删除成功');
+      } else if (response.statusCode == 401) {
+        throw TokenExpired('未登录或登录已过期');
+      } else if (response.statusCode == 403) {
+        throw '无权限物理删除此答案';
+      } else {
+        throw '物理删除答案失败: ${response.statusCode}';
       }
     } catch (e) {
       final errorMsg = e.toString();

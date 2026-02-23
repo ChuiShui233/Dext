@@ -567,7 +567,13 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
 
     return MouseRegion(
       onExit: widget.mode == QuestionDisplayMode.readonly ? null : (_) {
-        setState(() => _localHoverRatings[widget.question.id] = null);
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() => _localHoverRatings[widget.question.id] = null);
+            }
+          });
+        }
       },
       onHover: widget.mode == QuestionDisplayMode.readonly ? null : (e) {
         double hv = starIndex.toDouble();
@@ -575,7 +581,14 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
           final dx = e.localPosition.dx;
           if (dx <= starIconSize / 2) hv = starIndex - 0.5;
         }
-        setState(() => _localHoverRatings[widget.question.id] = hv.clamp(allowHalf ? 0.5 : 1.0, stars.toDouble()));
+        final finalHv = hv.clamp(allowHalf ? 0.5 : 1.0, stars.toDouble());
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() => _localHoverRatings[widget.question.id] = finalHv);
+            }
+          });
+        }
       },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -612,12 +625,25 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
 
     return MouseRegion(
       onExit: widget.mode == QuestionDisplayMode.readonly ? null : (_) {
-        setState(() => _localHoverRatings[widget.question.id] = null);
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() => _localHoverRatings[widget.question.id] = null);
+            }
+          });
+        }
       },
       onHover: widget.mode == QuestionDisplayMode.readonly ? null : (e) {
         double hv = segIndex.toDouble();
         if (allowHalf && e.localPosition.dx <= width / 2) hv = segIndex - 0.5;
-        setState(() => _localHoverRatings[widget.question.id] = hv.clamp(allowHalf ? 0.5 : 1.0, stars.toDouble()));
+        final finalHv = hv.clamp(allowHalf ? 0.5 : 1.0, stars.toDouble());
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() => _localHoverRatings[widget.question.id] = finalHv);
+            }
+          });
+        }
       },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,

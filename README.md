@@ -1,37 +1,45 @@
 # Dext - 花里胡哨的问卷调查
 
 <p align="center">
-    <img src="assets/images/Dext.png" alt="Dext Logo" width="120" height="120">
+  <img src="assets/images/Dext.png" alt="Dext Logo" width="120" height="120">
 </p>
 
 <p align="center">
-    <a href='https://github.com/chuishui233/dext'><img alt="Github stars" src="https://img.shields.io/github/stars/chuishui233/dext?logo=github"></a>
-    <a href='https://github.com/chuishui233/dext'><img alt="Github forks" src="https://img.shields.io/github/forks/chuishui233/dext?logo=github"></a>
-    <a href='https://github.com/chuishui233/dext/releases'><img alt="Github releases" src="https://img.shields.io/github/v/release/chuishui233/dext?logo=github"></a>
-    <a href='https://flutter.dev'><img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.35.0+-blue?logo=flutter"></a>
+  <a href='https://github.com/chuishui233/dext'><img alt="Github stars" src="https://img.shields.io/github/stars/chuishui233/dext?logo=github"></a>
+  <a href='https://github.com/chuishui233/dext'><img alt="Github forks" src="https://img.shields.io/github/forks/chuishui233/dext?logo=github"></a>
+  <a href='https://github.com/chuishui233/dext/releases'><img alt="Github releases" src="https://img.shields.io/github/v/release/chuishui233/dext?logo=github"></a>
+  <a href='https://flutter.dev'><img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.35.0+-blue?logo=flutter"></a>
 </p>
 
-## 项目介绍
+## 项目简介
 
-**Dext** 是一款功能强大的开源问卷调查应用，采用 Flutter 跨平台技术开发。应用提供了完整的问卷创建、发布、填写、数据分析等功能，支持多种题型和丰富的交互体验。
+**Dext** 是一款基于 Flutter 的跨平台开源问卷 / 调研工具，主打 **「花里胡哨但好用」** 的编辑和填写体验。  
+它提供从「问卷设计 → 发布分享 → 填写收集 → 结果分析导出」的一整套流程，适合个人、小团队甚至中小企业自建问卷系统使用。
 
-### 核心功能
+### 功能一览
 
-- 📝 **问卷创建** - 支持多种题型（单选、多选、填空、评分等）
-- 🔗 **公开访问** - 支持通过链接分享问卷，无需注册即可填写
-- 📊 **数据分析** - 实时统计分析，可视化展示结果
-- 🔒 **端到端加密** - RSA + AES-GCM
-- 📋 **智能剪切板** - 自动检测剪切板中的问卷链接并提示访问
+- 📝 **问卷编辑器**
+  - 支持单选、多选、填空、评分、排序等常见题型
+  - 支持题目分组、必答设置、校验规则等
+  - 拖拽式编辑、所见即所得
+- 🔗 **分享与访问**
+  - 生成公开访问链接，一键分享
+  - 支持多端访问（移动端 / 桌面端 / Web）
+- 📊 **结果统计与分析**
+  - 填写数据实时统计
+  - 支持图表展示（柱状图、饼图等）
+  - 支持导出为 Excel 等格式（基于 `syncfusion_flutter_xlsio`）
+- 🔒 **安全与隐私**
+  - 使用 RSA、对称加密等方案保护敏感数据（`fast_rsa`、`crypto`、`pointycastle` 等）
+  - 支持安全本地存储（`flutter_secure_storage`、`shared_preferences`）
+- 📋 **剪切板 + 深度链接**
+  - 智能检测剪切板里的问卷链接并提示打开
+  - 支持 App Links / 深度链接唤起应用
+- 🧊 **UI 与交互**
+  - 使用 `forui` 等组件库构建现代化 UI
+  - 支持多平台窗口管理、托盘图标、单实例等桌面增强能力
 
-### 特色亮点
-
-- **智能问卷设计** - 拖拽式问卷编辑器，所见即所得
-- **多媒体支持** - 支持图片、音频、视频等多媒体内容
-- **实时预览** - 创建过程中实时预览问卷效果
-- **数据可视化** - 图表展示问卷统计结果
-- **响应式设计** - 完美适配各种屏幕尺寸
-
-## 项目地址
+## 仓库地址
 
 <a href='https://github.com/chuishui233/dext'><img alt="Github" src="https://img.shields.io/badge/GitHub-Dext-blue?logo=github"></a>
 
@@ -78,8 +86,10 @@
 | iOS                            |  ✅
 | Windows                        |  ✅
 | Web                            |  ✅
-| macOS                          |  ✅
-| Linux                          |  ✅
+| macOS                          |  ？
+| Linux                          |  ？
+
+>？ 为未测试编译运行
 
 ## 项目结构
 
@@ -128,34 +138,55 @@ lib/
 | Flutter SDK                    |  3.35.0+
 | Dart SDK                       |  3.9+
 
-### 核心依赖
-|                                | 版本          | 用途
-|------------------------------- | ------------- | ---------------------------
-| forui                          |  ^0.16.0      | UI组件库
-| http                           |  ^1.1.0       | 网络请求
-| flutter_secure_storage         |  ^10.0.0-beta.4 | 安全存储
-| shared_preferences             |  ^2.5.3       | 本地存储
-| provider                       |  ^6.1.5+1     | 状态管理
-| cached_network_image           |  ^3.4.1       | 图片缓存
-| file_picker                    |  ^10.1.9      | 文件选择
-| image_picker                   |  ^1.0.4       | 图片选择
-| video_player                   |  ^2.10.0      | 视频播放
-| pull_to_refresh                |  ^2.0.0       | 下拉刷新
-| flutter_staggered_grid_view    |  ^0.7.0       | 瀑布流布局
-| uni_links                      |  ^0.5.1       | 深度链接
-| url_launcher                   |  ^6.2.5       | URL启动
-| window_manager                 |  ^0.5.1       | 窗口管理
-| tray_manager                   |  ^0.5.2       | 系统托盘
-| web                            |  ^1.1.0       | Web平台支持
-| clipboard                      |  ^0.1.3       | 剪切板操作
+### 核心依赖（功能相关）
+|                                | 版本              | 用途
+|------------------------------- | ----------------- | ---------------------------|
+| forui                          |  ^0.16.0          | UI 组件库 / 交互控件       |
+| layout                         |  ^1.0.5           | 响应式布局                 |
+| provider                       |  ^6.1.5+1         | 状态管理                   |
+| http                           |  ^1.1.0           | 基础 HTTP 请求            |
+| dio                            |  ^5.9.0           | 高级 HTTP 客户端 / 拦截器 |
+| shared_preferences             |  ^2.5.3           | 轻量本地 KV 存储          |
+| flutter_secure_storage         |  ^10.0.0-beta.4   | 安全存储（如 Token 等）   |
+| path_provider                  |  ^2.1.1           | 本地路径访问               |
+| file_picker                    |  ^10.1.9          | 文件选择                   |
+| image_picker                   |  ^1.0.4           | 图片选择                   |
+| video_player                   |  ^2.10.0          | 视频播放                   |
+| video_player_win               |  ^3.2.0           | Windows 平台视频支持       |
+| radio_player                   |  ^2.1.0           | 音频播放                   |
+| cached_network_image           |  ^3.4.1           | 网络图片缓存               |
+| pull_to_refresh                |  ^2.0.0           | 下拉刷新                   |
+| flutter_staggered_grid_view    |  ^0.7.0           | 瀑布流布局                 |
+| syncfusion_flutter_xlsio       |  ^31.1.19         | 导出 Excel 报表            |
+| fl_chart                       |  0.71.0           | 图表展示                   |
+| app_links                      |  ^3.5.0           | 深度链接 / 唤起应用        |
+| url_launcher                   |  ^6.2.5           | 打开浏览器、外部应用       |
+| clipboard_watcher              |  ^0.2.0           | 剪切板内容监听             |
+| window_manager                 |  ^0.5.1           | 多平台窗口管理             |
+| tray_manager                   |  ^0.5.2           | 系统托盘                   |
+| desktop_drop                   |  ^0.6.1           | 桌面拖拽文件               |
+| windows_single_instance        |  ^1.0.1           | 单实例应用                 |
+| package_info_plus              |  ^8.0.0           | 应用版本信息               |
+| shimmer                        |  ^3.0.0           | 骨架屏 / 加载动画          |
+| photo_view                     |  ^0.15.0          | 图片预览与缩放             |
+| flutter_speed_dial             |  ^7.0.0           | 悬浮菜单按钮               |
+| connectivity_plus              |  ^7.0.0           | 网络状态监测               |
+| oauth2_client                  |  ^4.2.0           | OAuth2 客户端              |
+| crop_image_plus                |  git              | 图片裁剪                   |
+| getuiflut                      |  git              | 个推推送 SDK               |
+| image                          |  ^4.2.0           | 本地图片处理               |
+| http_parser                    |  ^4.1.2           | HTTP 工具与解析            |
+| cupertino_icons                |  ^1.0.2           | iOS 风格图标               |
 
-### 安全组件
-|                                | 版本          | 用途
-|------------------------------- | ------------- | ---------------------------
-| pointycastle                   |  ^4.0.0       | 加密算法库
-| fast_rsa                       |  ^3.8.5       | RSA加密
-| crypto                         |  ^3.0.6       | 加密算法
-| basic_utils                    |  ^5.8.2       | 基础工具
+### 安全与加密
+|                                | 版本              | 用途
+|------------------------------- | ----------------- | ---------------------------|
+| pointycastle                   |  ^4.0.0           | 加密算法实现               |
+| fast_rsa                       |  ^3.8.5           | RSA 加解密                 |
+| crypto                         |  ^3.0.6           | 常用散列 / HMAC 等        |
+| cryptography                   |  ^2.5.0           | 现代加密算法封装           |
+| basic_utils                    |  ^5.8.2           | 证书处理等基础工具         |
+
 
 ## 快速开始
 

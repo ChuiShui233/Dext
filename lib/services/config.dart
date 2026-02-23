@@ -1,7 +1,7 @@
 // Centralized API configuration
 // Update the base URL here and all services will use it.
 
-const String apiBaseUrl = 'http://192.168.1.14:11222';
+const String apiBaseUrl = 'https://chuishui.top:11222';
 
 // ===== 域名配置 =====
 const String appDomain = 'qs.chuishui.top';

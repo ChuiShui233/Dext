@@ -32,8 +32,24 @@ class _InteractiveScaleState extends State<_InteractiveScale> {
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onEnter: (_) {
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() => _hovered = true);
+            }
+          });
+        }
+      },
+      onExit: (_) {
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() => _hovered = false);
+            }
+          });
+        }
+      },
       child: Listener(
         behavior: HitTestBehavior.translucent,
         onPointerDown: (_) => setState(() => _pressed = true),

@@ -59,30 +59,37 @@ class UserService {
   }
 
   Future<void> logout({StatusCallback? onStatus}) async {
-    final response = await httpRequest('POST', '$baseUrl/api/auth/logout', onStatus: onStatus);
-    
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('auth_token');
-    await prefs.remove('auth_token_expires');
-    await prefs.remove('refresh_token');
-    
-    cryptoService.clearSessionKey();
-    
-    if (response.statusCode != 200 && response.statusCode != 401) {
-      throw '退出登录失败: ${response.statusCode}';
+    try {
+      await httpRequest('POST', '$baseUrl/api/auth/logout', onStatus: onStatus);
+    } catch (_) {
+      // 忽略登出请求失败，继续清理本地数据
     }
+    
+    await clearAllLocalData();
   }
 
   Future<void> clearAllLocalData() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('auth_token');
-    await prefs.remove('auth_token_expires');
-    await prefs.remove('refresh_token');
-    await prefs.remove('projects_cache');
-    await prefs.remove('surveys_cache');
-    await prefs.remove('survey_stats_cache');
-    await prefs.remove('recent_submissions');
-    await prefs.remove('analytics_overview');
+    final keys = prefs.getKeys();
+    
+    // 需要保留的设置键名（这些是用户偏好，通常在登出后也应保留）
+    final preservedKeys = {
+      'window_close_dont_ask',
+      'window_close_default_action',
+      'theme_mode',
+      'glass_card_enabled',
+      'edge_drag_width',
+      'dpi_scale',
+      'settings_panel_width',
+      'sidebar_collapsed',
+    };
+    
+    // 清理除保留设置外的所有本地数据
+    for (final key in keys) {
+      if (!preservedKeys.contains(key)) {
+        await prefs.remove(key);
+      }
+    }
     
     cryptoService.clearSessionKey();
   }
