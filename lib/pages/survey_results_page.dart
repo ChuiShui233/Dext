@@ -29,6 +29,12 @@ import '../components/adaptive_message_card.dart';
 import '../components/glass_button.dart';
 import 'recycle_bin_page.dart';
 
+String _bgThumbUrl(String? url) {
+  if (url == null || url.isEmpty) return '';
+  final abs = url.startsWith('/') ? toAbsoluteUrl(url) : url;
+  return abs.contains('?') ? '$abs&type=thumb' : '$abs?type=thumb';
+}
+
 class SurveyResultsPage extends StatefulWidget {
   final String token;
   final Survey survey;
@@ -99,7 +105,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
 
     final List<Color> pieColors = [
       Colors.blue,
-      Colors.green,
+      Colors.lightGreen,
       Colors.orange,
       Colors.purple,
       Colors.red,
@@ -143,7 +149,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
             children: [
             if (title != null) ...[
               Text(
-                title,
+                _stripMarkdown(title),
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -1608,7 +1614,7 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
                                       Icon(
                                         Icons.check_circle,
                                         size: 16,
-                                        color: Colors.green[600],
+                                        color: Colors.lightGreen,
                                       ),
                                       const SizedBox(width: 8),
                                       Expanded(
@@ -2352,8 +2358,8 @@ class _SurveyResultsPageState extends State<SurveyResultsPage> with TickerProvid
                         image: DecorationImage(
                           image: CachedNetworkImageProvider(
                             isWide
-                                ? toAbsoluteUrl(_desktopBackground)
-                                : toAbsoluteUrl(_mobileBackground),
+                                ? _bgThumbUrl(_desktopBackground)
+                                : _bgThumbUrl(_mobileBackground),
                           ),
                           fit: BoxFit.cover,
                           onError: (_, __) {},

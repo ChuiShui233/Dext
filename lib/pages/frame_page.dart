@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
+import '../main.dart' show isDesktop;
 import 'package:dext/widgets/frosted_glass_background.dart';
 import 'package:dext/widgets/downscaled_blur.dart';
 import 'package:dext/widgets/glass_sidebar_card.dart';
+import 'package:dext/widgets/exit_confirm_dialog.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -712,79 +714,13 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
       handleTabChange(0);
       return false;
     }
-    final shouldExit = await showDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) {
-        bool animateIn = false;
-        bool isClosing = false;
-        const animationDuration = Duration(milliseconds: 220);
+    final shouldExit = await showExitConfirmDialog(context);
 
-        return StatefulBuilder(
-          builder: (builderContext, setDialogState) {
-            if (!animateIn && !isClosing) {
-              Future.microtask(() {
-                if (dialogContext.mounted) {
-                  setDialogState(() {
-                    animateIn = true;
-                  });
-                }
-              });
-            }
-
-            Future<void> closeDialogWithAnimation(bool result) async {
-              if (!dialogContext.mounted) return;
-              setDialogState(() {
-                animateIn = false;
-                isClosing = true;
-              });
-              await Future.delayed(animationDuration);
-              if (dialogContext.mounted) {
-                Navigator.of(dialogContext).pop(result);
-              }
-            }
-
-            return AnimatedOpacity(
-              opacity: animateIn ? 1.0 : 0.0,
-              duration: animationDuration,
-              curve: animateIn ? Curves.easeOutCubic : Curves.easeInCubic,
-              child: AnimatedScale(
-                scale: animateIn ? 1.0 : 0.92,
-                duration: animationDuration,
-                curve: animateIn ? Curves.easeOutBack : Curves.easeInCubic,
-                child: Center(
-                  child: Material(
-                    color: Colors.transparent,
-                    child: FDialog(
-                      direction: Axis.horizontal,
-                      title: const Text('确认退出'),
-                      body: const Text('确定要退出应用吗？'),
-                      actions: [
-                        FButton(
-                          style: context.theme.buttonStyles.outline.call,
-                          onPress: () => closeDialogWithAnimation(false),
-                          child: const Text('取消'),
-                        ),
-                        FButton(
-                          onPress: () => closeDialogWithAnimation(true),
-                          child: const Text('退出'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    if (shouldExit == true) {
+    if (shouldExit) {
       await SystemNavigator.pop();
       return false;
     }
-    return false; // 取消退出
+    return false;
   }
 
   // 根据 Tab 索引构建右侧区域的“根页面”
@@ -895,7 +831,7 @@ Widget _buildSidebarHeader(BuildContext context) {
                   sizeCurve: Curves.easeInOutCubic,
                 ),
               ),
-              AnimatedRotation(
+              if (isDesktop) AnimatedRotation(
                 turns: _sidebarCollapsed ? 0.0 : 0.5, // 左箭头=旋转180度表示收起状态
                 duration: const Duration(milliseconds: 220),
                 curve: Curves.easeInOutCubic,

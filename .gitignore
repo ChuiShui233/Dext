@@ -53,3 +53,6 @@ android/key.properties
 
 # CI temporary keystore
 android/app/ci-release.keystore
+
+# Android App Links - contains sensitive signing fingerprint
+web/.well-known/assetlinks.json

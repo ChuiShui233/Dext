@@ -3,8 +3,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:forui/forui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../components/privacy_policy_service.dart';
 import '../../services/settings_service.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_service.dart';
 import '../../models/user.dart';
 import 'package:file_picker/file_picker.dart';
@@ -114,13 +114,8 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
   }
 
     Future<void> _launchPrivacyPolicy() async {
-    final Uri url = Uri.parse('https://cc12.eu.org');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url);
-    } else {
-      if (!mounted) return;
+      await PrivacyPolicyService.launchPrivacyPolicy(context: context);
     }
-  }
 
   Future<void> _changeAvatar() async {
     try {
@@ -503,7 +498,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
         ),
         const SizedBox(height: 16),
         Text(
-          _currentUser?.username ?? '用户名示例',
+          _currentUser?.username ?? 'Ghost',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w600,
@@ -512,7 +507,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
         ),
         const SizedBox(height: 4),
         Text(
-          _currentUser?.email ?? 'user@example.com',
+          _currentUser?.email ?? '',
           style: TextStyle(
             fontSize: 14,
             color: theme.colorScheme.onSurface.withValues(alpha: 0.6),

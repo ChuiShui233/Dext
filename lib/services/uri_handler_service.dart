@@ -11,6 +11,9 @@ class UriHandlerService {
   static final AppLinks _appLinks = AppLinks();
   static const _windowsChannel = MethodChannel('dext/uri_handler');
 
+  static final StreamController<String> _quickShareController = StreamController<String>.broadcast();
+  static Stream<String> get onQuickShareLink => _quickShareController.stream;
+
   /// 初始化URI监听
   static Future<void> initialize() async {
     if (kIsWeb || Platform.isAndroid || Platform.isIOS) {
@@ -25,7 +28,7 @@ class UriHandlerService {
         if (call.method == 'handleUri') {
           final uri = call.arguments['uri'] as String?;
           if (uri != null) {
-            debugPrint('📨 从Windows原生层接收到URI: $uri');
+            debugPrint('从Windows原生层接收到URI: $uri');
             try {
               final parsedUri = Uri.parse(uri);
               handleIncomingUri(parsedUri);
@@ -35,7 +38,7 @@ class UriHandlerService {
           }
         }
       });
-      debugPrint('✅ Windows Method Channel已设置');
+      debugPrint('Windows Method Channel已设置');
     }
 
     try {
@@ -69,12 +72,25 @@ class UriHandlerService {
   }
 
   /// 处理传入的URI
+  static void _handleQuickShareLink(String id) {
+    debugPrint('🔗 处理快速分享链接: $id');
+    _quickShareController.add(id);
+  }
+
   static void handleIncomingUri(Uri uri) {
     debugPrint('🔍 处理URI: $uri');
     debugPrint('  - Scheme: ${uri.scheme}');
     debugPrint('  - Host: ${uri.host}');
     debugPrint('  - Path: ${uri.path}');
     debugPrint('  - Query: ${uri.query}');
+
+    // 处理 https://qs.chuishui.top/?id=xxx 格式的深度链接
+    if ((uri.host == 'qs.chuishui.top' || uri.host == 'wucode.xyz') && uri.queryParameters.containsKey('id')) {
+      final id = uri.queryParameters['id']!;
+      debugPrint('📋 深度链接ID: $id');
+      _handleQuickShareLink(id);
+      return;
+    }
     
     if (uri.scheme == 'dext' && uri.host == 'oauth') {
       final path = uri.path;
@@ -85,7 +101,7 @@ class UriHandlerService {
         final code = queryParams['code'];
         final error = queryParams['error'];
         
-        debugPrint('📋 OAuth回调参数:');
+        debugPrint('OAuth回调参数:');
         debugPrint('  - State: $state');
         debugPrint('  - Code: ${code != null ? "存在" : "缺失"}');
         debugPrint('  - Error: $error');
@@ -199,6 +215,9 @@ class UriHandlerService {
       }
     }
     _pendingCallbacks.clear();
+    
+    // 关闭快速分享链接流
+    _quickShareController.close();
   }
 
   /// 生成随机state参数

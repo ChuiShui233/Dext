@@ -21,7 +21,7 @@ FThemeData get zincLight {
   final colors = FColors(
     brightness: Brightness.light,
     barrier: Color(0x33000000),
-    background: Color(0xCCFFFFFF),
+    background: Color(0xFFFFFFFF),
     foreground: Color(0xFF09090B),
     primary: Color(0xCC18181B),
     primaryForeground: Color(0xFFFAFAFA),

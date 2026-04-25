@@ -3572,4 +3572,49 @@ Future<Question> addQuestion(
   static String getOriginalUrl(String? imageUrl) {
     return core.ImageService.getOriginalUrl(imageUrl);
   }
+
+  // ==================== 配置信息相关方法 ====================
+  
+  /// 获取应用配置信息，包括隐私政策链接等
+  Future<Map<String, dynamic>> getAppConfig({StatusCallback? onStatus}) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在获取配置信息...');
+      _updateStatus(RequestStatus.loading, '正在获取配置信息...');
+      
+      final response = await _httpRequest(
+        'GET',
+        '$baseUrl/api/config',
+        onStatus: onStatus,
+      );
+      
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        onStatus?.call(RequestStatus.success, '配置信息获取成功');
+        _updateStatus(RequestStatus.success, '配置信息获取成功');
+        return data;
+      } else {
+        throw '获取配置信息失败: ${response.statusCode}';
+      }
+    } catch (e) {
+      final errorMsg = e.toString();
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+    
+      return {
+        'privacyPolicyUrl': '$baseUrl/static',
+        'version': '1.0.0',
+      };
+    }
+  }
+  
+  /// 获取隐私政策链接
+  Future<String> getPrivacyPolicyUrl({StatusCallback? onStatus}) async {
+    try {
+      final config = await getAppConfig(onStatus: onStatus);
+      return config['privacyPolicyUrl'] ?? '$baseUrl/static';
+    } catch (e) {
+      // 如果获取失败，返回默认链接
+      return '$baseUrl/static';
+    }
+  }
 }

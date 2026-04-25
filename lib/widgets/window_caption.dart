@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:forui/forui.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:tray_manager/tray_manager.dart';
 import 'package:dext/widgets/app_navigator.dart';
 import '../services/settings_service.dart';
 
@@ -57,7 +59,9 @@ class _WindowCaptionState extends State<WindowCaption> with WindowListener {
         if (defaultAction == 'hide') {
           await windowManager.hide();
         } else if (defaultAction == 'close') {
+          await TrayManager.instance.destroy();
           await windowManager.destroy();
+          exit(0);
         }
         return;
       }
@@ -164,7 +168,9 @@ class _WindowCaptionState extends State<WindowCaption> with WindowListener {
                                 await settings.setWindowCloseDefaultAction('close');
                               }
                               await closeDialogWithAnimation(() async {
+                                await TrayManager.instance.destroy();
                                 await windowManager.destroy();
+                                exit(0);
                               });
                             },
                             child: const Text('关闭应用'),

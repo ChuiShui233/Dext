@@ -1,7 +1,7 @@
 // Centralized API configuration
 // Update the base URL here and all services will use it.
 
-const String apiBaseUrl = 'https://chuishui.top:11222';
+const String apiBaseUrl = 'https://server.chuishui.top:11222';
 
 // ===== 域名配置 =====
 const String appDomain = 'qs.chuishui.top';
@@ -22,10 +22,10 @@ const String getuiAppKey = '你的个推AppKey';  // 从个推控制台获取
 const String getuiAppSecret = '你的个推AppSecret';  // 从个推控制台获取
 
 // ===== OAuth 重定向URI配置 =====
-const String oauthCallbackWeb = 'https://chuishui.top:11222/api/auth/oauth/callback/web';
-const String oauthCallbackAndroid = 'https://chuishui.top:11222/api/auth/oauth/callback/mobile';
-const String oauthCallbackIOS = 'https://chuishui.top:11222/api/auth/oauth/callback/mobile';
-const String oauthCallbackDesktop = 'https://chuishui.top:11222/api/auth/oauth/callback/desktop';
+const String oauthCallbackWeb = 'https://server.chuishui.top:11222/api/auth/oauth/callback/web';
+const String oauthCallbackAndroid = 'https://server.chuishui.top:11222/api/auth/oauth/callback/mobile';
+const String oauthCallbackIOS = 'https://server.chuishui.top:11222/api/auth/oauth/callback/mobile';
+const String oauthCallbackDesktop = 'https://server.chuishui.top:11222/api/auth/oauth/callback/desktop';
 
 // ===== Android/iOS URI Scheme =====
 const String uriSchemeAndroid = 'com.dext.app';

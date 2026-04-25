@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart' hide WindowCaption;
+import '../components/privacy_policy_service.dart';
 import '../widgets/window_caption.dart';
+import '../widgets/exit_confirm_dialog.dart';
 import '../main.dart' show isDesktop;
 import '../services/api_service.dart';
 import '../services/oauth_service.dart';
@@ -184,13 +185,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }
 
   Future<void> _launchPrivacyPolicy() async {
-    final Uri url = Uri.parse('https://cc12.eu.org');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url);
-    } else {
-      if (!mounted) return;
-      showErrorDialog('无法打开隐私政策页面');
-    }
+    await PrivacyPolicyService.launchPrivacyPolicy(
+      context: context,
+      onLoading: (isLoading) {
+        if (mounted) {
+          setState(() {
+            _isLoading = isLoading;
+          });
+        }
+      },
+    );
   }
 
   Future<void> _fetchCaptcha() async {
@@ -885,8 +889,64 @@ Widget build(BuildContext context) {
   final screenWidth = MediaQuery.of(context).size.width;
   final isWide = screenWidth > 800;
   final statusBarHeight = MediaQuery.of(context).padding.top;
+   
+   // 处理系统返回
+   return PopScope(
+     canPop: isDesktop,
+     onPopInvokedWithResult: (didPop, result) async {
+       if (didPop) return;
+       if (_isRegistering || _isResettingPassword) {
+         final wasRegistering = _isRegistering;
+         final wasResetting = _isResettingPassword;
 
-  final Widget content = AnimatedSwitcher(
+         setState(() {
+           _isRegistering = false;
+           _isResettingPassword = false;
+
+           if (wasRegistering) {
+             _usernameController.clear();
+             _emailController.clear();
+             _emailCodeController.clear();
+             _passwordController.clear();
+             _confirmPasswordController.clear();
+           }
+
+           if (wasResetting) {
+             _emailController.clear();
+             _emailCodeController.clear();
+             _passwordController.clear();
+             _confirmPasswordController.clear();
+           }
+
+           _captchaController.clear();
+           _emailCodeSent = false;
+           _emailCodeCountdown = 0;
+           _countdownTimer?.cancel();
+           _countdownTimer = null;
+         });
+
+         _fetchCaptcha();
+         return;
+       }
+       if (!isDesktop) {
+         final shouldExit = await showExitConfirmDialog(context);
+         if (!context.mounted) return;
+         if (shouldExit) {
+           await SystemNavigator.pop();
+         }
+       }
+     },
+     child: _buildMainContent(
+       context,
+       screenWidth,
+       isWide,
+       statusBarHeight,
+     ),
+   );
+ }
+ 
+ Widget _buildMainContent(BuildContext context, double screenWidth, bool isWide, double statusBarHeight) {
+    final Widget content = AnimatedSwitcher(
     duration: const Duration(milliseconds: 400),
     switchInCurve: Curves.easeInOut,
     switchOutCurve: Curves.easeInOut,
@@ -1407,7 +1467,11 @@ Positioned.fill(
               borderRadius: BorderRadius.circular(12),
               child: Center(
                 child: _isLoading
-                    ? const LoadingIndicator.button()
+                    ? LoadingIndicator.button(
+                        color: Theme.of(context).brightness == Brightness.light
+                            ? Colors.white
+                            : null,
+                      )
                     : const Text(
                         '登录',
                         style: TextStyle(
@@ -2097,7 +2161,11 @@ Widget _buildRegisterForm() {
               borderRadius: BorderRadius.circular(12),
               child: Center(
                 child: _isLoading
-                    ? const LoadingIndicator.button()
+                    ? LoadingIndicator.button(
+                        color: Theme.of(context).brightness == Brightness.light
+                            ? Colors.white
+                            : null,
+                      )
                     : const Text(
                         '重置密码',
                         style: TextStyle(

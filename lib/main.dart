@@ -64,6 +64,17 @@ class _NoScrollbarBehavior extends MaterialScrollBehavior {
   }
 }
 
+late final _AppTrayListener _trayListener;
+
+Future<void> _exitApp() async {
+  TrayManager.instance.removeListener(_trayListener);
+  await TrayManager.instance.destroy();
+  windowManager.removeListener(_windowListener);
+  await windowManager.setPreventClose(false);
+  await windowManager.destroy();
+  await Future.delayed(const Duration(milliseconds: 100));
+  exit(0);
+}
 
 class _AppWindowListener with WindowListener {
   @override
@@ -104,12 +115,12 @@ class _AppTrayListener with TrayListener {
         await windowManager.hide();
         break;
       case 'exit':
-        await windowManager.setPreventClose(false);
-        await windowManager.close();
-        break;
+        await _exitApp();
     }
   }
 }
+
+late final _AppWindowListener _windowListener;
 
 Future<void> _initDesktopWindowAndTray() async {
 
@@ -126,11 +137,13 @@ Future<void> _initDesktopWindowAndTray() async {
     await windowManager.focus();
   });
   await windowManager.setPreventClose(true);
-  windowManager.addListener(_AppWindowListener());
+  _windowListener = _AppWindowListener();
+  windowManager.addListener(_windowListener);
 
   await UriHandlerService.initialize();
   
   await TrayManager.instance.setIcon('assets/images/favicon.ico');
+  await TrayManager.instance.setToolTip('Dext'); 
   final menu = Menu(items: [
     MenuItem(key: 'show', label: '显示窗口'),
     MenuItem(key: 'hide', label: '隐藏到托盘'),
@@ -138,7 +151,8 @@ Future<void> _initDesktopWindowAndTray() async {
     MenuItem(key: 'exit', label: '退出'),
   ]);
   await TrayManager.instance.setContextMenu(menu);
-  TrayManager.instance.addListener(_AppTrayListener());
+  _trayListener = _AppTrayListener();
+  TrayManager.instance.addListener(_trayListener);
 }
 
 void main(List<String> args) async {

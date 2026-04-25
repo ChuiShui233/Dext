@@ -99,16 +99,40 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                     FButton(
                       style: context.theme.buttonStyles.primary.call,
                       onPress: () async {
-                        Navigator.pop(context);
+                        final currentContext = context;
+                        Navigator.pop(currentContext);
                         try {
                           await _apiService.restoreAnswer(id);
-                          if (mounted) {
-                            showFToast(context: context, title: const Text('已恢复作答记录'));
+                          if (currentContext.mounted) {
+                            showFToast(
+                              context: currentContext,
+                              alignment: FToastAlignment.bottomRight,
+                              title: const Text('已恢复作答记录'),
+                              suffixBuilder: (context, entry) => IntrinsicHeight(
+                                child: FButton(
+                                  style: context.theme.buttonStyles.primary.call,
+                                  onPress: entry.dismiss,
+                                  child: const Text('关闭'),
+                                ),
+                              ),
+                            );
                             _loadData();
                           }
                         } catch (e) {
-                          if (mounted) {
-                            showFToast(context: context, title: Text('恢复失败: $e'));
+                          if (currentContext.mounted) {
+                            showFToast(
+                              context: currentContext,
+                              alignment: FToastAlignment.bottomRight,
+                              title: const Text('恢复失败'),
+                              description: Text('恢复作答记录失败: $e'),
+                              suffixBuilder: (context, entry) => IntrinsicHeight(
+                                child: FButton(
+                                  style: context.theme.buttonStyles.primary.call,
+                                  onPress: entry.dismiss,
+                                  child: const Text('关闭'),
+                                ),
+                              ),
+                            );
                           }
                         }
                       },
@@ -164,11 +188,23 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                     FButton(
                       style: context.theme.buttonStyles.primary.call,
                       onPress: () async {
-                        Navigator.pop(context);
+                        final currentContext = context;
+                        Navigator.pop(currentContext);
                         try {
                           await _apiService.batchRestoreAnswers(_selectedIds.toList());
-                          if (mounted) {
-                            showFToast(context: context, title: Text('已恢复 ${_selectedIds.length} 条记录'));
+                          if (currentContext.mounted) {
+                            showFToast(
+                              context: currentContext,
+                              alignment: FToastAlignment.bottomRight,
+                              title: Text('已恢复 ${_selectedIds.length} 条记录'),
+                              suffixBuilder: (context, entry) => IntrinsicHeight(
+                                child: FButton(
+                                  style: context.theme.buttonStyles.primary.call,
+                                  onPress: entry.dismiss,
+                                  child: const Text('关闭'),
+                                ),
+                              ),
+                            );
                             setState(() {
                               _selectedIds.clear();
                               _isSelectionMode = false;
@@ -176,8 +212,20 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                             _loadData();
                           }
                         } catch (e) {
-                          if (mounted) {
-                            showFToast(context: context, title: Text('批量恢复失败: $e'));
+                          if (currentContext.mounted) {
+                            showFToast(
+                              context: currentContext,
+                              alignment: FToastAlignment.bottomRight,
+                              title: const Text('批量恢复失败'),
+                              description: Text('批量恢复作答记录失败: $e'),
+                              suffixBuilder: (context, entry) => IntrinsicHeight(
+                                child: FButton(
+                                  style: context.theme.buttonStyles.primary.call,
+                                  onPress: entry.dismiss,
+                                  child: const Text('关闭'),
+                                ),
+                              ),
+                            );
                           }
                         }
                       },
@@ -369,7 +417,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                                                   FButton(
                                                     style: context.theme.buttonStyles.ghost.call,
                                                     onPress: () => _restoreAnswer(result.id),
-                                                    child: const Icon(Icons.restore, color: Colors.blue),
+                                                    child: const Icon(Icons.restore, color: Colors.lightGreen),
                                                   ),
                                               ],
                                             ),

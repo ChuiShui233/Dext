@@ -642,7 +642,6 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
       
       final errorStr = e.toString();
       if (errorStr.contains('403') || errorStr.contains('权限') || errorStr.contains('禁止')) {
-        // 403错误：跳转到错误提示界面
         setState(() {
           errorMessage = '您可能没有权限提交此问卷或者达到提交次数限制';
         });
@@ -856,9 +855,8 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
           children: [
             Image.asset(
               'assets/images/loading.gif',
-              width: 64,
-              height: 64,
-              color: Colors.red[400],
+              width: 128,
+              height: 128,
             ),
             const SizedBox(height: 16),
             Text(

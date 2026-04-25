@@ -1216,7 +1216,7 @@ class _SurveyStatsDialogState extends State<_SurveyStatsDialog> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = '获取失败: $e';
+          _errorMessage = '$e';
           _isLoading = false;
         });
       }
@@ -1264,34 +1264,14 @@ class _SurveyStatsDialogState extends State<_SurveyStatsDialog> {
     Widget content;
 
     if (_errorMessage != null) {
-      content = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.error_outline,
-                color: context.theme.colors.destructive,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  _errorMessage!,
-                  style: TextStyle(
-                    color: context.theme.colors.destructive,
-                  ),
-                ),
-              ),
-            ],
+      content = Center(
+        child: Text(
+          _errorMessage!,
+          textAlign: TextAlign.left,
+          style: TextStyle(
+            color: context.theme.colors.destructive,
           ),
-          const SizedBox(height: 12),
-          FButton(
-            style: context.theme.buttonStyles.outline.call,
-            onPress: _loadStats,
-            child: const Text('重试'),
-          ),
-        ],
+        ),
       );
     } else if (_isLoading) {
       content = Column(
@@ -1330,6 +1310,7 @@ class _SurveyStatsDialogState extends State<_SurveyStatsDialog> {
       title: Text('${widget.survey.surveyName} - 统计信息'),
       body: SizedBox(
         width: 320,
+        height: 110,
         child: content,
       ),
       actions: [

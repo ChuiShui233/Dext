@@ -5,12 +5,14 @@ class LoadingIndicator extends StatelessWidget {
   final LoadingSize size;
   final String? message;
   final bool centered;
+  final Color? color;
 
   const LoadingIndicator({
     super.key,
     this.size = LoadingSize.medium,
     this.message,
     this.centered = false,
+    this.color,
   });
 
   /// 大
@@ -18,11 +20,13 @@ class LoadingIndicator extends StatelessWidget {
     super.key,
     this.message,
   })  : size = LoadingSize.large,
-        centered = true;
+        centered = true,
+        color = null;
 
   /// 小
   const LoadingIndicator.button({
     super.key,
+    this.color,
   })  : size = LoadingSize.small,
         message = null,
         centered = false;
@@ -32,12 +36,13 @@ class LoadingIndicator extends StatelessWidget {
     super.key,
     this.message,
   })  : size = LoadingSize.small,
-        centered = false;
+        centered = false,
+        color = null;
 
   @override
   Widget build(BuildContext context) {
     final theme = context.theme;
-    final color = theme.colors.primary;
+    final indicatorColor = color ?? theme.colors.primary;
     
     final double indicatorSize;
     final double strokeWidth;
@@ -62,7 +67,7 @@ class LoadingIndicator extends StatelessWidget {
       height: indicatorSize,
       child: CircularProgressIndicator(
         strokeWidth: strokeWidth,
-        valueColor: AlwaysStoppedAnimation<Color>(color),
+        valueColor: AlwaysStoppedAnimation<Color>(indicatorColor),
       ),
     );
 

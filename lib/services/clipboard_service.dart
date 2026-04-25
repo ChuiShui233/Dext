@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' as flutter_services;
 import 'package:forui/forui.dart';
 import 'package:clipboard_watcher/clipboard_watcher.dart' if (dart.library.io) 'package:clipboard_watcher/clipboard_watcher.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'url_handler.dart';
 
 /// 服务
@@ -179,67 +180,80 @@ class ClipboardService with ClipboardListener {
     VoidCallback onOpenSurvey,
   ) {
     final displayId = surveyId.length > 8 ? '${surveyId.substring(0, 8)}...' : surveyId;
-    
+
     showRawFToast(
       context: context,
       duration: const Duration(seconds: 5),
-      builder: (context, entry) => Container(
-        constraints: const BoxConstraints(
-          maxWidth: 300,
-          minHeight: 0,
-        ),
-        child: Material(
-          color: Colors.white,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: BorderSide(color: FTheme.of(context).colors.border),
+      builder: (context, entry) {
+        Future<void> handleOpen() async {
+          entry.dismiss();
+          if (kIsWeb) {
+            final url = Uri.parse('https://qs.chuishui.top/?id=$surveyId');
+            try {
+              await launchUrl(url, mode: LaunchMode.externalApplication);
+            } catch (e) {
+              onOpenSurvey();
+            }
+          } else {
+            onOpenSurvey();
+          }
+        }
+
+        return Container(
+          constraints: const BoxConstraints(
+            maxWidth: 300,
+            minHeight: 0,
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '检测到问卷链接',
-                  style: TextStyle(
-                    color: FTheme.of(context).colors.foreground,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '发现问卷ID: $displayId',
-                  style: TextStyle(
-                    color: FTheme.of(context).colors.foreground,
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    FButton(
-                      onPress: () {
-                        entry.dismiss();
-                          onOpenSurvey();
-                      },
-                      child: const Text('打开'),
+          child: Material(
+            color: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(color: FTheme.of(context).colors.border),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '检测到问卷链接',
+                    style: TextStyle(
+                      color: FTheme.of(context).colors.foreground,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
                     ),
-                    const SizedBox(width: 8),
-                    FButton(
-                      onPress: () => entry.dismiss(),
-                      child: const Text('忽略'),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '发现问卷ID: $displayId',
+                    style: TextStyle(
+                      color: FTheme.of(context).colors.foreground,
+                      fontSize: 12,
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FButton(
+                        onPress: handleOpen,
+                        child: const Text('打开'),
+                      ),
+                      const SizedBox(width: 8),
+                      FButton(
+                        onPress: () => entry.dismiss(),
+                        child: const Text('忽略'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

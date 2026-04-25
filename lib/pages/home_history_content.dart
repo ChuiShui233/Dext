@@ -351,34 +351,22 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     final isDark = theme.brightness == Brightness.dark;
     
     if (_loading) {
-      return Container(
-        padding: const EdgeInsets.all(48),
-        decoration: BoxDecoration(
-          color: isDark 
-            ? Colors.white.withValues(alpha: 0.05)
-            : Colors.white.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark 
-              ? Colors.white.withValues(alpha: 0.1)
-              : Colors.black.withValues(alpha: 0.1),
-          ),
-        ),
-        child: Center(
-          child: Column(
-            children: [
-              LoadingIndicator(
-                size: LoadingSize.medium,
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            LoadingIndicator(
+              size: LoadingSize.medium,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '加载中...',
+              style: TextStyle(
+                color: isDark ? Colors.white70 : Colors.black54,
               ),
-              const SizedBox(height: 16),
-              Text(
-                '加载中...',
-                style: TextStyle(
-                  color: isDark ? Colors.white70 : Colors.black54,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     }

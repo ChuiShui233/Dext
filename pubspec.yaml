@@ -1,7 +1,7 @@
 name: dext
 description: "问卷调查"
 publish_to: 'none' # 如果您希望发布到 pub.dev，请移除此行
-version: 1.0.8+1129
+version: 1.1.0+20260425
 
 environment:
   sdk: ^3.9.0

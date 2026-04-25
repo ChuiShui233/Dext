@@ -19,7 +19,7 @@ class GlassButton extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final base = color ?? Colors.blue;
     final bg = base.withValues(alpha: isDark ? 0.22 : 0.18);
-    final fg = Colors.white;
+    final fg = isDark ? Colors.white : Colors.black;
 
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 120),
