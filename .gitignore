@@ -56,3 +56,5 @@ android/app/ci-release.keystore
 
 # Android App Links - contains sensitive signing fingerprint
 web/.well-known/assetlinks.json
+# Build outputs
+Output/

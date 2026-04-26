@@ -34,7 +34,13 @@ FThemeData get zincLight {
     error: Color(0xCCE57373),
     errorForeground: Color(0xFFFAFAFA),
     border: Color(0x66E4E4E7),
-    systemOverlayStyle: SystemUiOverlayStyle.light,
+    systemOverlayStyle: SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      systemNavigationBarIconBrightness: Brightness.dark,
+    ),
   );
 
   final typography = _typography(colors: colors);
@@ -61,7 +67,13 @@ FThemeData get zincDark {
     error: Color(0xFFB56565),
     errorForeground: Color(0xFF525252), 
     border: Color(0x1AFFFFFF), // Divider 白 0.12 -> 更淡 (0.1)
-    systemOverlayStyle: SystemUiOverlayStyle.dark,
+    systemOverlayStyle: SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarIconBrightness: Brightness.light,
+    ),
   );
 
   final typography = _typography(colors: colors);

@@ -1,11 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import 'package:provider/provider.dart';
 import '../../widgets/frosted_oauth_dialog.dart';
 import '../../services/api_service.dart';
 import '../../services/oauth_service.dart';
 import '../../services/uri_handler_service.dart';
 import '../../models/user.dart';
+import '../../providers/user_info_provider.dart';
 import 'dart:async';
 import '../../widgets/top_safe_spacer.dart';
 
@@ -13,12 +15,14 @@ class AccountSecurityPage extends StatefulWidget {
   final ApiService apiService;
   final User? currentUser;
   final VoidCallback onUserUpdated;
+  final ValueNotifier<User?>? userNotifier;
 
   const AccountSecurityPage({
     super.key,
     required this.apiService,
     this.currentUser,
     required this.onUserUpdated,
+    this.userNotifier,
   });
 
   @override
@@ -27,12 +31,31 @@ class AccountSecurityPage extends StatefulWidget {
 
 class _AccountSecurityPageState extends State<AccountSecurityPage> {
   User? _user;
+  bool _wasDesktopLayout = false;
+  bool _initialized = false;
 
   @override
   void initState() {
     super.initState();
     _user = widget.currentUser;
     _refreshUserInfo();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final bool isDesktopLayout = MediaQuery.of(context).size.width >= 1025;
+    // 跳过首次构建，避免在桌面端直接打开时错误弹出
+    if (_initialized && !_wasDesktopLayout && isDesktopLayout) {
+      // 移动端→桌面端布局切换，弹出当前页面，返回设置列表
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+      });
+    }
+    _wasDesktopLayout = isDesktopLayout;
+    _initialized = true;
   }
 
   Future<void> _refreshUserInfo() async {
@@ -59,8 +82,10 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
     final bool isDesktopLayout = MediaQuery.of(context).size.width >= 1025;
 
     return Scaffold(
+      backgroundColor: Colors.transparent,
       body: Stack(
         children: [
+          Container(color: theme.colorScheme.surface),
           Column(
             children: [
               if (!isDesktopLayout) const TopSafeSpacer(),
@@ -153,6 +178,31 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
                             color: theme.dividerColor.withValues(alpha: 0.1),
                           ),
                           _buildOAuthListTile('microsoft', Icons.business, Color(0xFF00A4EF), 'Microsoft账号'),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 注销账号卡片
+                      _buildSectionCard(
+                        context,
+                        title: '账号管理',
+                        icon: Icons.person_remove,
+                        children: [
+                          _buildListTile(
+                            leading: Icon(Icons.delete_forever, color: Colors.red),
+                            title: const Text('注销账号'),
+                            subtitle: const Text(
+                              '永久删除账号和所有数据',
+                              style: TextStyle(
+                                fontSize: 12,
+                              ),
+                            ),
+                            trailing: Icon(
+                              Icons.arrow_forward_ios,
+                              size: 16,
+                            ),
+                            onTap: _showDeleteAccountDialog,
+                          ),
                         ],
                       ),
                     ],
@@ -279,7 +329,7 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
   void _bindOAuth(String provider) async {
     BuildContext? dialogContext;
     bool dialogShown = false;
-    
+
     void closeDialog() {
       if (dialogShown && dialogContext != null) {
         try {
@@ -290,7 +340,7 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
         dialogContext = null;
       }
     }
-    
+
     try {
       if (mounted) {
         showDialog(
@@ -302,7 +352,6 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
               providerName: _getProviderDisplayName(provider),
               waitingText: '请在浏览器中完成授权，或点击取消',
               onCancel: () {
-                // 取消OAuth等待
                 UriHandlerService.cancelAllPendingCallbacks();
                 closeDialog();
               },
@@ -311,82 +360,87 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
         );
         dialogShown = true;
       }
-
-      // 获取OAuth服务实例
       final oauthService = OAuthService();
-      
-      // 执行OAuth授权流程
-      Map<String, dynamic> result;
-      switch (provider) {
-        case 'google':
-          result = await oauthService.signInWithGoogle();
-          break;
-        case 'github':
-          result = await oauthService.signInWithGitHub();
-          break;
-        case 'microsoft':
-          result = await oauthService.signInWithMicrosoft();
-          break;
-        default:
-          throw Exception('不支持的OAuth提供商: $provider');
-      }
-      
-      if (result['success'] == true && result['token'] != null) {
-        // OAuth授权成功，现在调用绑定API将OAuth账号绑定到当前主账号
-        try {
-          await widget.apiService.bindOAuth(
-            provider: provider,
-            accessToken: result['token'],
-          );
-          
-          closeDialog();
-          
-          await widget.apiService.clearUserCache();
-          await _refreshUserInfo();
-          
-          if (mounted) {
-            showFToast(
-              context: context,
-              alignment: FToastAlignment.bottomRight,
-              title: const Text('绑定成功'),
-              description: Text('${_getProviderDisplayName(provider)}账号已成功绑定'),
-              suffixBuilder: (context, entry) => IntrinsicHeight(
-                child: FButton(
-                  style: context.theme.buttonStyles.primary.call,
-                  onPress: entry.dismiss.call,
-                  child: const Text('关闭'),
-                ),
-              ),
-            );
-          }
-        } catch (bindError) {
-          closeDialog();
-          
-          if (mounted) {
-            showFToast(
-              context: context,
-              alignment: FToastAlignment.bottomRight,
-              title: const Text('绑定失败'),
-              description: Text(bindError.toString()),
-              suffixBuilder: (context, entry) => IntrinsicHeight(
-                child: FButton(
-                  style: context.theme.buttonStyles.primary.call,
-                  onPress: entry.dismiss.call,
-                  child: const Text('关闭'),
-                ),
-              ),
-            );
-          }
-        }
-      } else {
+      final authCode = await oauthService.getAuthorizationCode(provider);
+
+      if (authCode == null || authCode.isEmpty) {
         closeDialog();
-        
         if (mounted) {
           showFToast(
             context: context,
             alignment: FToastAlignment.bottomRight,
             title: const Text('授权失败'),
-            description: const Text('OAuth授权失败，请重试'),
+            description: const Text('未收到授权码'),
+            suffixBuilder: (context, entry) => IntrinsicHeight(
+              child: FButton(
+                style: context.theme.buttonStyles.primary.call,
+                onPress: entry.dismiss.call,
+                child: const Text('关闭'),
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
+      final exchangeResult = await oauthService.exchangeCodeForBinding(
+        provider,
+        authorizationCode: authCode,
+        redirectUri: oauthService.redirectUri,
+      );
+
+      if (exchangeResult['success'] != true) {
+        closeDialog();
+        if (mounted) {
+          showFToast(
+            context: context,
+            alignment: FToastAlignment.bottomRight,
+            title: const Text('授权失败'),
+            description: Text(exchangeResult['error'] ?? '交换授权码失败'),
+            suffixBuilder: (context, entry) => IntrinsicHeight(
+              child: FButton(
+                style: context.theme.buttonStyles.primary.call,
+                onPress: entry.dismiss.call,
+                child: const Text('关闭'),
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
+      final providerAccessToken = exchangeResult['provider_access_token'] as String;
+
+      final bindResult = await widget.apiService.bindOAuth(provider: provider, accessToken: providerAccessToken);
+
+      closeDialog();
+
+      if (bindResult['success'] == true) {
+        await widget.apiService.clearUserCache();
+        await _refreshUserInfo();
+
+        if (mounted) {
+          showFToast(
+            context: context,
+            alignment: FToastAlignment.bottomRight,
+            title: const Text('绑定成功'),
+            description: Text('${_getProviderDisplayName(provider)}账号已成功绑定'),
+            suffixBuilder: (context, entry) => IntrinsicHeight(
+              child: FButton(
+                style: context.theme.buttonStyles.primary.call,
+                onPress: entry.dismiss.call,
+                child: const Text('关闭'),
+              ),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          showFToast(
+            context: context,
+            alignment: FToastAlignment.bottomRight,
+            title: const Text('绑定失败'),
+            description: Text(bindResult['error'] ?? '绑定失败'),
             suffixBuilder: (context, entry) => IntrinsicHeight(
               child: FButton(
                 style: context.theme.buttonStyles.primary.call,
@@ -399,13 +453,13 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
       }
     } catch (e) {
       closeDialog();
-      
+
       if (mounted) {
         showFToast(
           context: context,
           alignment: FToastAlignment.bottomRight,
           title: const Text('绑定失败'),
-          description: Text(e.toString()),
+          description: Text('绑定失败: $e'),
           suffixBuilder: (context, entry) => IntrinsicHeight(
             child: FButton(
               style: context.theme.buttonStyles.primary.call,
@@ -571,6 +625,23 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
         hasEmail: hasEmail,
         onSuccess: () {
           widget.onUserUpdated();
+        },
+      ),
+    );
+  }
+
+  void _showDeleteAccountDialog() {
+    final userInfoProvider = context.read<UserInfoProvider>();
+    showDialog(
+      context: context,
+      builder: (context) => _DeleteAccountDialog(
+        apiService: widget.apiService,
+        currentUser: _user,
+        userNotifier: widget.userNotifier,
+        userInfoProvider: userInfoProvider,
+        onAccountDeleted: () {
+          widget.apiService.clearAllLocalData();
+          Navigator.of(context).popUntil((route) => route.isFirst);
         },
       ),
     );
@@ -878,6 +949,299 @@ class _BindEmailDialogState extends State<_BindEmailDialog> {
                 )
               : const Text('确认'),
         ),
+      ],
+    );
+  }
+}
+
+// ==================== 注销账号对话框 ====================
+class _DeleteAccountDialog extends StatefulWidget {
+  final ApiService apiService;
+  final User? currentUser;
+  final VoidCallback onAccountDeleted;
+  final ValueNotifier<User?>? userNotifier;
+  final UserInfoProvider userInfoProvider;
+
+  const _DeleteAccountDialog({
+    required this.apiService,
+    required this.currentUser,
+    required this.onAccountDeleted,
+    this.userNotifier,
+    required this.userInfoProvider,
+  });
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  final _emailCodeController = TextEditingController();
+  
+  bool _isLoading = false;
+  bool _isCodeSending = false;
+  int _countdown = 0;
+  Timer? _countdownTimer;
+  bool _showConfirmStep = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailCodeController.addListener(_onInputChanged);
+    _passwordController.addListener(_onInputChanged);
+    _confirmPasswordController.addListener(_onInputChanged);
+  }
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _emailCodeController.dispose();
+    _countdownTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onInputChanged() {
+    setState(() {});
+  }
+
+  Future<void> _sendEmailCode() async {
+    setState(() => _isCodeSending = true);
+    
+    try {
+      await widget.apiService.sendDeleteAccountCode();
+      _showSuccess('验证码已发送到您的邮箱');
+      _startCountdown();
+    } catch (e) {
+      _showError('发送验证码失败：${e.toString()}');
+    } finally {
+      if (mounted) {
+        setState(() => _isCodeSending = false);
+      }
+    }
+  }
+  
+  void _startCountdown() {
+    setState(() => _countdown = 60);
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_countdown <= 1) {
+        timer.cancel();
+        if (mounted) {
+          setState(() => _countdown = 0);
+        }
+      } else {
+        if (mounted) {
+          setState(() => _countdown--);
+        }
+      }
+    });
+  }
+
+  bool _canProceed() {
+    final email = widget.currentUser?.email ?? '';
+    final hasEmail = email.isNotEmpty && !email.endsWith('@dext.oauth');
+    
+    if (hasEmail) {
+      return _emailCodeController.text.trim().isNotEmpty;
+    } else {
+      return _passwordController.text.trim().isNotEmpty && 
+             _confirmPasswordController.text.trim().isNotEmpty;
+    }
+  }
+
+  Future<void> _confirmDelete() async {
+    final email = widget.currentUser?.email ?? '';
+    final hasEmail = email.isNotEmpty && !email.endsWith('@dext.oauth');
+    
+    if (hasEmail) {
+      final code = _emailCodeController.text.trim();
+      if (code.isEmpty) {
+        _showError('请输入邮箱验证码');
+        return;
+      }
+    } else {
+      final password = _passwordController.text.trim();
+      final confirmPassword = _confirmPasswordController.text.trim();
+      
+      if (password.isEmpty || confirmPassword.isEmpty) {
+        _showError('请填写完整信息');
+        return;
+      }
+      
+      if (password != confirmPassword) {
+        _showError('两次输入的密码不一致');
+        return;
+      }
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      await widget.apiService.deleteAccount(
+        code: hasEmail ? _emailCodeController.text.trim() : null,
+        password: hasEmail ? null : _passwordController.text.trim(),
+        confirmPassword: hasEmail ? null : _confirmPasswordController.text.trim(),
+      );
+      
+      if (mounted) {
+        // 清理全局用户状态
+        widget.userNotifier?.value = null;
+        widget.userInfoProvider.clear();
+        
+        // 关闭对话框
+        Navigator.of(context).pop();
+        
+        // 清理本地数据并返回登录页面（使用与401相同的处理方式）
+        ApiService.onUnauthorized?.call();
+      }
+    } catch (e) {
+      _showError(e.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showError(String message) {
+    if (mounted) {
+      showFToast(
+        context: context,
+        title: Text(message),
+      );
+    }
+  }
+
+  void _showSuccess(String message) {
+    if (mounted) {
+      showFToast(
+        context: context,
+        title: Text(message),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final email = widget.currentUser?.email ?? '';
+    final hasEmail = email.isNotEmpty && !email.endsWith('@dext.oauth');
+    
+    return FDialog(
+      direction: Axis.horizontal,
+      title: _showConfirmStep ? const Text('确认注销账号') : const Text('注销账号'),
+      body: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!_showConfirmStep) ...[
+            const Text(
+              '此操作会删除您的账号但所有数据会匿名化处理，包括：',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '• 所有问卷和问题\n• 所有提交的答案\n• 个人资料和设置\n• 项目和数据统计',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              '此操作不可恢复，请谨慎操作！',
+              style: TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            if (hasEmail) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: FTextField(
+                      controller: _emailCodeController,
+                      label: const Text('邮箱验证码'),
+                      hint: '请输入6位验证码',
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FButton(
+                    style: context.theme.buttonStyles.outline.call,
+                    onPress: (_isCodeSending || _countdown > 0) ? null : _sendEmailCode,
+                    child: _isCodeSending
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(_countdown > 0 ? '${_countdown}s' : '发送验证码'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '验证码将发送到：$email',
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            ] else ...[
+              FTextField(
+                controller: _passwordController,
+                label: const Text('密码'),
+                hint: '请输入密码',
+                obscureText: true,
+              ),
+              const SizedBox(height: 16),
+              FTextField(
+                controller: _confirmPasswordController,
+                label: const Text('确认密码'),
+                hint: '请再次输入密码',
+                obscureText: true,
+              ),
+            ],
+          ] else ...[
+            const Text(
+              '您确定要永久注销账号吗？',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              '此操作将永久删除您的所有数据，且无法恢复！',
+              style: TextStyle(fontSize: 14, color: Colors.red),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        if (!_showConfirmStep) ...[
+          FButton(
+            style: context.theme.buttonStyles.outline.call,
+            onPress: _isLoading ? null : () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+          FButton(
+            style: context.theme.buttonStyles.primary.call,
+            onPress: _isLoading ? null : (_canProceed() ? () {
+              setState(() => _showConfirmStep = true);
+            } : null),
+            child: const Text(
+              '继续注销',
+            ),
+          ),
+        ] else ...[
+          FButton(
+            style: context.theme.buttonStyles.outline.call,
+            onPress: _isLoading ? null : () {
+              setState(() => _showConfirmStep = false);
+            },
+            child: const Text('返回'),
+          ),
+          FButton(
+            mainAxisSize: MainAxisSize.min,
+            onPress: _isLoading ? null : _confirmDelete,
+            child: _isLoading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('确认注销'),
+          ),
+        ],
       ],
     );
   }

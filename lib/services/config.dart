@@ -1,7 +1,12 @@
 // Centralized API configuration
 // Update the base URL here and all services will use it.
 
-const String apiBaseUrl = 'https://server.chuishui.top:11222';
+import 'package:flutter/foundation.dart';
+
+const String _releaseApiBaseUrl = 'https://csmy-dext.hf.space';
+const String _debugApiBaseUrl = 'http://127.0.0.1:11222';
+
+final String apiBaseUrl = kReleaseMode ? _releaseApiBaseUrl : _debugApiBaseUrl;
 
 // ===== 域名配置 =====
 const String appDomain = 'qs.chuishui.top';
@@ -22,13 +27,13 @@ const String getuiAppKey = '你的个推AppKey';  // 从个推控制台获取
 const String getuiAppSecret = '你的个推AppSecret';  // 从个推控制台获取
 
 // ===== OAuth 重定向URI配置 =====
-const String oauthCallbackWeb = 'https://server.chuishui.top:11222/api/auth/oauth/callback/web';
-const String oauthCallbackAndroid = 'https://server.chuishui.top:11222/api/auth/oauth/callback/mobile';
-const String oauthCallbackIOS = 'https://server.chuishui.top:11222/api/auth/oauth/callback/mobile';
-const String oauthCallbackDesktop = 'https://server.chuishui.top:11222/api/auth/oauth/callback/desktop';
+const String oauthCallbackWeb = 'https://csmy-dext.hf.space/api/auth/oauth/callback/web';
+const String oauthCallbackAndroid = 'https://csmy-dext.hf.space/api/auth/oauth/callback/mobile';
+const String oauthCallbackIOS = 'https://csmy-dext.hf.space/api/auth/oauth/callback/mobile';
+const String oauthCallbackDesktop = 'https://csmy-dext.hf.space/api/auth/oauth/callback/desktop';
 
 // ===== Android/iOS URI Scheme =====
-const String uriSchemeAndroid = 'com.dext.app';
+const String uriSchemeAndroid = 'dext';
 const String uriSchemeIOS = 'dext';
 
 /// 将相对路径（/openassets/...）转换为绝对URL，便于移动端/桌面端使用

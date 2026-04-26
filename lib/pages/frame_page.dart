@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
-import '../main.dart' show isDesktop;
+import 'package:provider/provider.dart';
+
 import 'package:dext/widgets/frosted_glass_background.dart';
 import 'package:dext/widgets/downscaled_blur.dart';
 import 'package:dext/widgets/glass_sidebar_card.dart';
@@ -9,6 +10,7 @@ import 'package:dext/widgets/exit_confirm_dialog.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:forui/forui.dart';
 import 'package:layout/layout.dart';
 import 'package:dext/services/settings_service.dart';
@@ -20,9 +22,11 @@ import 'home_page.dart';
 import 'project_page.dart';
 import 'survey_page.dart';
 import 'public_survey_page.dart';
+import 'debug_test_page.dart';
 import '../widgets/public_access_dialog.dart';
 import '../utils/error_formatter.dart';
 import '../services/config.dart';
+import '../providers/user_info_provider.dart';
 
 final ValueNotifier<bool> mobileSidebarOpen = ValueNotifier<bool>(false);
 final showSidebarInDrawer = LayoutValue(xs: true, md: false);
@@ -96,10 +100,13 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
     int _surveyCount = 0;
     User? _currentUser;
     final GlobalKey<NavigatorState> _contentNavigatorKey = GlobalKey<NavigatorState>();
-    // 记录上一次是否为桌面布局，用于在从移动切换到桌面时重置右侧导航栈
-    bool _wasDesktopLayout = false;
+    // 调试模式点击检测
+    int _debugClickCount = 0;
+    DateTime? _lastDebugClickTime;
     // 桌面侧边栏折叠状态
     bool _sidebarCollapsed = false;
+    // 上一次布局是否为桌面布局
+    bool _wasDesktopLayout = false;
     // 自定义侧滑菜单：动画与手势状态
     late final AnimationController _menuController;
     late final Animation<double> _menuScale;
@@ -266,6 +273,39 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
       }
     }
 
+    void _handleDebugClick() {
+      final now = DateTime.now();
+      
+      // 重置计数器如果超过3秒没有点击
+      if (_lastDebugClickTime != null && now.difference(_lastDebugClickTime!) > const Duration(seconds: 3)) {
+        _debugClickCount = 0;
+      }
+      
+      _debugClickCount++;
+      _lastDebugClickTime = now;
+      
+      // 仅在调试模式下且点击5次时跳转
+      if (kDebugMode && _debugClickCount >= 5) {
+        _debugClickCount = 0;
+        
+        // 检查是否已经在调试测试页面
+        final nav = _contentNavigatorKey.currentState;
+        if (nav != null) {
+          final currentRoute = ModalRoute.of(nav.context);
+          if (currentRoute?.settings.name?.contains('DebugTestPage') == true) {
+            // 已经在调试测试页面，不重复跳转
+            return;
+          }
+          
+          nav.push(
+            MaterialPageRoute(
+              builder: (context) => const DebugTestPage(),
+            ),
+          );
+        }
+      }
+    }
+
     Future<void> _fetchUserData() async {
       if (_hasLoadedUser) return;
       
@@ -353,7 +393,8 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
 
   @override
   Widget build(BuildContext context) {
-    // 依据断点决定是否显示“桌面布局”（侧边栏内联），不再受平台限制（Web 也支持）
+    _updateSystemUIOverlayStyle();
+    // 依据断点决定是否显示"桌面布局"（侧边栏内联），不再受平台限制（Web 也支持）
     final bool showDesktopLayout = showSidebarInline.resolve(context);
     // 主题变化时，刷新一次截图
     final currentBrightness = Theme.of(context).brightness;
@@ -370,20 +411,17 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
       _menuController.value = 0.0;
       if (mobileSidebarOpen.value) mobileSidebarOpen.value = false;
     }
-
-    // 当布局从移动切换到桌面时，重置右侧嵌套 Navigator 的栈为当前 Tab 的根页面
-    if (showDesktopLayout && !_wasDesktopLayout) {
-      final nav = _contentNavigatorKey.currentState;
-      if (nav != null) {
-        nav.pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => _buildRootForTab(_currentTabIndex)),
-          (route) => false,
-        );
-        _forceBackdropUpdate();
-      }
+    // 移动端→桌面端布局切换时，重置侧边栏折叠状态为展开
+    if (showDesktopLayout && !_wasDesktopLayout && _sidebarCollapsed) {
+      _sidebarCollapsed = false;
     }
+    // 桌面端→移动端布局切换时，也重置为展开
+    if (!showDesktopLayout && _wasDesktopLayout && _sidebarCollapsed) {
+      _sidebarCollapsed = false;
+    }
+    _wasDesktopLayout = showDesktopLayout;
 
-    // 统一采用嵌套 Navigator 承载右侧内容区域，避免切换桌面/移动布局时丢失栈
+    // 统一采用嵌套 Navigator 承载右侧内容区域，移动端与桌面端共用同一栈，切换布局时保留深层页面
     final contentArea = Navigator(
       key: _contentNavigatorKey,
       onGenerateRoute: (settings) {
@@ -394,14 +432,12 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
         MaterialPageRoute(builder: (_) => _buildRootForTab(_currentTabIndex)),
       ],
       observers: [
-        _backdropNavObserver ??= _BackdropNavObserver(() {
-          _forceBackdropUpdate();
-        })
+          _backdropNavObserver ??= _BackdropNavObserver(() {
+            _updateSystemUIOverlayStyle();
+            _forceBackdropUpdate();
+          })
       ],
     );
-
-    // 记录当前布局状态供下次对比
-    _wasDesktopLayout = showDesktopLayout;
 
     if (showDesktopLayout) {
 
@@ -689,6 +725,20 @@ class FramePageState extends State<FramePage> with SingleTickerProviderStateMixi
     WidgetsBinding.instance.addPostFrameCallback((_) => _scheduleBackdropUpdate());
   }
 
+  void _updateSystemUIOverlayStyle() {
+    final brightness = _lastBrightness ?? Theme.of(context).brightness;
+    final isDark = brightness == Brightness.dark;
+    SystemChrome.setSystemUIOverlayStyle(
+      SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarDividerColor: Colors.transparent,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      ),
+    );
+  }
+
   // 每一帧都刷新一次聚焦背景
   void _ensureBackdropLoop() {
     if (_isBackdropLoopActive) return;
@@ -806,13 +856,16 @@ Widget _buildSidebarHeader(BuildContext context) {
                   firstChild: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Dext问卷调查',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary,
+                      GestureDetector(
+                        onTap: _handleDebugClick,
+                        child: Text(
+                          'Dext问卷调查',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
                         ),
                       ),
                       Text(
@@ -831,7 +884,7 @@ Widget _buildSidebarHeader(BuildContext context) {
                   sizeCurve: Curves.easeInOutCubic,
                 ),
               ),
-              if (isDesktop) AnimatedRotation(
+              if (showSidebarInline.resolve(context)) AnimatedRotation(
                 turns: _sidebarCollapsed ? 0.0 : 0.5, // 左箭头=旋转180度表示收起状态
                 duration: const Duration(milliseconds: 220),
                 curve: Curves.easeInOutCubic,
@@ -863,6 +916,8 @@ Widget _buildSidebarHeader(BuildContext context) {
 
   Widget _buildSidebarFooter(BuildContext context) {
   if (_sidebarCollapsed) return const SizedBox.shrink();
+  final user = Provider.of<UserInfoProvider>(context, listen: true).user ?? _currentUser;
+  
   return GlassSidebarCard(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -875,18 +930,18 @@ Widget _buildSidebarHeader(BuildContext context) {
             Row(
               children: [
                 Container(
-                    padding: _currentUser?.avatarUrl != null ? const EdgeInsets.all(2) : const EdgeInsets.all(10),
+                    padding: user?.avatarUrl != null ? const EdgeInsets.all(2) : const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: _currentUser?.avatarUrl != null 
+                      color: user?.avatarUrl != null 
                           ? Colors.transparent 
                           : Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: (_currentUser?.avatarUrl?.isNotEmpty ?? false)
+                    child: (user?.avatarUrl?.isNotEmpty ?? false)
     ? ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: Image.network(
-          toAbsoluteUrl(_currentUser!.avatarUrl!),
+          toAbsoluteUrl(user!.avatarUrl!),
           width: 32,
           height: 32,
           fit: BoxFit.cover,
@@ -910,14 +965,14 @@ Widget _buildSidebarHeader(BuildContext context) {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                          _currentUser?.username ?? 'Ghost',
+                          user?.username ?? 'Ghost',
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             fontWeight: FontWeight.w600,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          _currentUser?.email ?? '啥也没有捏',
+                          user?.email ?? '啥也没有捏',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                           ),

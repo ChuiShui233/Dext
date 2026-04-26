@@ -79,7 +79,6 @@ class AuthService {
       throw TokenExpired('无法刷新令牌：未找到刷新令牌');
     }
 
-    // 使用普通HTTP请求，因为后端已将refresh端点加入白名单
     final resp = await core.httpRequest(
       'POST',
       '${ApiCore.baseUrl}/api/auth/refresh',

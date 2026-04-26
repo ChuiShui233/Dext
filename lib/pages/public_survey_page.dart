@@ -12,18 +12,28 @@ import '../controllers/survey_runtime.dart';
 import '../components/glass_card.dart';
 import '../components/adaptive_message_card.dart';
 import '../components/glass_button.dart';
+import '../components/survey_continuous_layout.dart';
+import '../components/survey_wizard_layout.dart';
 import '../widgets/question_display_widget.dart';
 import 'fullscreen_media_viewer.dart';
 import '../widgets/frosted_glass_background.dart';
 import '../widgets/top_safe_spacer.dart';
+import '../widgets/survey_preview_card.dart';
+import 'lite/public_survey_page_web.dart' if (dart.library.io) 'lite/public_survey_page_stub.dart';
 import '../components/loading_indicator.dart';
+import '../services/settings_service.dart';
 
 class PublicSurveyPage extends StatefulWidget {
   final String surveyUID;
 
+  /// 精简版在 `_resolveHome` 阶段已经拉过问卷元信息，这里透传进来
+  /// 可以在头部渲染预览卡（创建者 / 发布时间），避免重复拉接口。
+  final SurveyPreview? surveyPreview;
+
   const PublicSurveyPage({
     super.key,
     required this.surveyUID,
+    this.surveyPreview,
   });
 
   @override
@@ -51,6 +61,8 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
   bool isSubmitted = false;
   final Map<int, double?> _hoverRatings = {};
   bool _bgReady = false;
+  String? _authorName;
+  String? _authorAvatar;
   
   // 存储自定义填写选项的输入内容：key: questionId_optionIndex, value: 输入文本
   final Map<String, String> _customInputValues = {};
@@ -102,6 +114,8 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
       _mobileBackground = data['mobileBackground'] as String?;
       autoSubmit = data['autoSubmit'] ?? false;
       allowAnonymous = data['allowAnonymous'] ?? false;
+      _authorName = data['createdBy'] as String?;
+      _authorAvatar = data['creatorAvatar'] as String?;
       
       final questionsData = data['questions'] as List? ?? [];
       questions = questionsData.map((q) {
@@ -209,7 +223,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
         title: const Text('登录过期'),
         description: const Text('登录已过期，请重新登录'),
       );
-      Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+      _navigateToPublicAccess();
     } catch (e) {
       setState(() {
         isLoading = false;
@@ -626,7 +640,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
           title: const Text('登录过期'),
           description: const Text('登录已过期，请重新登录'),
         );
-        Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+        _navigateToPublicAccess();
       } else {
         showFToast(
           context: context,
@@ -814,6 +828,15 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
                   ],
                 ),
               ),
+              // 精简版：URL 带 ?id= 时，main_lite 已经拉过预览元信息，渲染到头部下方
+              if (widget.surveyPreview != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: SurveyPreviewCard(
+                    preview: widget.surveyPreview!,
+                    prominent: false,
+                  ),
+                ),
               Expanded(
                 child: isLoading
                     ? const LoadingIndicator.page()
@@ -871,7 +894,7 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
             GlassButton(
               text: '返回主界面',
               color: Colors.blue,
-              onPressed: () => Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false),
+              onPressed: _navigateToPublicAccess,
             ),
           ],
         ),
@@ -934,132 +957,136 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
 
   Widget _buildSurveyView() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    final visible = questions.where((q) => _runtime?.visibleQuestionIds.contains(q.id) ?? false).toList();
+    final runtime = _runtime;
+    if (runtime == null) {
+      return const SizedBox.shrink();
+    }
 
-    return CustomScrollView(
-      controller: _scrollController,
-      cacheExtent: 800.0,
-      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.all(16),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-        if (description.isNotEmpty)
-          _buildGlassCard(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    surveyName,
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    description,
-                    style: TextStyle(
-                      color: isDark ? Colors.white70 : Colors.black54,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        const SizedBox(height: 16),
+    // 评分题变更：内部更新 runtime + 触发自动提交检查
+    void onRatingChanged(int questionId, String value) {
+      setState(() {
+        runtime.setAnswerSingle(questionId, value);
+        runtime.recomputeVisible();
+      });
+      _scrollToBottom();
+      _checkAutoSubmit();
+    }
 
-        ...visible.asMap().entries.map((entry) {
-          final index = entry.key;
-          final q = entry.value;
-          return TweenAnimationBuilder<double>(
-            duration: Duration(milliseconds: 500 + (index * 150)),
-            tween: Tween(begin: 0.0, end: 1.0),
-            curve: Curves.easeOutQuart,
-            builder: (context, value, child) {
-              return Transform.translate(
-                offset: Offset(0, 30 * (1 - value)),
-                child: Opacity(
-                  opacity: value,
-                  child: Transform.scale(
-                    scale: 0.8 + (0.2 * value),
-                    child: AnimatedSize(
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.fastOutSlowIn,
-                      alignment: Alignment.topCenter,
-                      child: _buildGlassCard(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: QuestionDisplayWidget(
-                              question: q,
-                              mode: QuestionDisplayMode.interactive,
-                              optionStates: _optionStates,
-                              selectedAnswers: _runtime?.answers[q.id] ?? [],
-                              hoverRatings: _hoverRatings,
-                              onSingleChoiceChanged: _updateSingleChoiceAnswer,
-                              onMultipleChoiceChanged: _updateMultipleChoiceAnswer,
-                              onRatingChanged: (questionId, value) {
-                                setState(() {
-                                  _runtime?.setAnswerSingle(questionId, value);
-                                  _runtime?.recomputeVisible();
-                                });
-                                _checkAutoSubmit();
-                              },
-                              onTextInputChanged: _updateTextInputAnswer,
-                              onMediaOpen: (url, all, index) => _openFullscreenViewer(url, all, index),
-                              customInputValues: _customInputValues,
-                              onCustomInputChanged: (questionId, optionIndex, value) {
-                                setState(() {
-                                  final key = '${questionId}_$optionIndex';
-                                  if (value.trim().isEmpty) {
-                                    // 删除空内容，触发 UI 重新构建
-                                    _customInputValues.remove(key);
-                                  } else {
-                                    _customInputValues[key] = value;
-                                  }
-                                });
-                                // 自定义填写输入不触发自动提交
-                              },
-                          ),
-                        ),
-                      ),
-                    ),
+    // 自定义填写输入变更
+    void onCustomInputChanged(int questionId, int optionIndex, String value) {
+      setState(() {
+        final key = '${questionId}_$optionIndex';
+        if (value.trim().isEmpty) {
+          _customInputValues.remove(key);
+        } else {
+          _customInputValues[key] = value;
+        }
+      });
+      // 自定义填写输入不触发自动提交
+    }
+
+    final useWizard =
+        SettingsService().questionnaireLayout == SettingsService.layoutWizard;
+
+    if (useWizard) {
+      return SurveyWizardLayout(
+        surveyName: surveyName,
+        description: description,
+        questions: questions,
+        runtime: runtime,
+        optionStates: _optionStates,
+        hoverRatings: _hoverRatings,
+        authToken: '',
+        isDark: isDark,
+        mode: QuestionDisplayMode.interactive,
+        customInputValues: _customInputValues,
+        onSingleChoiceChanged: _updateSingleChoiceAnswer,
+        onMultipleChoiceChanged: _updateMultipleChoiceAnswer,
+        onRatingChanged: onRatingChanged,
+        onTextInputChanged: _updateTextInputAnswer,
+        onCustomInputChanged: onCustomInputChanged,
+        onMediaOpen: (url, all, index, {controller}) =>
+            _openFullscreenViewer(url, all, index),
+        footer: _buildSubmitButton(useFButton: true),
+      );
+    }
+    return SurveyContinuousLayout(
+      surveyName: surveyName,
+      description: description,
+      questions: questions,
+      runtime: runtime,
+      optionStates: _optionStates,
+      hoverRatings: _hoverRatings,
+      authToken: '',
+      isDark: isDark,
+      mode: QuestionDisplayMode.interactive,
+      authorName: _authorName,
+      authorAvatar: _authorAvatar,
+      customInputValues: _customInputValues,
+      scrollController: _scrollController,
+      onSingleChoiceChanged: _updateSingleChoiceAnswer,
+      onMultipleChoiceChanged: _updateMultipleChoiceAnswer,
+      onRatingChanged: onRatingChanged,
+      onTextInputChanged: _updateTextInputAnswer,
+      onCustomInputChanged: onCustomInputChanged,
+      onMediaOpen: (url, all, index, {controller}) =>
+          _openFullscreenViewer(url, all, index),
+      footer: _buildSubmitButton(),
+    );
+  }
+
+  /// 提交按钮：仅在所有必答题回答完毕或问卷结束时显示
+  Widget? _buildSubmitButton({bool useFButton = false}) {
+    if (!(_areAllRequiredQuestionsAnswered() || _runtime?.ended == true)) {
+      return null;
+    }
+    final label = isSubmitting ? '提交中...' : '提交问卷';
+    final onPressed = isSubmitting ? () {} : _submitAnswers;
+
+    if (useFButton) {
+      return FButton(
+        style: context.theme.buttonStyles.primary.call,
+        onPress: onPressed,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isSubmitting)
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation(
+                    Theme.of(context).colorScheme.onPrimary,
                   ),
                 ),
-              );
-            },
-          );
-        }),
-
-        
-        // 提交按钮
-        if (_areAllRequiredQuestionsAnswered() || _runtime?.ended == true)
-          Container(
-            margin: const EdgeInsets.only(bottom: 16),
-            child: isSubmitting
-                ? Opacity(
-                    opacity: 0.6,
-                    child: GlassButton(
-                      text: '提交中...',
-                      color: Colors.blue,
-                      onPressed: () {},
-                    ),
-                  )
-                : GlassButton(
-                    text: '提交问卷',
-                    color: Colors.blue,
-                    onPressed: _submitAnswers,
-                  ),
-          ),
-            ]),
-          ),
+              )
+            else
+              Icon(Icons.send, size: 16),
+            const SizedBox(width: 6),
+            Text(label),
+          ],
         ),
-      ],
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      child: isSubmitting
+          ? Opacity(
+              opacity: 0.6,
+              child: GlassButton(
+                text: '提交中...',
+                color: Colors.blue,
+                onPressed: () {},
+              ),
+            )
+          : GlassButton(
+              text: '提交问卷',
+              color: Colors.blue,
+              onPressed: _submitAnswers,
+            ),
     );
   }
 
@@ -1100,9 +1127,31 @@ class _PublicSurveyPageState extends State<PublicSurveyPage> {
     );
   }
 
-  /// 导航到公开访问页面，避免Web端路由SecurityError
+  /// 退出问卷，回到入口页。
+  ///
+  /// Web 上优先用「URL 去 query + 整页重载」的方式：
+  ///   - 当前 URL 还带 ?id=xxx（从分享链接进入）→ location.replace 跳到无 query 版本
+  ///     浏览器重载后应用 bootstrap 重新跑，按当前登录态显示登录页/入口页，
+  ///     同时地址栏也变干净（用户可重新分享出去当普通入口链接）。
+  ///   - 当前 URL 已干净（从 SurveyEntryPage 推入）→ 走原来的 pushNamedAndRemoveUntil('/')。
+  ///
+  /// 非 Web 平台没有 query 概念，直接走 pushNamedAndRemoveUntil('/')。
   void _navigateToPublicAccess() {
-    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+    // Web 端：URL 里如果还带 ?id=，单纯 pushNamedAndRemoveUntil 到 '/' 会被
+    // main_lite 的 URL 解析器再次路由回 PublicSurveyPage，造成循环。
+    // 用 window.location.replace 去掉 query 触发一次整页重载，干净退出。
+    if (kIsWeb) {
+      final uri = Uri.base;
+      if (uri.hasQuery) {
+        final clean = uri.replace(query: '');
+        webLocationReplace(clean.toString());
+        return;
+      }
+    }
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      '/',
+      (route) => false,
+    );
   }
-
 }

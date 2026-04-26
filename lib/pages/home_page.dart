@@ -1,15 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:dext/services/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:layout/layout.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/user.dart';
-import 'home_main_content.dart';
-import 'home_history_content.dart';
-import 'settings/home_settings_content.dart';
 import '../widgets/frosted_glass_background.dart';
+import 'home_history_content.dart';
+import 'home_main_content.dart';
+import 'settings/home_settings_content.dart';
 
 final contentPadding = LayoutValue(
   xs: const EdgeInsets.all(16),
@@ -28,8 +31,22 @@ final sectionSpacing = LayoutValue(
 final showSidebarInDrawer = LayoutValue(xs: true, md: false);
 final showSidebarInline = LayoutValue(xs: false, md: true);
 
+class HomeTabProvider extends ChangeNotifier {
+  int _index;
+
+  HomeTabProvider({int initialIndex = 0}) : _index = initialIndex;
+
+  int get index => _index;
+
+  void setIndex(int value) {
+    if (_index == value) return;
+
+    _index = value;
+    notifyListeners();
+  }
+}
+
 class HomePage extends StatefulWidget {
-  final int currentIndex;
   final int projectCount;
   final int surveyCount;
   final VoidCallback onProjectTap;
@@ -38,13 +55,13 @@ class HomePage extends StatefulWidget {
   final VoidCallback onLogout;
   final Function(ThemeMode) onThemeModeChange;
   final Function(double)? onDpiScaleChange;
-  final Function(int)? onTabChanged;
   final ApiService apiService;
   final ValueNotifier<User?>? userNotifier;
+  final int currentIndex;
+  final void Function(int index) onTabChanged;
 
   const HomePage({
     super.key,
-    required this.currentIndex,
     required this.projectCount,
     required this.surveyCount,
     required this.onProjectTap,
@@ -54,38 +71,45 @@ class HomePage extends StatefulWidget {
     required this.onThemeModeChange,
     this.onDpiScaleChange,
     required this.apiService,
-    this.onTabChanged,
     this.userNotifier,
+    required this.currentIndex,
+    required this.onTabChanged,
   });
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin {
+class _HomePageState extends State<HomePage>
+    with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
-  
+
   Map<String, int>? _cachedAnalytics;
   bool _isLoadingAnalytics = false;
-  
+
   @override
   void initState() {
     super.initState();
     _loadCachedAnalytics();
     _loadAnalytics();
   }
-  
+
   Future<void> _loadCachedAnalytics() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+
       final cached = prefs.getString('analytics_overview');
+
       if (cached != null) {
         final data = json.decode(cached) as Map<String, dynamic>;
-        if (!data.containsKey('totalSurveys') || !data.containsKey('activeSurveys')) {
+
+        if (!data.containsKey('totalSurveys') ||
+            !data.containsKey('activeSurveys')) {
           await prefs.remove('analytics_overview');
           return;
         }
+
         if (mounted) {
           setState(() {
             _cachedAnalytics = {
@@ -97,159 +121,386 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
           });
         }
       }
-    } catch (_) {
-      // 忽略错误，_loadAnalytics 会处理
-    }
+    } catch (_) {}
   }
-  
+
   Future<void> _loadAnalytics() async {
     if (_isLoadingAnalytics) return;
     if (_cachedAnalytics != null) return;
-    
-    Timer? loadingTimer = Timer(const Duration(milliseconds: 150), () {
-      if (mounted && _isLoadingAnalytics) {
-        setState(() => _isLoadingAnalytics = true);
-      }
-    });
-    
+
+    Timer? loadingTimer = Timer(
+      const Duration(milliseconds: 150),
+      () {
+        if (mounted && _isLoadingAnalytics) {
+          setState(() => _isLoadingAnalytics = true);
+        }
+      },
+    );
+
     try {
-      final analytics = await widget.apiService.getAnalyticsOverview();
+      final analytics =
+          await widget.apiService.getAnalyticsOverview();
+
       loadingTimer.cancel();
+
       if (mounted) {
         setState(() {
           _cachedAnalytics = analytics;
           _isLoadingAnalytics = false;
         });
       }
-    } catch (e) {
+    } catch (_) {
       loadingTimer.cancel();
+
       if (mounted) {
         setState(() {
-          _cachedAnalytics = const {'totalViews': 0, 'totalSubmits': 0, 'totalSurveys': 0, 'activeSurveys': 0};
+          _cachedAnalytics = const {
+            'totalViews': 0,
+            'totalSubmits': 0,
+            'totalSurveys': 0,
+            'activeSurveys': 0,
+          };
+
           _isLoadingAnalytics = false;
         });
       }
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    showSidebarInDrawer.resolve(context);
-    final bool showDesktopLayout = showSidebarInline.resolve(context);
-    final EdgeInsets padding = contentPadding.resolve(context);
 
-    final overview = _cachedAnalytics ?? const {'totalViews': 0, 'totalSubmits': 0, 'totalSurveys': 0, 'activeSurveys': 0};
-    Widget dashboardContent = HomeMainContent(
-      projectCount: overview['totalSurveys'] ?? 0,
-      surveyCount: overview['activeSurveys'] ?? 0,
-      totalViews: overview['totalViews'] ?? 0,
-      totalSubmits: overview['totalSubmits'] ?? 0,
-      onProjectTap: widget.onProjectTap,
-      onSurveyTap: widget.onSurveyTap,
-      onFillSurveyTab: widget.onFillSurveyTab,
-      fetchTrend: (range) => widget.apiService.getSubmitTrend(range: range),
-      apiService: widget.apiService,
-    );
+    final bool showDesktopLayout =
+        showSidebarInline.resolve(context);
 
-    final contents = [
-      dashboardContent,
-      HomeHistoryContent(apiService: widget.apiService),
-      HomeSettingsContent(
-        onLogout: widget.onLogout,
-        onThemeModeChange: widget.onThemeModeChange,
-        onDpiScaleChange: widget.onDpiScaleChange,
-        onChangeAvatar: () {
-  },
-        apiService: widget.apiService,
-        userNotifier: widget.userNotifier,
-      ),
-    ];
+    final EdgeInsets padding =
+        contentPadding.resolve(context);
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          if (widget.currentIndex == 0)
-            const FrostedGlassBackground(
-              count: 8,
-              blurSigma: 120,
-              blobOpacity: 0.5,
-              animated: true,
-              vignette: true,
-            )
-          else
-            Container(color: Theme.of(context).colorScheme.surface),
-          Scaffold(
-            backgroundColor: Colors.transparent,
-            extendBody: true,
-            body: LayoutBuilder(
-              builder: (context, constraints) {
-                final Widget current = AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  switchInCurve: Curves.fastOutSlowIn,
-                  switchOutCurve: Curves.fastOutSlowIn.flipped,
-                  child: contents[widget.currentIndex],
+    final overview = _cachedAnalytics ??
+        const {
+          'totalViews': 0,
+          'totalSubmits': 0,
+          'totalSurveys': 0,
+          'activeSurveys': 0,
+        };
+
+    return ChangeNotifierProvider(
+      create: (_) => HomeTabProvider(initialIndex: widget.currentIndex),
+      child: Consumer<HomeTabProvider>(
+        builder: (context, tabProvider, _) {
+          final currentIndex = tabProvider.index;
+
+          final contents = [
+            HomeMainContent(
+              projectCount:
+                  overview['totalSurveys'] ?? 0,
+              surveyCount:
+                  overview['activeSurveys'] ?? 0,
+              totalViews:
+                  overview['totalViews'] ?? 0,
+              totalSubmits:
+                  overview['totalSubmits'] ?? 0,
+              onProjectTap: widget.onProjectTap,
+              onSurveyTap: widget.onSurveyTap,
+              onFillSurveyTab:
+                  widget.onFillSurveyTab,
+              fetchTrend: (range) => widget.apiService
+                  .getSubmitTrend(range: range),
+              apiService: widget.apiService,
+            ),
+
+            HomeHistoryContent(
+              apiService: widget.apiService,
+            ),
+
+            HomeSettingsContent(
+              onLogout: widget.onLogout,
+              onThemeModeChange:
+                  widget.onThemeModeChange,
+              onDpiScaleChange:
+                  widget.onDpiScaleChange,
+              onChangeAvatar: () {},
+              apiService: widget.apiService,
+              userNotifier: widget.userNotifier,
+            ),
+          ];
+
+          final Widget current = IndexedStack(
+            index: currentIndex,
+            children: contents,
+          );
+
+          final contentWidget = currentIndex == 2
+              ? current
+              : Padding(
+                  padding: padding.copyWith(
+                    bottom: padding.bottom + 48,
+                  ),
+                  child: current,
                 );
-                
-                final contentWidget = widget.currentIndex == 2
-                    ? current
-                    : Padding(
-                        padding: padding,
-                        child: current,
-                      );
-                
-                if (showDesktopLayout) {
-                  return contentWidget;
-                }
-                
-                final double safeBottom = MediaQuery.of(context).padding.bottom;
-                final double fullHeight = 64 + safeBottom; // 导航栏期望高度
-                return Scaffold(
+
+          return Scaffold(
+            backgroundColor:
+                Theme.of(context).brightness ==
+                        Brightness.dark
+                    ? const Color(0xFF09090B)
+                    : const Color(0xFFF7F7F8),
+            body: Stack(
+              children: [
+                if (currentIndex == 0)
+                  const FrostedGlassBackground(
+                    count: 8,
+                    blurSigma: 120,
+                    blobOpacity: 0.28,
+                    animated: true,
+                    vignette: true,
+                  )
+                else
+                  Container(
+                    color:
+                        Theme.of(context).brightness ==
+                                Brightness.dark
+                            ? const Color(0xFF09090B)
+                            : const Color(
+                                0xFFF7F7F8,
+                              ),
+                  ),
+
+                Scaffold(
                   backgroundColor: Colors.transparent,
-                  body: contentWidget,
-                  bottomNavigationBar: SizedBox(
-                    height: fullHeight,
-                    child: NavigationBarTheme(
-                      data: NavigationBarThemeData(
-                        indicatorColor: Theme.of(context).brightness == Brightness.light
-                            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.24)
-                            : Theme.of(context).colorScheme.primary.withValues(alpha: 0.20),
-                        iconTheme: WidgetStateProperty.resolveWith<IconThemeData>((states) {
-                          if (states.contains(WidgetState.selected)) {
-                            return IconThemeData(color: Theme.of(context).colorScheme.primary);
-                          }
-                          return IconThemeData(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6));
-                        }),
-                        labelTextStyle: WidgetStateProperty.resolveWith<TextStyle>((states) {
-                          if (states.contains(WidgetState.selected)) {
-                            return TextStyle(
-                              color: Theme.of(context).colorScheme.primary,
-                              fontWeight: FontWeight.w600,
-                            );
-                          }
-                          return TextStyle(
-                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                            fontWeight: FontWeight.w500,
-                          );
-                        }),
+                  extendBody: true,
+                  body:
+                      showDesktopLayout
+                          ? contentWidget
+                          : Scaffold(
+                              backgroundColor:
+                                  Colors.transparent,
+                              extendBody: true,
+                              body: contentWidget,
+                              bottomNavigationBar:
+                                  const _AnimatedBottomBar(),
+                            ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _AnimatedBottomBar extends StatelessWidget {
+  const _AnimatedBottomBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final provider =
+        context.watch<HomeTabProvider>();
+
+    final currentIndex = provider.index;
+
+    final dark =
+        Theme.of(context).brightness ==
+        Brightness.dark;
+
+    final activeColor =
+        dark
+            ? Colors.white
+            : const Color(0xFF111111);
+
+    return Container(
+      height: 64 + MediaQuery.of(context).padding.bottom,
+      decoration: BoxDecoration(
+        color:
+            dark
+                ? const Color(0xFF0B0B0C)
+                : Colors.white,
+        border: Border(
+          top: BorderSide(
+            color:
+                dark
+                    ? Colors.white.withValues(
+                        alpha: 0.05,
+                      )
+                    : Colors.black.withValues(
+                        alpha: 0.05,
                       ),
-                      child: NavigationBar(
-                        selectedIndex: widget.currentIndex,
-                        onDestinationSelected: (index) => widget.onTabChanged?.call(index),
-                        destinations: const [
-                          NavigationDestination(icon: Icon(FIcons.house), label: '主页', tooltip: ''),
-                          NavigationDestination(icon: Icon(FIcons.clock), label: '历史', tooltip: ''),
-                          NavigationDestination(icon: Icon(FIcons.settings), label: '设置', tooltip: ''),
-                        ],
-                      ),
+          ),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final itemWidth =
+                constraints.maxWidth / 3;
+
+            return Stack(
+              children: [
+                AnimatedPositioned(
+                  duration: const Duration(
+                    milliseconds: 380,
+                  ),
+                  curve: Curves.easeOutExpo,
+                  top: 1,
+                  left:
+                      itemWidth * currentIndex +
+                      (itemWidth - 24) / 2,
+                  child: Container(
+                    width: 24,
+                    height: 2,
+                    decoration: BoxDecoration(
+                      color: activeColor,
+                      borderRadius:
+                          BorderRadius.circular(999),
                     ),
                   ),
-                );
-              },
-            ),
+                ),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: _EdgeNavItem(
+                        icon: FIcons.house,
+                        label: '主页',
+                        selected:
+                            currentIndex == 0,
+                        onTap:
+                            () => provider
+                                .setIndex(0),
+                      ),
+                    ),
+                    Expanded(
+                      child: _EdgeNavItem(
+                        icon: FIcons.clock,
+                        label: '历史',
+                        selected:
+                            currentIndex == 1,
+                        onTap:
+                            () => provider
+                                .setIndex(1),
+                      ),
+                    ),
+                    Expanded(
+                      child: _EdgeNavItem(
+                        icon: FIcons.settings,
+                        label: '设置',
+                        selected:
+                            currentIndex == 2,
+                        onTap:
+                            () => provider
+                                .setIndex(2),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _EdgeNavItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _EdgeNavItem({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final dark =
+        Theme.of(context).brightness ==
+        Brightness.dark;
+
+    final activeColor =
+        dark
+            ? Colors.white
+            : const Color(0xFF111111);
+
+    final inactiveColor =
+        dark
+            ? Colors.white.withValues(
+                alpha: 0.42,
+              )
+            : Colors.black.withValues(
+                alpha: 0.42,
+              );
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        child: SizedBox(
+          height: 64,
+          child: Column(
+            mainAxisAlignment:
+                MainAxisAlignment.center,
+            children: [
+              AnimatedScale(
+                duration: const Duration(
+                  milliseconds: 180,
+                ),
+                curve: Curves.easeOutCubic,
+                scale: selected ? 1.05 : 1,
+                child: AnimatedSlide(
+                  duration: const Duration(
+                    milliseconds: 180,
+                  ),
+                  curve: Curves.easeOutCubic,
+                  offset:
+                      selected
+                          ? const Offset(
+                            0,
+                            -0.03,
+                          )
+                          : Offset.zero,
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color:
+                        selected
+                            ? activeColor
+                            : inactiveColor,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              AnimatedDefaultTextStyle(
+                duration: const Duration(
+                  milliseconds: 180,
+                ),
+                curve: Curves.easeOutCubic,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight:
+                      selected
+                          ? FontWeight.w600
+                          : FontWeight.w500,
+                  letterSpacing: -0.1,
+                  color:
+                      selected
+                          ? activeColor
+                          : inactiveColor,
+                ),
+                child: Text(label),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

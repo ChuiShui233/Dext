@@ -15,6 +15,7 @@ class WindowCaption extends StatefulWidget {
 
 class _WindowCaptionState extends State<WindowCaption> with WindowListener {
   bool _isMaximized = false;
+  bool _isDialogOpen = false;
 
   @override
   void initState() {
@@ -49,6 +50,9 @@ class _WindowCaptionState extends State<WindowCaption> with WindowListener {
         theme.brightness == Brightness.dark ? Colors.white : Colors.black;
 
     Future<void> showCloseConfirmDialog() async {
+      // 防止重复打开弹窗
+      if (_isDialogOpen) return;
+      
       // 检查用户是否选择了不再提示
       final settings = SettingsService();
       final dontAskAgain = settings.windowCloseDontAsk;
@@ -69,6 +73,8 @@ class _WindowCaptionState extends State<WindowCaption> with WindowListener {
       if (!mounted) return;
       final navCtx = appNavigatorKey.currentContext;
       if (navCtx == null || !navCtx.mounted) return;
+      
+      _isDialogOpen = true;
       
       bool dontAskAgainChecked = false;
       
@@ -101,6 +107,11 @@ class _WindowCaptionState extends State<WindowCaption> with WindowListener {
                 await Future.delayed(animationDuration);
                 if (dialogContext.mounted) {
                   Navigator.of(dialogContext).pop();
+                }
+                if (mounted) {
+                  setState(() {
+                    _isDialogOpen = false;
+                  });
                 }
                 if (afterPop != null) {
                   await afterPop();
@@ -157,7 +168,7 @@ class _WindowCaptionState extends State<WindowCaption> with WindowListener {
                                 await windowManager.hide();
                               });
                             },
-                            child: const Text('隐藏到托盘'),
+                            child: const Text('隐藏'),
                           ),
                           FButton(
                             style: context.theme.buttonStyles.outline.call,

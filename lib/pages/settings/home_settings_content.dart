@@ -45,6 +45,7 @@ class HomeSettingsContent extends StatefulWidget {
 class _HomeSettingsContentState extends State<HomeSettingsContent> {
   User? _currentUser;
   String _appVersion = '加载中...';
+  static String _cachedAppVersion = '';
   // 桌面布局：左侧设置栏可调整宽度
   double _settingsPanelWidth = 420.0;
   static const double _settingsPanelMinWidth = 320.0;
@@ -70,16 +71,33 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
     } catch (_) {}
     _loadAppVersion();
   }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final providerUser = Provider.of<UserInfoProvider>(context, listen: true).user;
+    if (providerUser != null && providerUser != _currentUser) {
+      setState(() {
+        _currentUser = providerUser;
+      });
+    }
+  }
   Future<void> _loadAppVersion() async {
+    if (_cachedAppVersion.isNotEmpty) {
+      _appVersion = _cachedAppVersion;
+      if (mounted) setState(() {});
+    }
     try {
       final packageInfo = await PackageInfo.fromPlatform();
+      final version = packageInfo.version;
+      _cachedAppVersion = version;
       if (mounted) {
         setState(() {
-          _appVersion = packageInfo.version;
+          _appVersion = version;
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (_cachedAppVersion.isEmpty && mounted) {
         setState(() {
           _appVersion = '未知';
         });
@@ -319,21 +337,26 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
     final double horizontalPadding = isDesktopLayout ? 4.0 : 12.0;
 
     return Scaffold(
-      // 移动布局（窄屏）使用纯色背景；桌面布局透明以显示右侧已打开页面
-      backgroundColor: isDesktopLayout ? Colors.transparent : theme.colorScheme.surface,
+      backgroundColor: Colors.transparent,
+      extendBody: true,
       appBar: AppBar(
         centerTitle: true,
         elevation: 0,
-        backgroundColor: isDesktopLayout ? Colors.transparent : theme.colorScheme.surface,
-        surfaceTintColor: isDesktopLayout ? Colors.transparent : theme.colorScheme.surface,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
         scrolledUnderElevation: 0,
-        title: const Text('设置'),
+        automaticallyImplyLeading: false,
+        toolbarHeight: 44,
+        title: const Text(
+          '设置',
+          style: TextStyle(fontSize: 18),
+        ),
       ),
       body: !isDesktopLayout
           ? ColoredBox(
               color: theme.colorScheme.surface,
               child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 8),
+                padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 8 + MediaQuery.of(context).padding.bottom),
                 child: Column(
                   children: [
                     const SizedBox(height: 8),
@@ -607,6 +630,7 @@ class _HomeSettingsContentState extends State<HomeSettingsContent> {
       apiService: widget.apiService,
       currentUser: _currentUser,
       onUserUpdated: _fetchUserData,
+      userNotifier: widget.userNotifier,
     );
 
     if (isDesktopLayout && _rightPaneNavigator.currentState != null) {

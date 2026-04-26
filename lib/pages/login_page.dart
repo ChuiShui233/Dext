@@ -13,19 +13,23 @@ import '../services/api_service.dart';
 import '../services/oauth_service.dart';
 import '../components/loading_indicator.dart';
 import '../widgets/frosted_oauth_dialog.dart';
+import '../widgets/survey_preview_card.dart';
 import '../services/uri_handler_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginPage extends StatefulWidget {
   final VoidCallback onToggleTheme;
-  
   final Function(String token, DateTime expires) onLoginSuccess;
+  final SurveyPreview? surveyPreview;
+  final bool showOAuth;
 
   const LoginPage({
-  super.key, 
-  required this.onToggleTheme,
-  required this.onLoginSuccess,
-});
+    super.key,
+    required this.onToggleTheme,
+    required this.onLoginSuccess,
+    this.surveyPreview,
+    this.showOAuth = true,
+  });
 
   @override
   // ignore: library_private_types_in_public_api
@@ -955,7 +959,7 @@ Widget build(BuildContext context) {
         parent: animation,
         curve: Curves.easeInOut,
       );
-      
+
       // 桌面端：淡入淡出 + 缩放
       if (isWide) {
         return FadeTransition(
@@ -1382,6 +1386,10 @@ Positioned.fill(
             fontFamily: 'PingFangSuper',
           ),
         ),
+        if (widget.surveyPreview != null) ...[
+          const SizedBox(height: 20),
+          SurveyPreviewCard(preview: widget.surveyPreview!),
+        ],
         const SizedBox(height: 32),
         FTextField(
           controller: _usernameController,
@@ -1443,7 +1451,7 @@ Positioned.fill(
           height: 50,
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: 
+              colors:
                   [
                       Colors.black.withValues(alpha: 0.85),
                       Colors.black.withValues(alpha: 0.7),
@@ -1516,78 +1524,80 @@ Positioned.fill(
           ),
         ),
         const SizedBox(height: 24),
-        Row(
-          children: [
-            Expanded(
-              child: Container(
-                height: 1,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.transparent,
-                      (isDark ? Colors.white : Colors.black).withValues(alpha: 0.2),
-                    ],
+        if (widget.showOAuth) ...[
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 1,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.transparent,
+                        (isDark ? Colors.white : Colors.black).withValues(alpha: 0.2),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                '或使用第三方登录',
-                style: TextStyle(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.5)
-                      : Colors.black.withValues(alpha: 0.4),
-                  fontSize: 12,
-                  fontFamily: 'PingFangSuper',
-                ),
-              ),
-            ),
-            Expanded(
-              child: Container(
-                height: 1,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      (isDark ? Colors.white : Colors.black).withValues(alpha: 0.2),
-                      Colors.transparent,
-                    ],
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  '或使用第三方登录',
+                  style: TextStyle(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.5)
+                        : Colors.black.withValues(alpha: 0.4),
+                    fontSize: 12,
+                    fontFamily: 'PingFangSuper',
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        Row(
-          children: [
-            Expanded(
-              child: _buildOAuthButton(
-                onTap: _handleGoogleLogin,
-                icon: Icons.g_mobiledata,
-                label: 'Google',
-                colors: const [Color(0xFF4285F4), Color(0xFF357AE8)],
+              Expanded(
+                child: Container(
+                  height: 1,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        (isDark ? Colors.white : Colors.black).withValues(alpha: 0.2),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildOAuthButton(
-                onTap: _handleGitHubLogin,
-                icon: Icons.code,
-                label: 'GitHub',
-                colors: const [Color(0xFF24292E), Color(0xFF1B1F23)],
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: _buildOAuthButton(
+                  onTap: _handleGoogleLogin,
+                  icon: Icons.g_mobiledata,
+                  label: 'Google',
+                  colors: const [Color(0xFF4285F4), Color(0xFF357AE8)],
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _buildOAuthButton(
-          onTap: _handleMicrosoftLogin,
-          icon: Icons.business,
-          label: 'Microsoft',
-          colors: const [Color(0xFF00A4EF), Color(0xFF0078D4)],
-        ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildOAuthButton(
+                  onTap: _handleGitHubLogin,
+                  icon: Icons.code,
+                  label: 'GitHub',
+                  colors: const [Color(0xFF24292E), Color(0xFF1B1F23)],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildOAuthButton(
+            onTap: _handleMicrosoftLogin,
+            icon: Icons.business,
+            label: 'Microsoft',
+            colors: const [Color(0xFF00A4EF), Color(0xFF0078D4)],
+          ),
+        ],
       ],
     );
     

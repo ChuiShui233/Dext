@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
@@ -9,11 +8,12 @@ import '../models/survey.dart';
 import '../models/question.dart';
 import '../services/api_service.dart';
 import '../controllers/survey_runtime.dart';
-import '../components/glass_card.dart';
-import '../widgets/question_display_widget.dart';
+import '../components/survey_continuous_layout.dart';
+import '../components/survey_wizard_layout.dart';
 import 'fullscreen_media_viewer.dart';
 import '../widgets/frosted_glass_background.dart';
 import '../services/config.dart';
+import '../services/settings_service.dart';
 
 class SurveyPreviewPage extends StatefulWidget {
   final Survey survey;
@@ -200,109 +200,7 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
                 ),
               ),
               Expanded(
-                child: CustomScrollView(
-                  cacheExtent: 800.0,
-                  physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-                  slivers: [
-                    SliverPadding(
-                      padding: const EdgeInsets.all(16),
-                      sliver: SliverList(
-                        delegate: SliverChildListDelegate([
-                    _buildGlassCard(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.survey.surveyName,
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white70 : Colors.black54,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              widget.survey.description,
-                              style: TextStyle(
-                                color: isDark ? Colors.white70 : Colors.black54,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    ...widget.questions
-                        .where((q) => _runtime.visibleQuestionIds.contains(q.id) || _runtime.visibleQuestionIds.isEmpty && q.order == 0)
-                        .map((q) => _buildGlassCard(
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: QuestionDisplayWidget(
-                                  question: q,
-                                  mode: QuestionDisplayMode.preview,
-                                  optionStates: _optionStates,
-                                  selectedAnswers: _runtime.answers[q.id] ?? [],
-                                  hoverRatings: _hoverRatings,
-                                  authToken: widget.token,
-                                  onSingleChoiceChanged: (questionId, selectedOption, optionIndex) {
-                                    for (int i = 0; i < q.options.length; i++) {
-                                      _optionStates[_getOptionKey(questionId, i)] = false;
-                                    }
-                                    _optionStates[_getOptionKey(questionId, optionIndex)] = true;
-                                    // 同步 runtime 的文本答案
-                                    _runtime.setAnswerSingle(questionId, selectedOption);
-                                    _runtime.recomputeVisible();
-                                    setState(() {});
-                                  },
-                                  onMultipleChoiceChanged: (questionId, option, optionIndex, isSelected) {
-                                    _optionStates[_getOptionKey(questionId, optionIndex)] = !isSelected;
-                                    final texts = <String>[];
-                                    for (int i = 0; i < q.options.length; i++) {
-                                      if (_optionStates[_getOptionKey(questionId, i)] ?? false) {
-                                        texts.add(q.options[i].text);
-                                      }
-                                    }
-                                    _runtime.setAnswerMultiple(questionId, texts);
-                                    _runtime.recomputeVisible();
-                                    setState(() {});
-                                  },
-                                  onRatingChanged: (questionId, value) {
-                                    _runtime.setAnswerSingle(questionId, value);
-                                    _runtime.recomputeVisible();
-                                    setState(() {});
-                                  },
-                                  onTextInputChanged: (questionId, value) {
-                                    _runtime.setAnswerSingle(questionId, value);
-                                    _runtime.recomputeVisible();
-                                    setState(() {});
-                                  },
-                                  onMediaOpen: (url, all, index) => _openFullscreenViewer(url, all, index),
-                                ),
-                              ),
-                            )),
-
-                    if (_runtime.ended)
-                      _buildGlassCard(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
-                              Text('问卷已结束', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                              SizedBox(height: 8),
-                              Text('根据当前选择，问卷在此结束。'),
-                            ],
-                          ),
-                        ),
-                      ),
-                        ]),
-                      ),
-                    ),
-                  ],
-                ),
+                child: _buildSurveyLayout(isDark),
               ),
             ],
           ),
@@ -311,19 +209,84 @@ class _SurveyPreviewPageState extends State<SurveyPreviewPage> {
     );
   }
 
-  /// 玻璃卡片封装
-  Widget _buildGlassCard({required Widget child}) {
-    // 委托到通用 GlassCard 以实现模块化
-    return GlassCard(
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedSuperellipseBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      backgroundColor: CupertinoColors.white.withAlpha(51),
-      borderColor: CupertinoColors.white.withAlpha(51),
-      blurSigma: 12,
-      child: child,
+  /// 根据设置服务选择问卷布局
+  Widget _buildSurveyLayout(bool isDark) {
+    final useWizard =
+        SettingsService().questionnaireLayout == SettingsService.layoutWizard;
+
+    if (useWizard) {
+      return SurveyWizardLayout(
+        surveyName: widget.survey.surveyName,
+        description: widget.survey.description,
+        questions: widget.questions,
+        runtime: _runtime,
+        optionStates: _optionStates,
+        hoverRatings: _hoverRatings,
+        authToken: widget.token,
+        isDark: isDark,
+        onSingleChoiceChanged: _onSingleChoiceChanged,
+        onMultipleChoiceChanged: _onMultipleChoiceChanged,
+        onRatingChanged: _onRatingChanged,
+        onTextInputChanged: _onTextInputChanged,
+        onMediaOpen: _openFullscreenViewer,
+      );
+    }
+    return SurveyContinuousLayout(
+      surveyName: widget.survey.surveyName,
+      description: widget.survey.description,
+      questions: widget.questions,
+      runtime: _runtime,
+      optionStates: _optionStates,
+      hoverRatings: _hoverRatings,
+      authToken: widget.token,
+      isDark: isDark,
+      onSingleChoiceChanged: _onSingleChoiceChanged,
+      onMultipleChoiceChanged: _onMultipleChoiceChanged,
+      onRatingChanged: _onRatingChanged,
+      onTextInputChanged: _onTextInputChanged,
+      onMediaOpen: _openFullscreenViewer,
     );
+  }
+
+  // === 答案变更回调 ===
+
+  void _onSingleChoiceChanged(
+      int questionId, String selectedOption, int optionIndex) {
+    final q = widget.questions.firstWhere((q) => q.id == questionId);
+    for (int i = 0; i < q.options.length; i++) {
+      _optionStates[_getOptionKey(questionId, i)] = false;
+    }
+    _optionStates[_getOptionKey(questionId, optionIndex)] = true;
+    _runtime.setAnswerSingle(questionId, selectedOption);
+    _runtime.recomputeVisible();
+    setState(() {});
+  }
+
+  void _onMultipleChoiceChanged(
+      int questionId, String option, int optionIndex, bool isSelected) {
+    final q = widget.questions.firstWhere((q) => q.id == questionId);
+    _optionStates[_getOptionKey(questionId, optionIndex)] = !isSelected;
+    final texts = <String>[];
+    for (int i = 0; i < q.options.length; i++) {
+      if (_optionStates[_getOptionKey(questionId, i)] ?? false) {
+        texts.add(q.options[i].text);
+      }
+    }
+    _runtime.setAnswerMultiple(questionId, texts);
+    _runtime.recomputeVisible();
+    setState(() {});
+  }
+
+  void _onRatingChanged(int questionId, String value) {
+    _runtime.setAnswerSingle(questionId, value);
+    _runtime.recomputeVisible();
+    setState(() {});
+  }
+
+  void _onTextInputChanged(int questionId, String value) {
+    _runtime.setAnswerSingle(questionId, value);
+    _runtime.recomputeVisible();
+    setState(() {});
   }
 
 

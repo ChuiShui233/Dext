@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
-import 'package:fast_rsa/fast_rsa.dart';
+import 'package:basic_utils/basic_utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:pointycastle/export.dart';
 import 'package:dext/services/core/XChaCha.dart';
@@ -49,11 +49,41 @@ O5BNvaOmpC2jMYWf0NfHRX9RIobjMknwGwIDAQAB
     return _currentSessionKey!;
   }
 
+  String _rsaEncryptPKCS1v15(String plaintext) {
+    final key = _parseRsaPublicKey(_publicKeyPem);
+    final cipher = PKCS1Encoding(RSAEngine())
+      ..init(true, PublicKeyParameter<RSAPublicKey>(key));
+    final plainBytes = Uint8List.fromList(utf8.encode(plaintext));
+    final encrypted = _processInBlocks(cipher, plainBytes);
+    return base64Encode(encrypted);
+  }
+
+  Uint8List _processInBlocks(AsymmetricBlockCipher engine, Uint8List data) {
+    final inputBlockSize = engine.inputBlockSize;
+    final outputBlockSize = engine.outputBlockSize;
+    final numBlocks = (data.length + inputBlockSize - 1) ~/ inputBlockSize;
+    final output = Uint8List(numBlocks * outputBlockSize);
+    var inputOffset = 0;
+    var outputOffset = 0;
+    while (inputOffset < data.length) {
+      final chunkSize =
+          (inputOffset + inputBlockSize <= data.length) ? inputBlockSize : data.length - inputOffset;
+      final chunk = engine.process(data.sublist(inputOffset, inputOffset + chunkSize));
+      output.setRange(outputOffset, outputOffset + chunk.length, chunk);
+      outputOffset += chunk.length;
+      inputOffset += chunkSize;
+    }
+    return output.sublist(0, outputOffset);
+  }
+
+  RSAPublicKey _parseRsaPublicKey(String pem) {
+    return CryptoUtils.rsaPublicKeyFromPem(pem);
+  }
+
   // 使用RSA加密会话密钥
   Future<String> encryptSessionKey(SessionKey sessionKey) async {
     final sessionKeyData = sessionKey.toBase64();
-    final encrypted = await RSA.encryptPKCS1v15(sessionKeyData, _publicKeyPem);
-    return encrypted; // RSA.encryptPKCS1v15已经返回base64编码的字符串
+    return _rsaEncryptPKCS1v15(sessionKeyData);
   }
 
   // 使用AES-GCM加密数据
@@ -109,7 +139,7 @@ O5BNvaOmpC2jMYWf0NfHRX9RIobjMknwGwIDAQAB
 
   // 传统RSA加密（向后兼容）
   Future<String> encrypt(String data) async {
-    final encrypted = await RSA.encryptPKCS1v15(data, _publicKeyPem);
+    final encrypted = _rsaEncryptPKCS1v15(data);
     final List<int> encryptedBytes = utf8.encode(encrypted);
     return base64Encode(encryptedBytes);
   }

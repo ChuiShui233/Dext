@@ -13,12 +13,14 @@ class AddOptionDialog extends StatefulWidget {
   final QuestionOption? option;
   final ApiService apiService;
   final int surveyId;
+  final bool hasCustomInput;
 
   const AddOptionDialog({
     super.key,
     this.option,
     required this.apiService,
     required this.surveyId,
+    this.hasCustomInput = false,
   });
 
   @override
@@ -34,12 +36,15 @@ class _AddOptionDialogState extends State<AddOptionDialog> {
   String? _uploadError;
   bool _isDragOver = false;
   double _uploadProgress = 0.0;
+  bool _isCustomInput = false;
+  bool _toastShown = false;
 
   @override
   void initState() {
     super.initState();
     if (widget.option != null) {
-      _textController.text = widget.option!.text == '__custom_input__' ? '__custom_input__' : widget.option!.text;
+      _isCustomInput = widget.option!.text == '__custom_input__';
+      _textController.text = _isCustomInput ? '' : widget.option!.text;
       _mediaUrl = widget.option!.mediaUrl;
       _placeholderController.text = widget.option!.customInputPlaceholder ?? '';
     }
@@ -244,16 +249,7 @@ class _AddOptionDialogState extends State<AddOptionDialog> {
         children: [
           Text('上传中 $percentage%'),
           const SizedBox(height: 8),
-          LinearProgressIndicator(
-            value: _uploadProgress,
-            backgroundColor: Colors.grey.shade300,
-            valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            percentage < 100 ? '请稍候...' : '上传完成',
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
-          ),
+          FDeterminateProgress(value: _uploadProgress),
         ],
       );
     }
@@ -365,6 +361,12 @@ class _AddOptionDialogState extends State<AddOptionDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // 新增选项时默认显示自定义选项开关；编辑时根据原选项类型决定
+    final bool showCustomInputToggle = widget.option == null;
+    final bool effectiveIsCustomInput = widget.option == null 
+        ? _isCustomInput 
+        : (widget.option!.text == '__custom_input__');
+
     return FDialog(
       direction: Axis.horizontal,
       title: Text(widget.option == null ? '添加选项' : '编辑选项'),
@@ -377,7 +379,56 @@ class _AddOptionDialogState extends State<AddOptionDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (widget.option?.text == '__custom_input__') ...[
+                if (showCustomInputToggle) ...[
+                  // 新增时显示自定义选项开关
+                  FSwitch(
+                    label: const Text('自定义填写选项'),
+                    semanticsLabel: '自定义填写选项',
+                    value: _isCustomInput,
+                    onChange: (value) {
+                      if (value && widget.hasCustomInput) {
+                        // 已存在自定义选项，提示用户（防止重复显示）
+                        if (_toastShown) return;
+                        _toastShown = true;
+                        showFToast(
+                          context: context,
+                          alignment: FToastAlignment.bottomRight,
+                          title: const Text('无法添加'),
+                          description: const Text('已存在自定义填写选项'),
+                          suffixBuilder: (context, entry) => IntrinsicHeight(
+                            child: FButton(
+                              style: context.theme.buttonStyles.primary.call,
+                              onPress: () {
+                                _toastShown = false;
+                                entry.dismiss.call();
+                              },
+                              child: const Text('关闭'),
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      setState(() {
+                        _isCustomInput = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '答题时显示为可输入的文本框',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).textTheme.bodySmall?.color,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    height: 1,
+                    color: Theme.of(context).dividerColor,
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (effectiveIsCustomInput) ...[
                   const Text(
                     '自定义填写选项',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
@@ -425,14 +476,13 @@ class _AddOptionDialogState extends State<AddOptionDialog> {
           child: const Text('确定'),
           onPress: () {
             if (_formKey.currentState!.validate()) {
-              final isCustomInput = widget.option?.text == '__custom_input__';
               Navigator.pop(
                 context,
                 QuestionOption(
                   id: widget.option?.id ?? DateTime.now().millisecondsSinceEpoch,
-                  text: isCustomInput ? '__custom_input__' : _textController.text,
-                  mediaUrl: isCustomInput ? null : _mediaUrl,
-                  customInputPlaceholder: isCustomInput ? _placeholderController.text : null,
+                  text: effectiveIsCustomInput ? '__custom_input__' : _textController.text,
+                  mediaUrl: effectiveIsCustomInput ? null : _mediaUrl,
+                  customInputPlaceholder: effectiveIsCustomInput ? _placeholderController.text : null,
                 ),
               );
             }

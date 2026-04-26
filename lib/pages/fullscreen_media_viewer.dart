@@ -6,6 +6,7 @@ import 'package:video_player/video_player.dart';
 import 'package:forui/forui.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
+import '../main.dart' show isDesktop;
 import '../services/config.dart';
 
 typedef VideoControllerMap = Map<String, VideoPlayerController>;
@@ -322,6 +323,7 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer>
                                             ? { 'Authorization': 'Bearer ${widget.authToken!}' }
                                             : null,
                                       ),
+                                      initialScale: isDesktop ? PhotoViewComputedScale.contained * 0.75 : PhotoViewComputedScale.contained,
                                       minScale: PhotoViewComputedScale.contained * 0.8,
                                       maxScale: PhotoViewComputedScale.covered * 4.0,
                                       heroAttributes: PhotoViewHeroAttributes(tag: url),

@@ -11,7 +11,7 @@ import '../frame_page.dart';
 import '../../widgets/top_safe_spacer.dart';
 import '../../services/power_service.dart';
 
-class GeneralSettingsPage extends StatelessWidget {
+class GeneralSettingsPage extends StatefulWidget {
   final Function(ThemeMode) onThemeModeChange;
   final Function(double)? onDpiScaleChange;
 
@@ -21,6 +21,31 @@ class GeneralSettingsPage extends StatelessWidget {
     this.onDpiScaleChange,
   });
 
+  @override
+  State<GeneralSettingsPage> createState() => _GeneralSettingsPageState();
+}
+
+class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
+  bool _wasDesktopLayout = false;
+  bool _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final bool isDesktopLayout = MediaQuery.of(context).size.width >= 1025;
+    // 跳过首次构建，避免在桌面端直接打开时错误弹出
+    if (_initialized && !_wasDesktopLayout && isDesktopLayout) {
+      // 移动端→桌面端布局切换，弹出当前页面，返回设置列表
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+      });
+    }
+    _wasDesktopLayout = isDesktopLayout;
+    _initialized = true;
+  }
+
   Future<Map<String, dynamic>> _loadSettings() async {
     final s = SettingsService();
     return {
@@ -29,6 +54,7 @@ class GeneralSettingsPage extends StatelessWidget {
       'window_close_default_action': s.windowCloseDefaultAction,
       'dpi_scale': s.dpiScale,
       'theme_mode': s.themeMode,
+      'questionnaire_layout': s.questionnaireLayout,
     };
   }
 
@@ -39,7 +65,7 @@ class GeneralSettingsPage extends StatelessWidget {
     final theme = Theme.of(context);
     final bool isDesktopLayout = MediaQuery.of(context).size.width >= 1025;
     return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
+      backgroundColor: Colors.transparent,
       body: Stack(
         children: [
           // 纯色背景
@@ -134,7 +160,7 @@ class GeneralSettingsPage extends StatelessWidget {
                                     pref = 'system';
                                 }
                                 await SettingsService().setThemeMode(pref);
-                                onThemeModeChange(themeMode);
+                                widget.onThemeModeChange(themeMode);
                               },
                             ),
                           ],
@@ -164,8 +190,20 @@ class GeneralSettingsPage extends StatelessWidget {
                           theme: theme,
                           onChanged: (v) {
                             SettingsService().setDpiScale(v);
-                            onDpiScaleChange?.call(v);
+                            widget.onDpiScaleChange?.call(v);
                           },
+                        ),
+                      ),
+                    );
+
+                    // 问卷布局外观
+                    items.add(
+                      FItem(
+                        title: const Text('问卷布局'),
+                        details: _QuestionnaireLayoutCard(
+                          initialValue: settings['questionnaire_layout'] as String,
+                          theme: theme,
+                          onChanged: (v) => SettingsService().setQuestionnaireLayout(v),
                         ),
                       ),
                     );
@@ -755,6 +793,416 @@ class _DpiScaleCardState extends State<_DpiScaleCard> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ---- 控件：问卷布局外观（Wizard / Continuous） ----
+class _QuestionnaireLayoutCard extends StatefulWidget {
+  final String initialValue;
+  final ThemeData theme;
+  final ValueChanged<String> onChanged;
+
+  const _QuestionnaireLayoutCard({
+    required this.initialValue,
+    required this.theme,
+    required this.onChanged,
+  });
+
+  @override
+  State<_QuestionnaireLayoutCard> createState() => _QuestionnaireLayoutCardState();
+}
+
+class _QuestionnaireLayoutCardState extends State<_QuestionnaireLayoutCard> {
+  late String _current;
+
+  @override
+  void initState() {
+    super.initState();
+    _current = widget.initialValue.isEmpty
+        ? SettingsService.layoutWizard
+        : widget.initialValue;
+  }
+
+  void _select(String value) {
+    if (_current == value) return;
+    setState(() => _current = value);
+    widget.onChanged(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = widget.theme;
+    final isDark = theme.brightness == Brightness.dark;
+    final skeletonColor = isDark
+        ? Colors.white.withValues(alpha: 0.12)
+        : const Color(0xFFE5E7EB);
+    final phoneBorder = isDark
+        ? Colors.white.withValues(alpha: 0.18)
+        : const Color(0xFFDDDDDD);
+    final phoneBg = isDark
+        ? Colors.white.withValues(alpha: 0.04)
+        : const Color(0xFFFAFAFA);
+    final cardBg = theme.colorScheme.surface;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                '外观',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              ),
+              Flexible(
+                child: Text(
+                  _current == SettingsService.layoutWizard ? 'Wizard 布局' : '连续布局',
+                  textAlign: TextAlign.end,
+                  softWrap: true,
+                  overflow: TextOverflow.visible,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.colorScheme.primary.withValues(alpha: 0.7),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '选择问卷填写界面的外观布局方式',
+            softWrap: true,
+            overflow: TextOverflow.visible,
+            style: TextStyle(
+              fontSize: 12,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              // 宽度足够时使用原始的 200 定宽 + Wrap 排版；
+              // 放不下时再让卡片按可用宽度等分缩小，避免换行。
+              const spacing = 16.0;
+              const originalCardWidth = 200.0;
+              const originalPhoneWidth = 104.0;
+              const originalPhoneHeight = 170.0;
+              final available = constraints.maxWidth;
+              final enoughSpace =
+                  available >= 2 * originalCardWidth + spacing;
+
+              if (enoughSpace) {
+                return Wrap(
+                  spacing: spacing,
+                  runSpacing: spacing,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    _buildLayoutOption(
+                      value: SettingsService.layoutWizard,
+                      title: 'Wizard 布局',
+                      desc: '一次只显示一个问题',
+                      selected: _current == SettingsService.layoutWizard,
+                      theme: theme,
+                      cardBg: cardBg,
+                      phoneBorder: phoneBorder,
+                      phoneBg: phoneBg,
+                      skeletonColor: skeletonColor,
+                      isDark: isDark,
+                      mock: _MockPhoneKind.wizard,
+                      cardWidth: originalCardWidth,
+                      phoneWidth: originalPhoneWidth,
+                      phoneHeight: originalPhoneHeight,
+                    ),
+                    _buildLayoutOption(
+                      value: SettingsService.layoutContinuous,
+                      title: '连续布局',
+                      desc: '所有问题同页显示',
+                      selected: _current == SettingsService.layoutContinuous,
+                      theme: theme,
+                      cardBg: cardBg,
+                      phoneBorder: phoneBorder,
+                      phoneBg: phoneBg,
+                      skeletonColor: skeletonColor,
+                      isDark: isDark,
+                      mock: _MockPhoneKind.continuous,
+                      cardWidth: originalCardWidth,
+                      phoneWidth: originalPhoneWidth,
+                      phoneHeight: originalPhoneHeight,
+                    ),
+                  ],
+                );
+              }
+
+              // 空间不足：两张卡片等分宽度，手机模型按比例缩小
+              final cardWidth = (available - spacing) / 2;
+              final phoneWidth = (cardWidth - 28).clamp(64.0, 104.0);
+              final phoneHeight =
+                  (phoneWidth * 170 / 104).clamp(110.0, 170.0);
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildLayoutOption(
+                    value: SettingsService.layoutWizard,
+                    title: 'Wizard 布局',
+                    desc: '一次只显示一个问题',
+                    selected: _current == SettingsService.layoutWizard,
+                    theme: theme,
+                    cardBg: cardBg,
+                    phoneBorder: phoneBorder,
+                    phoneBg: phoneBg,
+                    skeletonColor: skeletonColor,
+                    isDark: isDark,
+                    mock: _MockPhoneKind.wizard,
+                    cardWidth: cardWidth,
+                    phoneWidth: phoneWidth,
+                    phoneHeight: phoneHeight,
+                  ),
+                  const SizedBox(width: spacing),
+                  _buildLayoutOption(
+                    value: SettingsService.layoutContinuous,
+                    title: '连续布局',
+                    desc: '所有问题同页显示',
+                    selected: _current == SettingsService.layoutContinuous,
+                    theme: theme,
+                    cardBg: cardBg,
+                    phoneBorder: phoneBorder,
+                    phoneBg: phoneBg,
+                    skeletonColor: skeletonColor,
+                    isDark: isDark,
+                    mock: _MockPhoneKind.continuous,
+                    cardWidth: cardWidth,
+                    phoneWidth: phoneWidth,
+                    phoneHeight: phoneHeight,
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLayoutOption({
+    required String value,
+    required String title,
+    required String desc,
+    required bool selected,
+    required ThemeData theme,
+    required Color cardBg,
+    required Color phoneBorder,
+    required Color phoneBg,
+    required Color skeletonColor,
+    required bool isDark,
+    required _MockPhoneKind mock,
+    required double cardWidth,
+    required double phoneWidth,
+    required double phoneHeight,
+  }) {
+    final highlight = theme.colorScheme.primary;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '$title，$desc',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _select(value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+          width: cardWidth,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected ? highlight : Colors.transparent,
+              width: 2,
+            ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: highlight.withValues(alpha: 0.18),
+                      blurRadius: 14,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.06),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _MockPhone(
+                kind: mock,
+                borderColor: phoneBorder,
+                phoneBg: phoneBg,
+                skeletonColor: skeletonColor,
+                width: phoneWidth,
+                height: phoneHeight,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                softWrap: true,
+                overflow: TextOverflow.visible,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: selected
+                      ? highlight
+                      : theme.colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                desc,
+                textAlign: TextAlign.center,
+                softWrap: true,
+                overflow: TextOverflow.visible,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+              const SizedBox(height: 8),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                width: selected ? 18 : 0,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: highlight,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+enum _MockPhoneKind { wizard, continuous }
+
+class _MockPhone extends StatelessWidget {
+  final _MockPhoneKind kind;
+  final Color borderColor;
+  final Color phoneBg;
+  final Color skeletonColor;
+  final double? width;
+  final double? height;
+
+  const _MockPhone({
+    required this.kind,
+    required this.borderColor,
+    required this.phoneBg,
+    required this.skeletonColor,
+    this.width,
+    this.height,
+  });
+
+  Widget _skeleton() => FractionallySizedBox(
+        widthFactor: 1.0,
+        child: Container(
+          height: 8,
+          decoration: BoxDecoration(
+            color: skeletonColor,
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+      );
+
+  Widget _optionBar() => FractionallySizedBox(
+        widthFactor: 0.7,
+        alignment: Alignment.centerLeft,
+        child: Container(
+          height: 6,
+          decoration: BoxDecoration(
+            color: skeletonColor,
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 104,
+      height: 170,
+      decoration: BoxDecoration(
+        color: phoneBg,
+        border: Border.all(color: borderColor, width: 1.5),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      padding: const EdgeInsets.all(10),
+      child: kind == _MockPhoneKind.wizard
+          ? _buildWizard()
+          : _buildContinuous(),
+    );
+  }
+
+  Widget _buildWizard() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _skeleton(),
+        const SizedBox(height: 10),
+        _optionBar(),
+        const SizedBox(height: 6),
+        _optionBar(),
+        const SizedBox(height: 6),
+        _optionBar(),
+        const Spacer(),
+        Container(
+          height: 18,
+          decoration: BoxDecoration(
+            color: skeletonColor,
+            borderRadius: BorderRadius.circular(6),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContinuous() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _skeleton(),
+        const SizedBox(height: 6),
+        _optionBar(),
+        const SizedBox(height: 4),
+        _optionBar(),
+        const SizedBox(height: 4),
+        _optionBar(),
+        const SizedBox(height: 8),
+        _skeleton(),
+        const SizedBox(height: 6),
+        _optionBar(),
+        const SizedBox(height: 4),
+        _optionBar(),
+        const SizedBox(height: 4),
+        _optionBar(),
+        const SizedBox(height: 8),
+        _skeleton(),
+        const SizedBox(height: 6),
+        _optionBar(),
+        const SizedBox(height: 4),
+        _optionBar(),
+        const SizedBox(height: 4),
+        _optionBar(),
+      ],
     );
   }
 }

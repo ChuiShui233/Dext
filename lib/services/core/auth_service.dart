@@ -94,7 +94,7 @@ class AuthService {
     final response = await encryptedRequest(
       'POST',
       '$baseUrl/api/oauth/$provider/bind',
-      {'accessToken': accessToken},
+      {'access_token': accessToken},
     );
 
     if (response.statusCode == 200) {

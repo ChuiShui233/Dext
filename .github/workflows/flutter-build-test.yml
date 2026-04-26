@@ -42,6 +42,11 @@ on:
         required: false
         type: boolean
         default: true
+      build_web_lite:
+        description: '编译 Web Lite'
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   # Android 构建测试
@@ -626,9 +631,47 @@ jobs:
           path: build/web
           retention-days: 7
 
+  build-web-lite:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || inputs.build_web_lite
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Flutter 环境
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.1'
+          channel: 'stable'
+          cache: true
+
+      - name: 缓存 Flutter 依赖
+        if: github.event.inputs.clear_cache != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            .dart_tool
+          key: ${{ runner.os }}-flutter-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-pub-
+
+      - name: 获取依赖
+        run: flutter pub get
+
+      - name: 构建 Web 精简版
+        run: flutter build web --release -t lib/main_lite.dart
+
+      - name: 上传 Web 精简版构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build-lite
+          path: build/web
+          retention-days: 7
+
   # 构建总结
   build-summary:
-    needs: [build-android, build-ios, build-windows, build-macos, build-linux, build-web]
+    needs: [build-android, build-ios, build-windows, build-macos, build-linux, build-web, build-web-lite]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -644,3 +687,4 @@ jobs:
           echo "| macOS | ${{ needs.build-macos.result == 'success' && '✅ 成功' || '❌ 失败' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Linux | ${{ needs.build-linux.result == 'success' && '✅ 成功' || '❌ 失败' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Web | ${{ needs.build-web.result == 'success' && '✅ 成功' || '❌ 失败' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Web 精简版 | ${{ needs.build-web-lite.result == 'success' && '✅ 成功' || '❌ 失败' }} |" >> $GITHUB_STEP_SUMMARY

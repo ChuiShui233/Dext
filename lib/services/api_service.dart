@@ -50,7 +50,7 @@ typedef StatusCallback = core.StatusCallback;
 typedef ProgressCallback = core.ProgressCallback;
 
 class ApiService {
-  static const String baseUrl = apiBaseUrl;
+  static final String baseUrl = apiBaseUrl;
   static const Duration timeoutDuration = Duration(seconds: 15);
   static VoidCallback? onUnauthorized;
   String? authToken;
@@ -881,24 +881,24 @@ class ApiService {
         'Content-Type': 'application/json',
       };
 
-      String? encryptedBody;
-      SimpleKeyPair? localEphemeralKeyPair; // 保存本地临时密钥对用于响应解密
-      if (data != null) {
-        // 使用 XChaCha 加密，与 _hybridEncryptedRequest 保持一致
-        final remotePublicKeyBytes = base64Decode(remotePublicKey);
-        localEphemeralKeyPair = await SecurePacketFormatter.generateEphemeralKeyPair();
-        final sessionKey = await SecurePacketFormatter.deriveSessionKey(
-          localEphemeralKeyPair,
-          remotePublicKeyBytes,
-        );
+      final remotePublicKeyBytes = base64Decode(remotePublicKey);
+      final localEphemeralKeyPair = await SecurePacketFormatter.generateEphemeralKeyPair();
+      final sessionKey = await SecurePacketFormatter.deriveSessionKey(
+        localEphemeralKeyPair,
+        remotePublicKeyBytes,
+      );
+      final localPublicKey = await localEphemeralKeyPair.extractPublicKey();
+      headers['X-Client-Ephemeral-Key'] = base64Encode(localPublicKey.bytes);
 
+      String? encryptedBody;
+      if (data != null) {
+        // 使用 XChaCha 加密请求体
         final jsonBytes = utf8.encode(json.encode(data));
         final encryptedPacket = await SecurePacketFormatter.encryptPacket(
           sessionKey,
           jsonBytes,
         );
 
-        final localPublicKey = await localEphemeralKeyPair.extractPublicKey();
         final encryptedPayload = XChaChaEncryptedPayload(
           ephemeralPublicKey: base64Encode(localPublicKey.bytes),
           packet: base64Encode(encryptedPacket),
@@ -940,9 +940,6 @@ class ApiService {
               final encryptedPacket = base64Decode(responseData['packet'] as String);
               
               // 使用请求时保存的本地临时密钥对解密响应
-              if (localEphemeralKeyPair == null) {
-                throw '缺少本地临时密钥对，无法解密响应';
-              }
               final responseSessionKey = await SecurePacketFormatter.deriveSessionKey(
                 localEphemeralKeyPair,
                 remoteEphemeralKey,
@@ -1038,23 +1035,28 @@ class ApiService {
       };
 
       String? encryptedBody;
-      SimpleKeyPair? localEphemeralKeyPair; // 保存本地临时密钥对用于响应解密
+
+      // xchacha 模式下始终生成客户端临时密钥对：
+      // - 请求有 body 时用来加密请求
+      // - 无论有没有 body，响应都可能被加密，都要用它来派生 session key 解密响应
+      // 服务端中间件也强制要求 X-Client-Ephemeral-Key 头存在（即使无 body）
+      final remotePublicKeyBytes = base64Decode(remotePublicKey);
+      final localEphemeralKeyPair = await SecurePacketFormatter.generateEphemeralKeyPair();
+      final xSessionKey = await SecurePacketFormatter.deriveSessionKey(
+        localEphemeralKeyPair,
+        remotePublicKeyBytes,
+      );
+      final localPublicKey = await localEphemeralKeyPair.extractPublicKey();
+      headers['X-Client-Ephemeral-Key'] = base64Encode(localPublicKey.bytes);
+
       if (data != null) {
-        // 使用 XChaCha 加密
-        final remotePublicKeyBytes = base64Decode(remotePublicKey);
-        localEphemeralKeyPair = await SecurePacketFormatter.generateEphemeralKeyPair();
-        final xSessionKey = await SecurePacketFormatter.deriveSessionKey(
-          localEphemeralKeyPair,
-          remotePublicKeyBytes,
-        );
-        
+        // 使用 XChaCha 加密请求体
         final jsonBytes = utf8.encode(json.encode(data));
         final encryptedPacket = await SecurePacketFormatter.encryptPacket(
           xSessionKey,
           jsonBytes,
         );
-        
-        final localPublicKey = await localEphemeralKeyPair.extractPublicKey();
+
         final encryptedPayload = XChaChaEncryptedPayload(
           ephemeralPublicKey: base64Encode(localPublicKey.bytes),
           packet: base64Encode(encryptedPacket),
@@ -1109,10 +1111,6 @@ class ApiService {
               final encryptedPacket = base64Decode(responseData['packet'] as String);
               
               // 使用请求时保存的本地临时密钥对解密响应
-              if (localEphemeralKeyPair == null) {
-                throw '缺少本地临时密钥对，无法解密响应';
-              }
-              
               final responseSessionKey = await SecurePacketFormatter.deriveSessionKey(
                 localEphemeralKeyPair,
                 serverEphemeralKey,
@@ -1294,18 +1292,18 @@ class ApiService {
       http.Response decryptedResponse = response;
       if (response.statusCode >= 200 && response.statusCode < 300) {
         // 检查响应是否加密
-        if (response.headers['x-encrypted'] == 'xchacha' || 
+        if (response.headers['x-encrypted'] == 'xchacha' ||
             response.headers['X-Encrypted'] == 'xchacha') {
           try {
             onStatus?.call(RequestStatus.loading, '正在解密响应...');
             _updateStatus(RequestStatus.loading, '正在解密响应...');
-            
+
             final responseData = json.decode(response.body);
             if (responseData['ephemeralPublicKey'] != null && responseData['packet'] != null) {
               // 解密响应
               final remoteEphemeralKey = base64Decode(responseData['ephemeralPublicKey'] as String);
               final encryptedPacket = base64Decode(responseData['packet'] as String);
-              
+
               // 使用请求时保存的本地临时密钥对解密响应
               final responseSessionKey = await SecurePacketFormatter.deriveSessionKey(
                 localEphemeralKeyPair,
@@ -1489,23 +1487,23 @@ class ApiService {
             throw '不支持的HTTP方法: $method';
         }
       }
-      
+
       // 处理加密响应
       http.Response decryptedResponse = response;
       if (response.statusCode >= 200 && response.statusCode < 300) {
         // 检查响应是否加密
-        if (response.headers['x-encrypted'] == 'xchacha' || 
+        if (response.headers['x-encrypted'] == 'xchacha' ||
             response.headers['X-Encrypted'] == 'xchacha') {
           try {
             onStatus?.call(RequestStatus.loading, '正在解密响应...');
             _updateStatus(RequestStatus.loading, '正在解密响应...');
-            
+
             final responseData = json.decode(response.body);
             if (responseData['ephemeralPublicKey'] != null && responseData['packet'] != null) {
               // 解密响应
               final remoteEphemeralKey = base64Decode(responseData['ephemeralPublicKey'] as String);
               final encryptedPacket = base64Decode(responseData['packet'] as String);
-              
+
               // 使用请求时保存的本地临时密钥对解密响应
               if (localEphemeralKeyPair == null) {
                 throw '缺少本地临时密钥对，无法解密响应';
@@ -2197,7 +2195,6 @@ Future<Question> addQuestion(
     onStatus?.call(RequestStatus.loading, '正在添加问题...');
     _updateStatus(RequestStatus.loading, '正在添加问题...');
 
-
     final response = await _encryptedRequest(
       'POST',
       '$baseUrl/api/survey/$surveyId/question',
@@ -2245,12 +2242,12 @@ Future<Question> addQuestion(
       onStatus?.call(RequestStatus.loading, '正在更新问题...');
       _updateStatus(RequestStatus.loading, '正在更新问题...');
       
-    final response = await _encryptedRequest(
-      'PUT',
-      '$baseUrl/api/survey/$surveyId/question/${question.id}',
-      question.toJson(),
+      final response = await _encryptedRequest(
+        'PUT',
+        '$baseUrl/api/survey/$surveyId/question/${question.id}',
+        question.toJson(),
         onStatus: onStatus,
-    );
+      );
     
     if (response.statusCode == 200) {
         final updatedQuestion = Question.fromJson(json.decode(response.body));
@@ -2412,7 +2409,16 @@ Future<Question> addQuestion(
       
       if (response.statusCode == 200) {
         final data = response.data as Map<String, dynamic>;
-        final url = data['url'] as String;
+        String url = data['url'] as String;
+        final filename = data['filename'] as String?;  // 有扩展名的文件名
+        
+        // 修复：如果 url 没有扩展名但 filename 有扩展名，则添加扩展名
+        if (filename != null && !url.contains('.')) {
+          final ext = filename.contains('.') ? '.${filename.split('.').last}' : '';
+          if (ext.isNotEmpty) {
+            url = '$url$ext';
+          }
+        }
         
         final totalTime = DateTime.now().difference(startTime).inSeconds;
         final avgSpeed = totalTime > 0 ? (fileSize / totalTime / 1024).round() : 0;
@@ -2630,7 +2636,16 @@ Future<Question> addQuestion(
       
       if (response.statusCode == 200) {
         final data = response.data as Map<String, dynamic>;
-        final url = data['url'] as String;
+        String url = data['url'] as String;
+        final filename = data['filename'] as String?;  // 有扩展名的文件名
+        
+        // 修复：如果 url 没有扩展名但 filename 有扩展名，则添加扩展名
+        if (filename != null && !url.contains('.')) {
+          final ext = filename.contains('.') ? '.${filename.split('.').last}' : '';
+          if (ext.isNotEmpty) {
+            url = '$url$ext';
+          }
+        }
         
         final totalTime = DateTime.now().difference(startTime).inSeconds;
         final avgSpeed = totalTime > 0 ? (fileSize / totalTime / 1024).round() : 0;
@@ -3615,6 +3630,98 @@ Future<Question> addQuestion(
     } catch (e) {
       // 如果获取失败，返回默认链接
       return '$baseUrl/static';
+    }
+  }
+
+  /// 发送注销账号验证码
+  Future<void> sendDeleteAccountCode({StatusCallback? onStatus}) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在发送验证码...');
+      _updateStatus(RequestStatus.loading, '正在发送验证码...');
+
+      await _ensureAuthTokenLoaded();
+
+      final response = await _httpRequest(
+        'POST',
+        '$baseUrl/api/user/delete-account/send-code',
+        onStatus: onStatus,
+      );
+
+      if (response.statusCode == 200) {
+        onStatus?.call(RequestStatus.success, '验证码已发送');
+        _updateStatus(RequestStatus.success, '验证码已发送');
+      } else {
+        final errorData = json.decode(response.body);
+        final errorMessage = errorData['message'] ?? '发送验证码失败';
+        throw errorMessage;
+      }
+    } catch (e) {
+      final errorMsg = e.toString();
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
+    }
+  }
+
+  /// 永久注销账号
+  /// 绑定邮箱的用户需要邮箱验证码，纯OAuth用户使用密码验证
+  Future<void> deleteAccount({
+    String? code,
+    String? password,
+    String? confirmPassword,
+    StatusCallback? onStatus,
+  }) async {
+    try {
+      onStatus?.call(RequestStatus.loading, '正在注销账号...');
+      _updateStatus(RequestStatus.loading, '正在注销账号...');
+
+      await _ensureAuthTokenLoaded();
+
+      final requestData = <String, dynamic>{};
+      if (code != null) requestData['code'] = code;
+      if (password != null) requestData['password'] = password;
+      if (confirmPassword != null) requestData['confirmPassword'] = confirmPassword;
+
+      final response = await _httpRequest(
+        'POST',
+        '$baseUrl/api/user/delete-account',
+        data: requestData,
+        onStatus: onStatus,
+      );
+
+      if (response.statusCode == 200) {
+        // 注销成功，清除本地认证信息
+        authToken = null;
+        _core.updateAuthToken(null);
+        _cryptoService.clearSessionKey();
+
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove('auth_token');
+          await prefs.remove('auth_token_expires');
+          await prefs.remove('refresh_token');
+          await prefs.remove('refresh_token_expires');
+          
+          const storage = FlutterSecureStorage();
+          await storage.delete(key: 'auth_token');
+          await storage.delete(key: 'refresh_token');
+          await storage.delete(key: 'session_key');
+        } catch (e) {
+          if (kDebugMode) print('[DeleteAccount] 清理本地存储失败: $e');
+        }
+
+        onStatus?.call(RequestStatus.success, '账号已永久注销');
+        _updateStatus(RequestStatus.success, '账号已永久注销');
+      } else {
+        final errorData = json.decode(response.body);
+        final errorMessage = errorData['message'] ?? '注销账号失败';
+        throw errorMessage;
+      }
+    } catch (e) {
+      final errorMsg = e.toString();
+      onStatus?.call(RequestStatus.error, errorMsg);
+      _updateStatus(RequestStatus.error, errorMsg);
+      rethrow;
     }
   }
 }

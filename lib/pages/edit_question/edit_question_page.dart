@@ -155,8 +155,14 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
       showFToast(
         context: context,
         alignment: FToastAlignment.bottomRight,
-        title: const Text('无法添加'),
-        description: const Text('已存在自定义填写选项'),
+        title: Semantics(
+          container: true,
+          child: Text('无法添加'),
+        ),
+        description: Semantics(
+          container: true,
+          child: Text('已存在自定义填写选项'),
+        ),
         suffixBuilder: (context, entry) => IntrinsicHeight(
           child: FButton(
             style: context.theme.buttonStyles.primary.call,
@@ -168,10 +174,8 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
       return;
     }
 
-    setState(() {
-      final newId = (_options.isNotEmpty ? _options.map((o) => o.id).reduce((a, b) => a > b ? a : b) : 0) + 1;
-      _options.add(QuestionOption(id: newId, text: '__custom_input__'));
-    });
+    // 通过添加选项弹窗添加（弹窗中已默认显示自定义选项开关）
+    await _addOption();
   }
 
   @override
@@ -334,12 +338,14 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
   }
 
   Future<void> _addOption() async {
+    final hasCustomInput = _options.any((o) => o.text == '__custom_input__');
     final result = await showDialog<QuestionOption>(
       context: context,
       builder: (context) => AddOptionDialog(
         option: null,
         apiService: _apiService,
         surveyId: widget.surveyId,
+        hasCustomInput: hasCustomInput,
       ),
     );
 
@@ -351,12 +357,15 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
   }
 
   Future<void> _editOption(QuestionOption option) async {
+    // 编辑时检查是否已存在自定义选项（排除当前编辑的选项）
+    final hasCustomInput = _options.any((o) => o.text == '__custom_input__' && o.id != option.id);
     final result = await showDialog<QuestionOption>(
       context: context,
       builder: (context) => AddOptionDialog(
         option: option,
         apiService: _apiService,
         surveyId: widget.surveyId,
+        hasCustomInput: hasCustomInput,
       ),
     );
 
@@ -595,8 +604,14 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
     showFToast(
       context: context,
       alignment: FToastAlignment.bottomRight,
-      title: Text(title),
-      description: Text(message),
+      title: Semantics(
+        container: true,
+        child: Text(title),
+      ),
+      description: Semantics(
+        container: true,
+        child: Text(message),
+      ),
       suffixBuilder: (context, entry) => IntrinsicHeight(
         child: FButton(
           style: context.theme.buttonStyles.primary.call,
@@ -683,7 +698,9 @@ class _EditQuestionPageState extends State<EditQuestionPage> with TickerProvider
           const SizedBox(height: 24),
           FButton(
             onPress: _isLoading ? null : _saveQuestion,
-            child: _isLoading ? const CircularProgressIndicator() : const Text('保存问题'),
+            mainAxisSize: MainAxisSize.min,
+            prefix: _isLoading ? const FCircularProgress() : null,
+            child: Text(_isLoading ? '请稍候' : '保存问题'),
           ),
         ],
       ),

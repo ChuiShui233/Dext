@@ -16,7 +16,7 @@ typedef StatusCallback = void Function(RequestStatus status, String? message);
 class ApiCore {
   ApiCore({this.authToken});
 
-  static const String baseUrl = apiBaseUrl;
+  static final String baseUrl = apiBaseUrl;
   static const Duration timeoutDuration = Duration(seconds: 15);
 
   String? authToken;

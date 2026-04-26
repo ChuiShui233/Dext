@@ -1,14 +1,13 @@
 name: dext
 description: "问卷调查"
 publish_to: 'none' # 如果您希望发布到 pub.dev，请移除此行
-version: 1.1.0+20260425
+version: 1.1.2+20260628
 
 environment:
   sdk: ^3.9.0
 dependencies:
   basic_utils: ^5.8.2
   crypto: ^3.0.6
-  fast_rsa: ^3.8.5
   flutter:
     sdk: flutter
   cryptography: ^2.5.0
@@ -49,6 +48,7 @@ dependencies:
   desktop_drop: ^0.6.1
   windows_single_instance: ^1.0.1
   oauth2_client: ^4.2.0
+  flutter_web_auth_2: ^5.0.2
   flutter_speed_dial: ^7.0.0
   connectivity_plus: ^7.0.0
   fl_chart: 0.71.0

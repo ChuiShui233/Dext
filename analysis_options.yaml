@@ -10,6 +10,7 @@
 analyzer:
   errors:
     file_names: ignore
+    use_build_context_synchronously: ignore
 include: package:flutter_lints/flutter.yaml
 
 linter:

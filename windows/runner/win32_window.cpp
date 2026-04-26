@@ -3,6 +3,8 @@
 #include <dwmapi.h>
 #include <flutter_windows.h>
 
+#include <app_links/app_links_plugin_c_api.h>
+
 #include "resource.h"
 
 namespace {
@@ -123,6 +125,10 @@ Win32Window::~Win32Window() {
 bool Win32Window::Create(const std::wstring& title,
                          const Point& origin,
                          const Size& size) {
+  if (SendAppLinkToInstance(title)) {
+    return false;
+  }
+
   Destroy();
 
   const wchar_t* window_class =
@@ -285,4 +291,34 @@ void Win32Window::UpdateTheme(HWND const window) {
     DwmSetWindowAttribute(window, DWMWA_USE_IMMERSIVE_DARK_MODE,
                           &enable_dark_mode, sizeof(enable_dark_mode));
   }
+}
+
+bool Win32Window::SendAppLinkToInstance(const std::wstring& title) {
+  HWND hwnd = ::FindWindow(kWindowClassName, title.c_str());
+
+  if (hwnd) {
+    SendAppLink(hwnd);
+
+    WINDOWPLACEMENT place = { sizeof(WINDOWPLACEMENT) };
+    GetWindowPlacement(hwnd, &place);
+
+    switch(place.showCmd) {
+      case SW_SHOWMAXIMIZED:
+          ShowWindow(hwnd, SW_SHOWMAXIMIZED);
+          break;
+      case SW_SHOWMINIMIZED:
+          ShowWindow(hwnd, SW_RESTORE);
+          break;
+      default:
+          ShowWindow(hwnd, SW_NORMAL);
+          break;
+    }
+
+    SetWindowPos(0, HWND_TOP, 0, 0, 0, 0, SWP_SHOWWINDOW | SWP_NOSIZE | SWP_NOMOVE);
+    SetForegroundWindow(hwnd);
+
+    return true;
+  }
+
+  return false;
 }

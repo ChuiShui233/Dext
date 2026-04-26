@@ -18,6 +18,7 @@ class SettingsService {
   late double _dpiScale;
   late double _settingsPanelWidth;
   late bool _sidebarCollapsed;
+  late String _questionnaireLayout;
 
   // 设置键名常量
   static const String keyWindowCloseDontAsk = 'window_close_dont_ask';
@@ -28,6 +29,11 @@ class SettingsService {
   static const String keyDpiScale = 'dpi_scale';
   static const String keySettingsPanelWidth = 'settings_panel_width';
   static const String keySidebarCollapsed = 'sidebar_collapsed';
+  static const String keyQuestionnaireLayout = 'questionnaire_layout';
+
+  // 问卷布局取值
+  static const String layoutWizard = 'wizard';
+  static const String layoutContinuous = 'continuous';
 
   /// 初始化设置服务（在 main 函数中调用）
   Future<void> initialize() async {
@@ -49,6 +55,7 @@ class SettingsService {
     _dpiScale = _prefs?.getDouble(keyDpiScale) ?? 1.0;
     _settingsPanelWidth = _prefs?.getDouble(keySettingsPanelWidth) ?? 420.0;
     _sidebarCollapsed = _prefs?.getBool(keySidebarCollapsed) ?? false;
+    _questionnaireLayout = _prefs?.getString(keyQuestionnaireLayout) ?? layoutWizard;
 
     _isInitialized = true;
   }
@@ -65,6 +72,7 @@ class SettingsService {
       _dpiScale = 1.0;
       _settingsPanelWidth = 420.0;
       _sidebarCollapsed = false;
+      _questionnaireLayout = layoutWizard;
       _isInitialized = true;
       // 异步尝试真正初始化（不阻塞当前读取）
       // ignore: discarded_futures
@@ -186,6 +194,20 @@ class SettingsService {
     }
   }
 
+  // === 问卷布局设置 ===
+  String get questionnaireLayout {
+    _ensureInitialized();
+    return _questionnaireLayout;
+  }
+
+  Future<void> setQuestionnaireLayout(String value) async {
+    _ensureInitialized();
+    _questionnaireLayout = value;
+    if (_prefs != null) {
+      await _prefs!.setString(keyQuestionnaireLayout, value);
+    }
+  }
+
   // === 通用方法 ===
   
   Future<void> clear() async {
@@ -202,6 +224,7 @@ class SettingsService {
     _dpiScale = 1.0;
     _settingsPanelWidth = 420.0;
     _sidebarCollapsed = false;
+    _questionnaireLayout = layoutWizard;
   }
 
   Future<void> reload() async {
@@ -215,6 +238,7 @@ class SettingsService {
       _glassCardEnabled = _prefs!.getBool(keyGlassCardEnabled) ?? true;
       _edgeDragWidth = _prefs!.getDouble(keyEdgeDragWidth) ?? 24.0;
       _dpiScale = _prefs!.getDouble(keyDpiScale) ?? 1.0;
+      _questionnaireLayout = _prefs!.getString(keyQuestionnaireLayout) ?? layoutWizard;
     }
   }
 }

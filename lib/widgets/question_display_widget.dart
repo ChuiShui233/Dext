@@ -752,6 +752,7 @@ class _QuestionDisplayWidgetState extends State<QuestionDisplayWidget> {
               : TextFormField(
                   initialValue: currentAnswer,
                   maxLines: multiline ? 5 : 1,
+                  maxLength: maxLength,
                   decoration: InputDecoration(
                     hintText: placeholder,
                     hintStyle: TextStyle(

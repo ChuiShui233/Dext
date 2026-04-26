@@ -13,50 +13,8 @@ class QuestionService {
 
   Future<List<Question>> getSurveyQuestions(int surveyId, {StatusCallback? onStatus}) async {
     final prefs = await SharedPreferences.getInstance();
-    final cacheKey = 'questions_cache_$surveyId';
-    final cached = prefs.getString(cacheKey);
-    
-    if (cached != null) {
-      try {
-        final trimmed = cached.trim();
-        if (trimmed.isEmpty || trimmed.toLowerCase() == 'null') {
-          return <Question>[];
-        }
-        final dynamic data = json.decode(trimmed);
-        List<Question> questions;
-        if (data is List) {
-          questions = data
-              .whereType<Map<String, dynamic>>()
-              .map((e) => Question.fromJson(e))
-              .toList();
-        } else if (data is Map<String, dynamic>) {
-          final q = data['questions'];
-          if (q is List) {
-            questions = q
-                .whereType<Map<String, dynamic>>()
-                .map((e) => Question.fromJson(e))
-                .toList();
-          } else {
-            questions = <Question>[];
-          }
-        } else {
-          questions = <Question>[];
-        }
-        _refreshQuestionsSilently(prefs, cacheKey, surveyId);
-        return questions;
-      } catch (_) {}
-    }
-    
+    final cacheKey = 'questions_$surveyId';
     return _refreshQuestions(prefs, cacheKey, surveyId, onStatus: onStatus);
-  }
-
-  Future<void> _refreshQuestionsSilently(SharedPreferences prefs, String cacheKey, int surveyId) async {
-    try {
-      final response = await httpRequest('GET', '$baseUrl/api/survey/$surveyId/questions');
-      if (response.statusCode == 200) {
-        prefs.setString(cacheKey, response.body);
-      }
-    } catch (_) {}
   }
 
   Future<List<Question>> _refreshQuestions(
@@ -121,19 +79,22 @@ class QuestionService {
     );
 
     if (response.statusCode == 201) {
+      await _invalidate(surveyId);
       return json.decode(response.body);
     }
     throw '创建问题失败: ${response.statusCode}';
   }
 
-  Future<void> deleteQuestion(int questionId, {StatusCallback? onStatus}) async {
+  Future<void> deleteQuestion(int surveyId, int questionId, {StatusCallback? onStatus}) async {
     final response = await httpRequest('DELETE', '$baseUrl/api/questions/$questionId', onStatus: onStatus);
     if (response.statusCode != 200 && response.statusCode != 204) {
       throw '删除问题失败: ${response.statusCode}';
     }
+    await _invalidate(surveyId);
   }
 
   Future<Map<String, dynamic>> updateQuestion({
+    required int surveyId,
     required int questionId,
     String? title,
     List<Map<String, dynamic>>? options,
@@ -158,6 +119,7 @@ class QuestionService {
     );
 
     if (response.statusCode == 200) {
+      await _invalidate(surveyId);
       return json.decode(response.body);
     }
     throw '更新问题失败: ${response.statusCode}';
@@ -178,5 +140,12 @@ class QuestionService {
     if (response.statusCode != 200) {
       throw '更新问题顺序失败: ${response.statusCode}';
     }
+    await _invalidate(surveyId);
+  }
+
+  Future<void> _invalidate(int surveyId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('questions_$surveyId');
+    await prefs.remove('questions_cache_$surveyId');
   }
 }

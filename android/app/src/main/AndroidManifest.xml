@@ -52,9 +52,15 @@
                 <data android:scheme="https"
                       android:host="qs.chuishui.top" />
             </intent-filter>
-            
-            <!-- 深度链接配置 - 支持自定义 scheme -->
             <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="dext" />
+            </intent-filter>
+        </activity>
+        <activity android:name="com.linusu.flutter_web_auth_2.CallbackActivity" android:exported="true">
+            <intent-filter android:label="flutter_web_auth_2">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />

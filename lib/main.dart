@@ -223,9 +223,14 @@ void main(List<String> args) async {
     }
   }
 
-  // Android 状态栏透明
+  // Android 边缘到边缘渲染 + 状态栏/导航栏透明
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(statusBarColor: Colors.transparent));
+      const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
+  ));
 
   // 初始化设置服务（防御性处理，避免异常导致启动中断）
   try {
@@ -291,7 +296,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
   DateTime? _tokenExpiry;
   int _selectedIndex = 0;
   bool _isRefreshingToken = false;
-  String? _pendingSurveyId;
+  final List<String> _pendingSurveyIds = [];
   // 记录上一次网络状态：'connected' | 'none' | null
   String? _lastNetworkStatus;
   // 缓存项目列表，避免重复请求
@@ -561,15 +566,7 @@ class _YuMeng233AppState extends State<YuMeng233App>
 
   @override
   Widget build(BuildContext context) {
-    // 处理待处理的surveyId导航
-    if (_pendingSurveyId != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final surveyId = _pendingSurveyId!;
-        _pendingSurveyId = null;
-        _navigateToPublicSurvey(surveyId);
-      });
-    }
-    
+    _processPendingSurveys();
     return Directionality(
       textDirection: TextDirection.ltr,
       child: FToaster(
@@ -641,27 +638,27 @@ class _YuMeng233AppState extends State<YuMeng233App>
             : LoginPage(
                 onToggleTheme: _toggleTheme,
                 onLoginSuccess: (token, expiry) async {
-                  debugPrint('👉 main.dart onLoginSuccess 被调用');
+                  debugPrint('main.dart onLoginSuccess 被调用');
                   debugPrint('Token: ${token.substring(0, 20)}...');
                   debugPrint('Expiry: $expiry');
                   
                   await _storage.write(key: 'auth_token', value: token);
-                  debugPrint('✅ Token已保存到storage');
+                  debugPrint('Token已保存到storage');
                   
                   await _storage.write(
                     key: 'token_expiry',
                     value: expiry.toIso8601String(),
                   );
-                  debugPrint('✅ Expiry已保存到storage');
+                  debugPrint('Expiry已保存到storage');
                   
-                  debugPrint('🔄 调用 _checkAuthStatus()');
+                  debugPrint('调用 _checkAuthStatus()');
                   await _checkAuthStatus();
-                  debugPrint('✅ _checkAuthStatus() 完成');
-                  debugPrint('📊 当前状态: _token=${_token?.substring(0, 20)}, _tokenExpiry=$_tokenExpiry');
+                  debugPrint(' _checkAuthStatus() 完成');
+                  debugPrint('当前状态: _token=${_token?.substring(0, 20)}, _tokenExpiry=$_tokenExpiry');
                   
                   // 登录成功后启动定时刷新
                   _startTokenRefreshTimer();
-                  debugPrint('✅ onLoginSuccess 完成');
+                  debugPrint(' onLoginSuccess 完成');
                 },
               ),
       );
@@ -777,7 +774,8 @@ class _YuMeng233AppState extends State<YuMeng233App>
             return;
           }
 
-          _pendingSurveyId = surveyId;
+          _pendingSurveyIds.add(surveyId);
+          _processPendingSurveys();
         }
       } catch (e) {
         debugPrint('Web URL解析失败: $e');
@@ -808,16 +806,36 @@ class _YuMeng233AppState extends State<YuMeng233App>
     }
   }
 
+  /// 处理待处理的问卷导航
+  void _processPendingSurveys() {
+    if (_pendingSurveyIds.isEmpty) return;
+    if (_framePageKey.currentState == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _processPendingSurveys());
+      return;
+    }
+
+    final pending = List<String>.from(_pendingSurveyIds);
+    _pendingSurveyIds.clear();
+    for (final surveyId in pending) {
+      _framePageKey.currentState!.navigateToPublicSurvey(surveyId);
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final nav = appNavigatorKey.currentState ?? _navigatorKey.currentState;
+      if (nav != null && nav.canPop()) {
+        nav.popUntil((route) => route.isFirst);
+      }
+    });
+  }
+
   /// 处理深度链接
   void _processDeepLink(String link) {
     try {
       final surveyId = UrlHandler.instance.extractSurveyId(link);
       
       if (surveyId != null && surveyId.isNotEmpty) {
-        // 导航到公开问卷页面
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _navigateToPublicSurvey(surveyId);
-        });
+        _pendingSurveyIds.add(surveyId);
+        _processPendingSurveys();
       }
     } catch (e) {
       debugPrint('深度链接解析失败: $e');
@@ -842,16 +860,8 @@ class _YuMeng233AppState extends State<YuMeng233App>
 
   /// 导航到公开问卷页面
   void _navigateToPublicSurvey(String surveyId) {
-    // 如果用户已登录且在FramePage中，使用FramePage的嵌套导航
-    if (_framePageKey.currentState != null) {
-      _framePageKey.currentState!.navigateToPublicSurvey(surveyId);
-    } else {
-      // 否则使用全局导航
-      final navigatorState = appNavigatorKey.currentState ?? _navigatorKey.currentState;
-      if (navigatorState != null) {
-        navigatorState.pushNamed('/public/survey/$surveyId');
-      }
-    }
+    _pendingSurveyIds.add(surveyId);
+    _processPendingSurveys();
   }
 }
 

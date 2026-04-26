@@ -6,7 +6,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
   clipboard_watcher
   desktop_drop
   desktop_webview_window
-  fast_rsa
   file_selector_linux
   flutter_secure_storage_linux
   gtk
@@ -18,6 +17,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
+  jni
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

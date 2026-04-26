@@ -2,14 +2,37 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'dart:convert';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import 'submission_detail_page.dart';
 import '../main.dart' show isDesktop;
 import '../widgets/top_safe_spacer.dart';
 import '../utils/error_formatter.dart';
-import '../components/loading_indicator.dart'; 
 import '../components/flexible_pagination.dart';
+import '../components/skeleton_loading.dart';
+import '../widgets/route_transition.dart';
+
+class CustomPagePhysics extends BouncingScrollPhysics {
+  const CustomPagePhysics({super.parent});
+
+  @override
+  CustomPagePhysics applyTo(ScrollPhysics? ancestor) {
+    return CustomPagePhysics(parent: buildParent(ancestor));
+  }
+
+  @override
+  double get minFlingVelocity => 200.0;
+
+  @override
+  double get maxFlingVelocity => 8000.0;
+
+  @override
+  Simulation? createBallisticSimulation(
+      ScrollMetrics position, double velocity) {
+    return super.createBallisticSimulation(position, velocity * 0.8);
+  }
+}
 
 class HomeHistoryContent extends StatefulWidget {
   final ApiService apiService;
@@ -29,15 +52,19 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
   final int _pageSize = 50;
   int _total = 0;
   List<Map<String, dynamic>> _items = [];
+  final Map<int, List<Map<String, dynamic>>> _pageCache = {};
+  final Map<int, bool> _pageLoading = {};
   Timer? _debounce;
   bool _isProgrammaticPageChange = false; // 防止程序化更新触发回调
   
   FPaginationController _paginationController = FPaginationController(pages: 1);
+  late final PageController _pageController;
 
   @override
   void initState() {
     super.initState();
     _typeSelectController = FSelectController<int>(vsync: this);
+    _pageController = PageController(initialPage: _page - 1);
     _loading = true;
     _loadCachedHistory();
     _fetch();
@@ -53,6 +80,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
         final items = (data['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
         final total = (data['total'] as num?)?.toInt() ?? items.length;
         if (!mounted) return;
+        _pageCache[_page] = items;
         setState(() {
           _items = items;
           _total = total;
@@ -65,10 +93,11 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     }
   }
 
-  String _buildCacheKey() {
+  String _buildCacheKey([int? page]) {
     final q = _searchController.text.trim();
     final type = _selectedType?.toString() ?? 'all';
-    return 'history_${q}_${type}_${_page}_$_pageSize';
+    final pageNum = page ?? _page;
+    return 'history_${q}_${type}_${pageNum}_$_pageSize';
   }
 
   void _syncPaginationController() {
@@ -91,6 +120,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     _typeSelectController.dispose();
     _searchController.dispose();
     _paginationController.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -105,50 +135,75 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     
     if (resetPage) {
       _page = 1;
+      _pageCache.clear();
+      _pageLoading.clear();
       if (mounted) {
         _paginationController.page = 0; // 同步重置分页控制器
       }
     }
+    
+    await _loadPage(_page, isCurrentPage: true);
+    
+    loadingTimer.cancel();
+  }
+
+  Future<void> _loadPage(int page, {bool isCurrentPage = false}) async {
+    if (!mounted) return;
+    
+    if (_pageLoading[page] == true) return;
+    
+    _pageLoading[page] = true;
+    
     try {
       final resp = await widget.apiService.getSubmissionHistory(
         query: _searchController.text.trim().isEmpty ? null : _searchController.text.trim(),
         type: _selectedType,
-        page: _page,
+        page: page,
         pageSize: _pageSize,
       );
-      loadingTimer.cancel();
-      if (!mounted) return;
-      final items = (resp['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      setState(() {
-        _items = items;
-        _total = (resp['total'] as num?)?.toInt() ?? items.length;
-        _loading = false;
-      });
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final key = _buildCacheKey();
-        await prefs.setString(key, json.encode({'items': items, 'total': _total}));
-      } catch (_) {}
       
       if (!mounted) return;
-      _syncPaginationController();
+      final items = (resp['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final total = (resp['total'] as num?)?.toInt() ?? items.length;
+      
+      _pageCache[page] = items;
+      
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final key = _buildCacheKey(page);
+        await prefs.setString(key, json.encode({'items': items, 'total': total}));
+      } catch (_) {}
+      
+      if (isCurrentPage || page == _page) {
+        setState(() {
+          _items = items;
+          _total = total;
+          _loading = false;
+        });
+        _syncPaginationController();
+      }
     } catch (e) {
-      loadingTimer.cancel();
       if (!mounted) return;
-      setState(() => _loading = false);
-      showFToast(
-        context: context,
-        alignment: FToastAlignment.bottomRight,
-        title: const Text('加载失败'),
-        description: Text(ErrorFormatter.format(e)),
-        suffixBuilder: (context, entry) => IntrinsicHeight(
-          child: FButton(
-            style: context.theme.buttonStyles.primary.call,
-            onPress: entry.dismiss.call,
-            child: const Text('关闭'),
+      if (isCurrentPage || page == _page) {
+        setState(() => _loading = false);
+        showFToast(
+          context: context,
+          alignment: FToastAlignment.bottomRight,
+          title: const Text('加载失败'),
+          description: Text(ErrorFormatter.format(e)),
+          suffixBuilder: (context, entry) => IntrinsicHeight(
+            child: FButton(
+              style: context.theme.buttonStyles.primary.call,
+              onPress: entry.dismiss.call,
+              child: const Text('关闭'),
+            ),
           ),
-        ),
-      );
+        );
+      }
+    } finally {
+      if (mounted) {
+        _pageLoading[page] = false;
+      }
     }
   }
 
@@ -170,11 +225,27 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
   void _handlePageChange(int page) {
     // 忽略程序化更新触发的回调
     if (_isProgrammaticPageChange) return;
+
+    _pageController.animateToPage(
+      page,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
     
+    final newPage = page + 1; // FPagination 是 0-based，但 API 是 1-based
     setState(() {
-      _page = page + 1; // FPagination 是 0-based，但 API 是 1-based
+      _page = newPage;
     });
-    _fetch(); // _fetch() 会在加载完成后自动同步 controller.page
+    
+    _loadPage(newPage, isCurrentPage: true);
+    
+    final totalPages = ((_total + _pageSize - 1) ~/ _pageSize).clamp(1, 999999);
+    if (newPage + 1 <= totalPages) {
+      _loadPage(newPage + 1);
+    }
+    if (newPage - 1 >= 1) {
+      _loadPage(newPage - 1);
+    }
   }
 
   String _typeText(int t) {
@@ -195,20 +266,12 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     return Column(
       children: [
         const TopSafeSpacer(desktop: 20, web: 16, mobile: 8),
+        _buildHeader(context),
+        const SizedBox(height: 12),
+        _buildFilters(context),
         Expanded(
-          child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(context),
-                  const SizedBox(height: 24),
-                  _buildFilters(context),
-                  const SizedBox(height: 32),
-                  _buildTimelineContent(context),
-                ],
-              ),
-            ),
-          ),
+          child: _buildTimelineContent(context),
+        ),
         _buildPagination(context),
       ],
     );
@@ -219,7 +282,11 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     final isDark = theme.brightness == Brightness.dark;
     
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.only(
+        top: 8,
+        left: 8,
+        right: 8,
+      ),
       child: Row(
         children: [
           Icon(
@@ -259,7 +326,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     final isDark = theme.brightness == Brightness.dark;
     
     return Padding(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -351,24 +418,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
     final isDark = theme.brightness == Brightness.dark;
     
     if (_loading) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            LoadingIndicator(
-              size: LoadingSize.medium,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '加载中...',
-              style: TextStyle(
-                color: isDark ? Colors.white70 : Colors.black54,
-              ),
-            ),
-          ],
-        ),
-      );
+      return const SkeletonList();
     }
     
     if (_items.isEmpty) {
@@ -415,13 +465,51 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
       );
     }
     
-    return Column(
-      children: _items.asMap().entries.map((entry) {
-        final index = entry.key;
-        final item = entry.value;
-        return _buildTimelineItem(context, item, index);
-      }).toList(),
-    );
+    final totalPages = ((_total + _pageSize - 1) ~/ _pageSize).clamp(1, 999999);
+    
+    return PageView.builder(
+      controller: _pageController,
+      physics: const CustomPagePhysics(),
+      itemCount: totalPages,
+        onPageChanged: (index) {
+          if (_isProgrammaticPageChange) return;
+          HapticFeedback.selectionClick();
+          _handlePageChange(index);
+        },
+        itemBuilder: (context, pageIndex) {
+          final pageNumber = pageIndex + 1;
+          final items = _pageCache[pageNumber];
+          final isLoading = _pageLoading[pageNumber] == true;
+          
+          if (items != null) {
+            return AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              transitionBuilder: (child, anim) {
+                return SlideTransition(
+                  position: Tween(
+                    begin: const Offset(0.1, 0),
+                    end: Offset.zero,
+                  ).animate(anim),
+                  child: FadeTransition(opacity: anim, child: child),
+                );
+              },
+              child: ListView.builder(
+                key: ValueKey(pageIndex),
+                physics: const ClampingScrollPhysics(),
+                itemCount: items.length,
+                itemBuilder: (context, index) {
+                  return _buildTimelineItem(context, items[index], index);
+                },
+              ),
+            );
+          } else {
+            if (!isLoading) {
+              _loadPage(pageNumber);
+            }
+            return const SkeletonList();
+          }
+        },
+      );
   }
 
   Future<bool> _showDeleteConfirmationDialog(BuildContext context) async {
@@ -575,49 +663,143 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
   }
   
   Widget _buildTimelineItem(BuildContext context, Map<String, dynamic> item, int index) {
+    final answerId = (item['answerId'] as num?)?.toInt();
+    final surveyId = (item['surveyId'] as num?)?.toInt();
+
+    return FPopover(
+      popoverAnchor: Alignment.topLeft,
+      childAnchor: Alignment.bottomLeft,
+      offset: const Offset(10, 0),
+      popoverBuilder: (context, _) => Padding(
+        padding: const EdgeInsets.only(top: 6, bottom: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildPopoverMenuItem(
+              icon: FIcons.eye,
+              text: '查看详情',
+              onTap: () {
+                if (answerId != null) {
+                  final width = MediaQuery.of(context).size.width;
+                  final bool isDesktopLayout = width >= 1025;
+
+                  if (isDesktopLayout) {
+                    Navigator.of(context).push(
+                      fadePageRoute(
+                        SubmissionDetailPage(
+                          apiService: widget.apiService,
+                          answerId: answerId,
+                          surveyId: surveyId,
+                        ),
+                      ),
+                    );
+                  } else {
+                    Navigator.of(context).push(
+                      slideFadePageRoute(SubmissionDetailPage(
+                        apiService: widget.apiService,
+                        answerId: answerId,
+                        surveyId: surveyId,
+                      )),
+                    );
+                  }
+                }
+              },
+            ),
+            const SizedBox(height: 4),
+            _buildPopoverMenuItem(
+              icon: Icons.delete,
+              text: '删除',
+              onTap: () async {
+                if (answerId != null) {
+                  final ok = await _showDeleteConfirmationDialog(context);
+                  if (ok) {
+                    _deleteHistoryItem(context, answerId, index);
+                  }
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+      builder: (_, controller, child) {
+        return GestureDetector(
+          onLongPress: answerId == null ? null : () {
+            HapticFeedback.mediumImpact();
+            controller.toggle();
+          },
+          onSecondaryTapDown: answerId == null ? null : (_) {
+            controller.toggle();
+          },
+          child: _buildCardContent(context, item, index),
+        );
+      },
+    );
+  }
+
+  Widget _buildPopoverMenuItem({
+    required IconData icon,
+    required String text,
+    Color? textColor,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 20),
+            const SizedBox(width: 12),
+            Text(
+              text,
+              style: TextStyle(
+                fontSize: 14,
+                color: textColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+Widget _buildCardContent(BuildContext context, Map<String, dynamic> item, int index) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final answerId = (item['answerId'] as num?)?.toInt();
     final surveyId = (item['surveyId'] as num?)?.toInt();
     final surveyType = (item['surveyType'] as num?)?.toInt() ?? 0;
     final surveyStatus = (item['surveyStatus'] as num?)?.toInt() ?? 0;
-    
+
     final String title = (item['surveyName'] ?? '') as String;
     final String description = (item['description'] ?? '') as String;
     final String creator = (item['creator'] ?? '') as String;
     final String submitTime = (item['submitTime'] ?? '') as String;
 
-    return Dismissible(
-      key: ValueKey('history_${answerId ?? index}_${surveyId ?? 'x'}'),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        color: Colors.red.withValues(alpha: 0.9),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Icon(Icons.delete_forever, color: Colors.white),
-            SizedBox(width: 6),
-            Text('删除', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-          ],
-        ),
-      ),
-      confirmDismiss: (direction) async {
-        final confirmed = await _showDeleteConfirmationDialog(context);
-        if (!confirmed) {
-          return false;
-        }
-        final dialogContext = context;
-        if (!dialogContext.mounted) {
-          return false;
-        }
-        return await _deleteHistoryItem(dialogContext, answerId, index);
-      },
-      child: Column(
-        children: [
-          ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    final heroTag = 'history_${answerId ?? index}';
+
+    return Hero(
+      tag: heroTag,
+      child: Material(
+        type: MaterialType.transparency,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: isDark ? Colors.black.withValues(alpha: 0.3) : Colors.black.withValues(alpha: 0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(16),
             leading: Icon(
               FIcons.fileText,
               color: theme.colorScheme.primary,
@@ -699,19 +881,31 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
             onTap: answerId == null
                 ? null
                 : () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => SubmissionDetailPage(
+                    final width = MediaQuery.of(context).size.width;
+                    final bool isDesktopLayout = width >= 1025;
+
+                    if (isDesktopLayout) {
+                      Navigator.of(context).push(
+                        fadePageRoute(
+                          SubmissionDetailPage(
+                            apiService: widget.apiService,
+                            answerId: answerId,
+                            surveyId: surveyId,
+                          ),
+                        ),
+                      );
+                    } else {
+                      Navigator.of(context).push(
+                        slideFadePageRoute(SubmissionDetailPage(
                           apiService: widget.apiService,
                           answerId: answerId,
                           surveyId: surveyId,
-                        ),
-                      ),
-                    );
+                        )),
+                      );
+                    }
                   },
           ),
-          const Divider(height: 1),
-        ],
+        ),
       ),
     );
   }
@@ -738,7 +932,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
   Widget _buildStatusBadge(int status, bool isDark) {
     Color color;
     String text;
-    
+
     switch (status) {
       case 0:
         color = Colors.orange;
@@ -756,7 +950,7 @@ class _HomeHistoryContentState extends State<HomeHistoryContent> with TickerProv
         color = Colors.grey;
         text = '未知';
     }
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(

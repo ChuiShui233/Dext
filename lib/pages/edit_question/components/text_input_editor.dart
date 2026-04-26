@@ -131,46 +131,7 @@ class _TextInputEditorState extends State<TextInputEditor> {
             ),
           ),
         ),
-        
         const SizedBox(height: 16),
-        
-        // 预览区域
-        FCard(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '预览效果',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                
-                // 预览输入框
-                FTextField(
-                  hint: widget.placeholder.isEmpty ? '请输入占位符文本...' : widget.placeholder,
-                  maxLines: widget.multiline ? 5 : 1,
-                  maxLength: widget.maxLength > 0 ? widget.maxLength : null,
-                  enabled: false,
-                ),
-                
-                const SizedBox(height: 8),
-                
-                Text(
-                  '${widget.multiline ? '多行' : '单行'}输入框，最多 ${widget.maxLength} 个字符',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ],
     );
   }

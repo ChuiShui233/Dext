@@ -345,85 +345,78 @@ class _MediaEditorState extends State<MediaEditor> {
                     ),
                   );
                 },
-                child: Container(
+                child: SizedBox(
                   width: isVideo ? 200 : 100,
                   height: isVideo ? 150 : 100,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey),
-                    borderRadius: BorderRadius.circular(8),
-                    color: Colors.grey.shade100,
-                  ),
                   child: Stack(
                     children: [
-                      Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              isImage ? Icons.image : 
-                              isVideo ? Icons.video_file : 
-                              Icons.audio_file,
-                              size: 30,
-                              color: Colors.grey.shade600,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              fileName.length > 15 
-                                  ? '${fileName.substring(0, 12)}...'
-                                  : fileName,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.grey.shade600,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 8,
-                        left: 8,
-                        right: 8,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              statusText ?? '上传中 ${(progress * 100).toInt()}%',
-                              style: const TextStyle(
-                                fontSize: 12,
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.7),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                isImage ? Icons.image :
+                                isVideo ? Icons.video_file :
+                                Icons.audio_file,
+                                size: 30,
                                 color: Colors.white,
-                                fontWeight: FontWeight.w500,
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            LinearProgressIndicator(
-                              value: progress,
-                              backgroundColor: Colors.grey.shade300,
-                              valueColor: const AlwaysStoppedAnimation<Color>(
-                                Colors.blue,
+                              const SizedBox(height: 8),
+                              Text(
+                                statusText ?? '上传中 ${(progress * 100).toInt()}%',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                textAlign: TextAlign.center,
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              (progress * 100).toInt() < 100 ? '请稍候...' : '上传完成',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.white70,
-                              ),
-                            ),
-                          ],
+                              if (progress > 0 && progress < 1) ...[
+                                const SizedBox(height: 6),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  child: Column(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(3),
+                                        child: LinearProgressIndicator(
+                                          value: progress,
+                                          minHeight: 5,
+                                          backgroundColor: Colors.white.withValues(alpha: 0.3),
+                                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '${(progress * 100).toInt()}%',
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
                       ),
                       Positioned(
                         top: 4,
                         right: 4,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: GestureDetector(
-                            onTap: () => widget.onCancelUpload(fileName),
+                        child: GestureDetector(
+                          onTap: () => widget.onCancelUpload(fileName),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
                             child: const Padding(
                               padding: EdgeInsets.all(4),
                               child: Icon(

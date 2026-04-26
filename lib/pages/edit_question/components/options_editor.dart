@@ -175,14 +175,6 @@ class _OptionsEditorState extends State<OptionsEditor> {
           onPress: widget.onAddOption,
           child: const Text('添加选项'),
         ),
-        if (widget.selectedType == QuestionType.singleChoice || widget.selectedType == QuestionType.multipleChoice) ...[
-          const SizedBox(height: 8),
-          FButton(
-            style: context.theme.buttonStyles.outline.call,
-            onPress: widget.onAddCustomOption,
-            child: const Text('添加自定义填写选项'),
-          ),
-        ],
       ],
     );
   }

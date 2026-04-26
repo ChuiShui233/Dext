@@ -1,12 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:oauth2_client/oauth2_helper.dart';
 import 'package:oauth2_client/oauth2_client.dart';
 import 'package:oauth2_client/google_oauth2_client.dart';
 import 'package:oauth2_client/github_oauth2_client.dart';
-import 'package:http/http.dart' as http;
 import 'api_service.dart';
 import 'config.dart';
 import 'uri_handler_service.dart';
@@ -37,7 +37,230 @@ class OAuthService {
     }
   }
 
+  String get redirectUri => _redirectUri;
+
+  Future<String?> getAuthorizationCode(String provider) async {
+    try {
+      if (kIsWeb) {
+        return await _getAuthorizationCodeWeb(provider);
+      } else {
+        return await _getAuthorizationCodeDesktop(provider);
+      }
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<String?> _getAuthorizationCodeWeb(String provider) async {
+    final authUrlResponse = await ApiService().encryptedRequest(
+      'POST',
+      '${ApiService.baseUrl}/api/auth/oauth/$provider/url',
+      {'redirect_uri': _redirectUri},
+    );
+
+    if (authUrlResponse.statusCode != 200) {
+      throw Exception('获取授权URL失败: ${authUrlResponse.statusCode}');
+    }
+
+    final payload = json.decode(authUrlResponse.body);
+    final authUrl = payload['auth_url'];
+
+    final authCode = await WebOAuthHandler.authenticate(
+      authUrl: authUrl,
+      redirectUrl: _redirectUri,
+      windowOptions: {
+        'width': '500',
+        'height': '700',
+      },
+      timeoutSeconds: 300,
+    );
+
+    final uri = Uri.parse(authCode);
+    return uri.queryParameters['code'];
+  }
+
+  Future<String?> _getAuthorizationCodeDesktop(String provider) async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      return await _getAuthorizationCodeMobile(provider);
+    }
+
+    final state = UriHandlerService.generateState();
+
+    String authUrl;
+    switch (provider) {
+      case 'google':
+        authUrl = _buildGoogleAuthUrl(state);
+        break;
+      case 'github':
+        authUrl = _buildGitHubAuthUrl(state);
+        break;
+      case 'microsoft':
+        authUrl = _buildMicrosoftAuthUrl(state);
+        break;
+      default:
+        throw Exception('不支持的OAuth提供商: $provider');
+    }
+
+    final callback = await UriHandlerService.launchOAuthAndWaitForCallback(
+      authUrl: authUrl,
+      state: state,
+    );
+
+    return callback['code'];
+  }
+
+  Future<String?> _getAuthorizationCodeMobile(String provider) async {
+    try {
+      final state = UriHandlerService.generateState();
+      final authUrl = _buildMobileAuthUrl(provider, state: state);
+      final callbackUrl = await FlutterWebAuth2.authenticate(
+        url: authUrl,
+        callbackUrlScheme: _customUriScheme,
+      );
+      final uri = Uri.parse(callbackUrl);
+      final error = uri.queryParameters['error'];
+      if (error != null && error.isNotEmpty) {
+        final errorDescription = uri.queryParameters['error_description'];
+        throw Exception('OAuth error: $error${errorDescription != null ? ' - $errorDescription' : ''}');
+      }
+
+      final returnedState = uri.queryParameters['state'];
+      // redirect_uri 可能先落到后端，再由后端重定向回 App；部分实现可能不会把 state 透传回来。
+      // 这里保持兼容：只有在返回了 state 且不匹配时才报错。
+      if (returnedState != null && returnedState != state) {
+        throw Exception('OAuth state mismatch');
+      }
+
+      final code = uri.queryParameters['code'];
+      if (code == null || code.isEmpty) {
+        throw Exception('未获取到授权码');
+      }
+      return code;
+    } catch (e) {
+      if (e.toString().contains('cancelled') || e.toString().contains('cancel')) {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  String _buildMobileAuthUrl(String provider, {required String state}) {
+    switch (provider) {
+      case 'google':
+        final params = {
+          'client_id': googleClientId,
+          'response_type': 'code',
+          'redirect_uri': _redirectUri,
+          'scope': 'openid profile email',
+          'state': state,
+        };
+        return 'https://accounts.google.com/o/oauth2/v2/auth?${_buildQueryString(params)}';
+      case 'github':
+        final params = {
+          'client_id': githubClientId,
+          'redirect_uri': _redirectUri,
+          'scope': 'user:email',
+          'state': state,
+        };
+        return 'https://github.com/login/oauth/authorize?${_buildQueryString(params)}';
+      case 'microsoft':
+        final params = {
+          'client_id': microsoftClientId,
+          'response_type': 'code',
+          'redirect_uri': _redirectUri,
+          'scope': 'openid profile email User.Read',
+          'response_mode': 'query',
+          'state': state,
+        };
+        return 'https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?${_buildQueryString(params)}';
+      default:
+        throw Exception('不支持的OAuth提供商: $provider');
+    }
+  }
+
+  Future<Map<String, dynamic>> _signInWithProviderMobileViaBackend(String provider) async {
+    final authorizationCode = await _getAuthorizationCodeMobile(provider);
+    if (authorizationCode == null || authorizationCode.isEmpty) {
+      return {
+        'success': false,
+        'error': '登录已取消',
+        'cancelled': true,
+      };
+    }
+
+    final result = await _authenticateWithBackend(provider, {
+      'authorization_code': authorizationCode,
+      'redirect_uri': _redirectUri,
+    });
+
+    return {
+      'success': true,
+      'token': result['token'],
+      'expires': result['expires'],
+      'user': result['user'],
+    };
+  }
+
+  String _buildQueryString(Map<String, String> params) {
+    return params.entries.map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}').join('&');
+  }
+
+
+
+
+
+  String _buildMicrosoftAuthUrl(String state) {
+    final authParams = {
+      'client_id': microsoftClientId,
+      'response_type': 'code',
+      'redirect_uri': _redirectUri,
+      'scope': 'openid profile email User.Read',
+      'state': state,
+      'response_mode': 'query',
+    };
+    return Uri.https(
+      'login.microsoftonline.com',
+      '/consumers/oauth2/v2.0/authorize',
+      authParams,
+    ).toString();
+  }
+
+  String _buildGoogleAuthUrl(String state) {
+    final authParams = {
+      'client_id': googleClientId,
+      'response_type': 'code',
+      'redirect_uri': _redirectUri,
+      'scope': 'openid profile email',
+      'state': state,
+    };
+    return Uri.https(
+      'accounts.google.com',
+      '/o/oauth2/v2/auth',
+      authParams,
+    ).toString();
+  }
+
+  String _buildGitHubAuthUrl(String state) {
+    final authParams = {
+      'client_id': githubClientId,
+      'redirect_uri': _redirectUri,
+      'scope': 'user:email',
+      'state': state,
+    };
+    return Uri.https(
+      'github.com',
+      '/login/oauth/authorize',
+      authParams,
+    ).toString();
+  }
+
   Future<Map<String, dynamic>> signInWithMicrosoft() async {
+    if (microsoftClientId.isEmpty || microsoftClientId == 'YOUR_MICROSOFT_CLIENT_ID') {
+      return {
+        'success': false,
+        'error': 'Microsoft OAuth 未配置（缺少 client_id）',
+      };
+    }
     try {
       if (kIsWeb) {
         return await _signInWithMicrosoftWeb();
@@ -66,8 +289,10 @@ class OAuthService {
   }
 
   Future<Map<String, dynamic>> _signInWithMicrosoftWeb() async {
-    final authUrlResponse = await http.get(
-      Uri.parse('${ApiService.baseUrl}/api/auth/oauth/microsoft/url?redirect_uri=${Uri.encodeComponent(_redirectUri)}'),
+    final authUrlResponse = await ApiService().encryptedRequest(
+      'GET',
+      '${ApiService.baseUrl}/api/auth/oauth/microsoft/url?redirect_uri=${Uri.encodeComponent(_redirectUri)}',
+      null,
     );
 
     if (authUrlResponse.statusCode != 200) {
@@ -107,9 +332,10 @@ class OAuthService {
   }
 
   Future<Map<String, dynamic>> _signInWithMicrosoftDesktop() async {
+
     try {
       final state = UriHandlerService.generateState();
-      
+
       final authParams = {
         'client_id': microsoftClientId,
         'response_type': 'code',
@@ -118,29 +344,29 @@ class OAuthService {
         'state': state,
         'response_mode': 'query',
       };
-      
+
       final authUrl = Uri.https(
         'login.microsoftonline.com',
         '/consumers/oauth2/v2.0/authorize',
         authParams,
       ).toString();
-      
+
       final callback = await UriHandlerService.launchOAuthAndWaitForCallback(
         authUrl: authUrl,
         state: state,
       );
-      
+
       final authCode = callback['code'];
       if (authCode == null || authCode.isEmpty) {
         throw Exception('未收到授权码');
       }
-      
-      debugPrint('✅ 收到Microsoft授权码，发送给后端处理');
+
+
       final backendAuth = await _authenticateWithBackend('microsoft', {
         'authorization_code': authCode,
         'redirect_uri': _redirectUri,
       });
-      
+
       return {
         'success': true,
         'token': backendAuth['token'],
@@ -148,7 +374,6 @@ class OAuthService {
         'user': backendAuth['user'],
       };
     } catch (e) {
-      debugPrint('❌ Microsoft桌面端登录失败: $e');
       return {
         'success': false,
         'error': e.toString(),
@@ -160,13 +385,18 @@ class OAuthService {
     if (!kIsWeb && Platform.isWindows) {
       return await _signInWithMicrosoftDesktop();
     }
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      // Mobile 端统一走“授权码 -> 后端换取并登录”，避免各 Provider 对 client_secret/PKCE 的差异导致失败。
+      return await _signInWithProviderMobileViaBackend('microsoft');
+    }
 
     final client = OAuth2Client(
-      authorizeUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
-      tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+      authorizeUrl: 'https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize',
+      tokenUrl: 'https://login.microsoftonline.com/consumers/oauth2/v2.0/token',
       redirectUri: _redirectUri,
       customUriScheme: _customUriScheme,
     );
+
 
     final helper = OAuth2Helper(
       client,
@@ -174,7 +404,7 @@ class OAuthService {
       clientId: microsoftClientId,
       scopes: ['openid', 'profile', 'email', 'User.Read'],
       webAuthOpts: {
-        'useWebview': false,
+        'useWebview': true,
         'timeout': 300,
       },
     );
@@ -186,7 +416,7 @@ class OAuthService {
       final accessToken = await helper.getToken();
       
       final backendResult = await _authenticateWithBackend('microsoft', {
-        'access_token': accessToken?.accessToken,
+        'access_token': accessToken.accessToken,
         'user_info': {
           'id': userInfo['id'],
           'email': userInfo['mail'] ?? userInfo['userPrincipalName'],
@@ -209,6 +439,12 @@ class OAuthService {
 
   /// Google OAuth2 登录
   Future<Map<String, dynamic>> signInWithGoogle() async {
+    if (googleClientId.isEmpty || googleClientId == 'YOUR_GOOGLE_CLIENT_ID') {
+      return {
+        'success': false,
+        'error': 'Google OAuth 未配置（缺少 client_id）',
+      };
+    }
     try {
       if (kIsWeb) {
         return await _signInWithGoogleWeb();
@@ -237,8 +473,10 @@ class OAuthService {
   }
 
   Future<Map<String, dynamic>> _signInWithGoogleWeb() async {
-    final authUrlResponse = await http.get(
-      Uri.parse('${ApiService.baseUrl}/api/auth/oauth/google/url?redirect_uri=${Uri.encodeComponent(_redirectUri)}'),
+    final authUrlResponse = await ApiService().encryptedRequest(
+      'POST',
+      '${ApiService.baseUrl}/api/auth/oauth/google/url',
+      {'redirect_uri': _redirectUri},
     );
 
     if (authUrlResponse.statusCode != 200) {
@@ -335,11 +573,15 @@ class OAuthService {
     if (!kIsWeb && Platform.isWindows) {
       return await _signInWithGoogleDesktop();
     }
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      return await _signInWithProviderMobileViaBackend('google');
+    }
 
     final client = GoogleOAuth2Client(
       redirectUri: _redirectUri,
       customUriScheme: _customUriScheme,
     );
+
 
     final helper = OAuth2Helper(
       client,
@@ -355,7 +597,7 @@ class OAuthService {
     );
 
     final accessToken = await helper.getToken();
-    if (accessToken?.accessToken == null) {
+    if (accessToken.accessToken == null) {
       throw Exception('获取访问令牌失败');
     }
     
@@ -365,7 +607,7 @@ class OAuthService {
       final userInfo = json.decode(response.body);
       
       final backendResult = await _authenticateWithBackend('google', {
-        'access_token': accessToken!.accessToken,
+        'access_token': accessToken.accessToken,
         'user_info': {
           'id': userInfo['id'],
           'email': userInfo['email'],
@@ -388,6 +630,12 @@ class OAuthService {
 
   /// GitHub OAuth2 登录
   Future<Map<String, dynamic>> signInWithGitHub() async {
+    if (githubClientId.isEmpty || githubClientId == 'YOUR_GITHUB_CLIENT_ID') {
+      return {
+        'success': false,
+        'error': 'GitHub OAuth 未配置（缺少 client_id）',
+      };
+    }
     try {
       if (kIsWeb) {
         return await _signInWithGitHubWeb();
@@ -416,8 +664,10 @@ class OAuthService {
   }
 
   Future<Map<String, dynamic>> _signInWithGitHubWeb() async {
-    final authUrlResponse = await http.get(
-      Uri.parse('${ApiService.baseUrl}/api/auth/oauth/github/url?redirect_uri=${Uri.encodeComponent(_redirectUri)}'),
+    final authUrlResponse = await ApiService().encryptedRequest(
+      'GET',
+      '${ApiService.baseUrl}/api/auth/oauth/github/url?redirect_uri=${Uri.encodeComponent(_redirectUri)}',
+      null,
     );
 
     if (authUrlResponse.statusCode != 200) {
@@ -510,11 +760,15 @@ class OAuthService {
     if (!kIsWeb && Platform.isWindows) {
       return await _signInWithGitHubDesktop();
     }
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      return await _signInWithProviderMobileViaBackend('github');
+    }
 
     final client = GitHubOAuth2Client(
       redirectUri: _redirectUri,
       customUriScheme: _customUriScheme,
     );
+
 
     final helper = OAuth2Helper(
       client,
@@ -558,7 +812,7 @@ class OAuthService {
       };
       
       final backendResult = await _authenticateWithBackend('github', {
-        'access_token': accessToken?.accessToken,
+        'access_token': accessToken.accessToken,
         'user_info': userInfoFormatted,
       });
 
@@ -585,7 +839,7 @@ class OAuthService {
         'provider': provider,
         'oauth_data': oauthData,
       };
-      
+
       final response = await ApiService().encryptedRequest(
         'POST',
         '${ApiService.baseUrl}/api/auth/oauth',
@@ -597,7 +851,7 @@ class OAuthService {
         return {
           'token': data['token'],
           'expires': DateTime.parse(data['expires']),
-          'user': data['user'], // 返回完整的用户信息
+          'user': data['user'],
         };
       } else {
         final errorData = json.decode(response.body);
@@ -605,6 +859,52 @@ class OAuthService {
       }
     } catch (e) {
       throw Exception('后端认证失败: ${e.toString()}');
+    }
+  }
+
+  /// 交换授权码获取Provider原始access_token（用于绑定已有账号，不创建用户）
+  Future<Map<String, dynamic>> exchangeCodeForBinding(
+    String provider, {
+    required String authorizationCode,
+    required String redirectUri,
+  }) async {
+    try {
+      final requestData = {
+        'provider': provider,
+        'oauth_data': {
+          'authorization_code': authorizationCode,
+          'redirect_uri': redirectUri,
+        },
+      };
+
+      final response = await ApiService(authToken: '').encryptedRequest(
+        'POST',
+        '${ApiService.baseUrl}/api/oauth/exchange-code-for-binding',
+        requestData,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'provider_access_token': data['provider_access_token'],
+          'provider_user_id': data['provider_user_id'],
+          'provider_email': data['provider_email'],
+          'provider_username': data['provider_username'],
+          'provider_name': data['provider_name'],
+        };
+      } else {
+        final errorData = json.decode(response.body);
+        return {
+          'success': false,
+          'error': errorData['error'] ?? '交换授权码失败',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'error': '交换授权码失败: ${e.toString()}',
+      };
     }
   }
 
