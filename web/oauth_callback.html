@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { margin: 0; font-family: system-ui; background: #0b0b0b; }
+    </style>
+</head>
+<body>
+    <div id="error" style="display: none;"></div>
+
+    <script>
+        (function() {
+            try {
+                // 获取URL参数
+                const urlParams = new URLSearchParams(window.location.search);
+                const code = urlParams.get('code');
+                const error = urlParams.get('error');
+                const state = urlParams.get('state');
+
+                if (error) {
+                    // OAuth错误处理
+                    const errorDescription = urlParams.get('error_description') || error;
+                    document.getElementById('error').textContent = `登录失败: ${errorDescription}`;
+                    document.getElementById('error').style.display = 'block';
+                    
+                    // 通知父窗口错误
+                    if (window.opener) {
+                        window.opener.postMessage({
+                            type: 'oauth_error',
+                            error: error,
+                            error_description: errorDescription
+                        }, '*');
+                    }
+                    
+                    // 3秒后关闭窗口
+                    setTimeout(() => {
+                        window.close();
+                    }, 3000);
+                    return;
+                }
+
+                if (code) {
+                    // 成功获取授权码
+                    const callbackUrl = window.location.href;
+                    
+                    // 通知父窗口成功获取授权码
+                    if (window.opener) {
+                        window.opener.postMessage({
+                            type: 'oauth_success',
+                            code: code,
+                            state: state,
+                            callback_url: callbackUrl
+                        }, '*');
+                    }
+                    
+                    // 立即关闭窗口
+                    window.close();
+                } else {
+                    // 没有找到授权码
+                    document.getElementById('error').textContent = '未找到授权码，请重试';
+                    document.getElementById('error').style.display = 'block';
+                    
+                    // 通知父窗口错误
+                    if (window.opener) {
+                        window.opener.postMessage({
+                            type: 'oauth_error',
+                            error: 'no_code',
+                            error_description: '未找到授权码'
+                        }, '*');
+                    }
+                    
+                    // 3秒后关闭窗口
+                    setTimeout(() => {
+                        window.close();
+                    }, 3000);
+                }
+            } catch (e) {
+                console.error('OAuth回调处理错误:', e);
+                document.getElementById('error').textContent = `处理错误: ${e.message}`;
+                document.getElementById('error').style.display = 'block';
+                
+                // 通知父窗口错误
+                if (window.opener) {
+                    window.opener.postMessage({
+                        type: 'oauth_error',
+                        error: 'callback_error',
+                        error_description: e.message
+                    }, '*');
+                }
+                
+                // 3秒后关闭窗口
+                setTimeout(() => {
+                    window.close();
+                }, 3000);
+            }
+        })();
+    </script>
+</body>
+</html>

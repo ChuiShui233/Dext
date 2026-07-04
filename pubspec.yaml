@@ -1,0 +1,81 @@
+name: dext
+description: "问卷调查"
+publish_to: 'none' # 如果您希望发布到 pub.dev，请移除此行
+version: 1.1.5+20260721
+
+environment:
+  sdk: ^3.9.0
+dependencies:
+  basic_utils: ^5.8.2
+  crypto: ^3.0.6
+  flutter:
+    sdk: flutter
+  cryptography: ^2.5.0
+  flutter_secure_storage: ^10.0.0-beta.4
+  forui: ^0.16.0
+  http: ^1.1.0
+  dio: ^5.9.0
+  layout: ^1.0.5
+  window_manager: ^0.5.1
+  tray_manager: ^0.5.2
+  url_launcher: ^6.2.5
+  flutter_localizations:
+    sdk: flutter
+  file_picker: ^10.1.9 
+  path_provider: ^2.1.1
+  image_picker: ^1.0.4
+  video_player: ^2.10.0
+  video_player_win: ^3.2.0
+  radio_player: ^2.1.0
+  pull_to_refresh: ^2.0.0
+  flutter_staggered_grid_view: ^0.7.0
+  syncfusion_flutter_xlsio: ^31.1.19
+  cupertino_icons: ^1.0.2
+  cached_network_image: ^3.4.1
+  flutter_svg: ^2.0.9
+  shared_preferences: ^2.5.3
+  permission_handler: ^11.3.1
+  getuiflut:
+    git:
+      url: https://github.com/ChuiShui233/getuiflut_fix.git
+      ref: main
+  flutter_launcher_icons: ^0.13.1
+  provider: ^6.1.5+1
+  http_parser: ^4.1.2
+  image: ^4.2.0
+  app_links: ^6.4.1
+  clipboard_watcher: ^0.2.0
+  pointycastle: ^4.0.0
+  desktop_drop: ^0.6.1
+  windows_single_instance: ^1.0.1
+  oauth2_client: ^4.2.0
+  flutter_web_auth_2: ^5.0.2
+  flutter_speed_dial: ^7.0.0
+  connectivity_plus: ^7.0.0
+  fl_chart: 0.71.0
+  package_info_plus: ^8.0.0
+  crop_image_plus:
+    git:
+      url: https://github.com/ChuiShui233/crop_image_plus.git
+      ref: master
+  shimmer: ^3.0.0
+  photo_view: ^0.15.0
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/fonts/
+    - assets/svg/
+    
+  fonts:
+    - family: PingFangSuper
+      fonts:
+        - asset: assets/fonts/SuperPingFangV1.ttf
+  
+flutter_launcher_icons:
+  image_path: "assets/images/Dext.png"
+  android: true
+  ios: true
+  adaptive_icon_background: "#FFFFFF"

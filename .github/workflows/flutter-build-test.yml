@@ -1,0 +1,690 @@
+name: Flutter Multi-Platform Build Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      clear_cache:
+        description: '清除所有缓存'
+        required: false
+        type: boolean
+        default: false
+      build_android:
+        description: '编译 Android'
+        required: false
+        type: boolean
+        default: true
+      build_ios:
+        description: '编译 iOS'
+        required: false
+        type: boolean
+        default: true
+      build_windows:
+        description: '编译 Windows'
+        required: false
+        type: boolean
+        default: true
+      build_macos:
+        description: '编译 macOS'
+        required: false
+        type: boolean
+        default: true
+      build_linux:
+        description: '编译 Linux'
+        required: false
+        type: boolean
+        default: true
+      build_web:
+        description: '编译 Web'
+        required: false
+        type: boolean
+        default: true
+      build_web_lite:
+        description: '编译 Web Lite'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  # Android 构建测试
+  build-android:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || inputs.build_android
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Java 环境
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 设置 Flutter 环境
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.1'
+          channel: 'stable'
+          cache: true
+
+      - name: 缓存 Flutter 依赖
+        if: github.event.inputs.clear_cache != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            .dart_tool
+          key: ${{ runner.os }}-flutter-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-pub-
+
+      - name: 缓存 Gradle
+        if: github.event.inputs.clear_cache != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: 获取依赖
+        run: flutter pub get
+
+      - name: 生成ci编译临时签名
+        run: |
+          chmod +x .github/scripts/generate_ci_keystore.sh
+          .github/scripts/generate_ci_keystore.sh
+
+      - name: 分析代码
+        run: flutter analyze --no-fatal-infos
+
+      - name: 构建 APK
+        run: flutter build apk --release
+
+      - name: 生成 SHA256 校验和
+        run: |
+          cd build/app/outputs/flutter-apk
+          sha256sum app-release.apk > app-release.apk.sha256
+          cat app-release.apk.sha256
+
+      - name: 上传 APK 构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/app-release.apk.sha256
+          retention-days: 7
+
+  # iOS 构建测试
+  build-ios:
+    runs-on: macos-latest
+    if: github.event_name != 'workflow_dispatch' || inputs.build_ios
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Flutter 环境
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.1'
+          channel: 'stable'
+          cache: true
+
+      - name: 缓存 Flutter 依赖
+        if: github.event.inputs.clear_cache != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            .dart_tool
+          key: ${{ runner.os }}-flutter-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-pub-
+
+      - name: 缓存 CocoaPods
+        if: github.event.inputs.clear_cache != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-pods-${{ hashFiles('**/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: 获取依赖
+        run: flutter pub get
+
+      - name: 构建 iOS (无签名)
+        run: flutter build ios --release --no-codesign
+
+      - name: 打包 iOS 应用
+        run: |
+          cd build/ios/iphoneos
+          zip -r Runner.app.zip Runner.app
+
+      - name: 生成 SHA256 校验
+        run: |
+          cd build/ios/iphoneos
+          shasum -a 256 Runner.app.zip > Runner.app.zip.sha256
+          cat Runner.app.zip.sha256
+
+      - name: 上传 iOS 构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build
+          path: |
+            build/ios/iphoneos/Runner.app.zip
+            build/ios/iphoneos/Runner.app.zip.sha256
+          retention-days: 7
+
+  # Windows 构建测试
+  build-windows:
+    runs-on: windows-latest
+    if: github.event_name != 'workflow_dispatch' || inputs.build_windows
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 缓存 Windows 构建工具
+        if: github.event.inputs.clear_cache != 'true'
+        id: cache-tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:\ProgramData\chocolatey\lib
+            C:\ProgramData\chocolatey\bin
+            "C:\Program Files\CMake"
+            "C:\Program Files (x86)\Microsoft Visual Studio"
+          key: ${{ runner.os }}-vs-tools-v1
+          restore-keys: |
+            ${{ runner.os }}-vs-tools-
+
+      - name: 安装 CMake 与 VS 构建工具
+        if: steps.cache-tools.outputs.cache-hit != 'true'
+        run: |
+          echo "未命中缓存，开始安装构建工具..."
+          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=1' -y
+          choco install ninja -y
+          choco install visualstudio2022buildtools --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --includeOptional" -y
+          echo "安装完成 ✅"
+
+      - name: 检查 VS 环境
+        run: |
+          echo "Visual Studio 环境检测中..."
+          & "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+          echo "CMake 版本："
+          cmake --version
+          echo "MSBuild 版本："
+          & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" -version
+
+      - name: 设置 Flutter 环境
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.1'
+          channel: 'stable'
+          cache: true
+
+      - name: 缓存 Flutter 依赖
+        if: github.event.inputs.clear_cache != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\Pub\Cache
+            .dart_tool
+          key: ${{ runner.os }}-flutter-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-pub-
+
+      - name: 缓存 CMake 构建缓存
+        if: github.event.inputs.clear_cache != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            build\windows\CMakeFiles
+            build\windows\CMakeCache.txt
+            build\windows\x64
+          key: ${{ runner.os }}-cmake-${{ hashFiles('windows/CMakeLists.txt', '**/*.cmake') }}
+          restore-keys: |
+            ${{ runner.os }}-cmake-
+
+      - name: 启用 Windows 桌面支持
+        run: |
+          flutter config --enable-windows-desktop
+          flutter doctor -v
+
+      - name: 获取依赖
+        run: flutter pub get
+
+      - name: 确保 Windows 平台存在
+        run: |
+          if (!(Test-Path "windows")) {
+            Write-Host "Windows 目录不存在，正在创建..."
+            flutter create --platforms=windows .
+          }
+
+      - name: 构建 Windows 应用（Release）
+        run: |
+          echo "开始构建 Release 版本..."
+          flutter build windows --release -v
+
+      - name: 安装 Inno Setup
+        run: |
+          echo "安装 Inno Setup..."
+          
+          # 强制重新安装，确保实际安装而不是只下载
+          choco install innosetup --force -y --install-arguments='/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-'
+          
+          echo "Inno Setup 安装完成 ✅"
+          echo ""
+          
+          # 验证安装
+          echo "=== 验证安装 ==="
+          $standardPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (Test-Path $standardPath) {
+            echo "✅ 找到标准安装路径: $standardPath"
+          } else {
+            echo "⚠️ 标准路径不存在，搜索其他位置..."
+            
+            # 搜索所有可能的位置
+            $locations = @(
+              "C:\Program Files (x86)",
+              "C:\Program Files",
+              "C:\ProgramData\chocolatey"
+            )
+            
+            foreach ($loc in $locations) {
+              if (Test-Path $loc) {
+                $found = Get-ChildItem -Path $loc -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 5
+                foreach ($f in $found) {
+                  echo "  找到: $($f.FullName)"
+                }
+              }
+            }
+          }
+
+
+      # 🔨 使用 Inno Setup 打包安装程序
+      - name: 打包 Windows 安装程序
+        run: |
+          echo "开始编译安装程序..."
+          echo ""
+          
+          # 优先检查 Chocolatey lib 目录
+          echo "=== 检查 Chocolatey 安装位置 ==="
+          $chocoLibPath = "C:\ProgramData\chocolatey\lib\InnoSetup"
+          
+          if (Test-Path $chocoLibPath) {
+            echo "✅ 找到 Chocolatey InnoSetup 目录: $chocoLibPath"
+            echo "目录内容："
+            Get-ChildItem $chocoLibPath -Recurse -Filter "*.exe" | ForEach-Object {
+              echo "  📄 $($_.FullName)"
+            }
+          }
+          
+          echo ""
+          echo "=== 搜索 ISCC.exe ==="
+          $isccPath = $null
+          
+          # 定义可能的路径（按优先级排序）
+          $possiblePaths = @(
+            "$chocoLibPath\tools\ISCC.exe",
+            "$chocoLibPath\ISCC.exe",
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+            "C:\Program Files\Inno Setup 6\ISCC.exe"
+          )
+          
+          foreach ($path in $possiblePaths) {
+            if (Test-Path $path) {
+              $isccPath = $path
+              echo "✅ 找到 ISCC.exe: $path"
+              break
+            }
+          }
+          
+          # 如果还没找到，在 Chocolatey lib 目录递归搜索
+          if (-not $isccPath -and (Test-Path $chocoLibPath)) {
+            echo "在 Chocolatey 目录递归搜索..."
+            $found = Get-ChildItem -Path $chocoLibPath -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) {
+              $isccPath = $found.FullName
+              echo "✅ 递归搜索找到: $isccPath"
+            }
+          }
+          
+          echo ""
+          
+          # 如果还是没找到
+          if (-not $isccPath) {
+            echo "❌ 未找到 ISCC.exe"
+            echo ""
+            echo "=== 完整目录结构 ==="
+            if (Test-Path $chocoLibPath) {
+              Get-ChildItem $chocoLibPath -Recurse | Select-Object -First 30 | ForEach-Object {
+                echo "  $($_.FullName)"
+              }
+            }
+            throw "找不到 Inno Setup 编译器 (ISCC.exe)"
+          }
+          
+          # 编译安装程序
+          echo "=== 开始编译 ==="
+          echo "使用编译器: $isccPath"
+          $scriptPath = Join-Path $PWD "installer.iss"
+          echo "编译脚本: $scriptPath"
+          echo ""
+          
+          # 使用 Start-Process 确保正确的工作目录和路径解析
+          $process = Start-Process -FilePath $isccPath -ArgumentList "`"$scriptPath`"" -Wait -NoNewWindow -PassThru -WorkingDirectory $PWD
+          
+          if ($process.ExitCode -eq 0) {
+            echo "✅ 安装程序编译成功"
+          } else {
+            echo "❌ 编译失败，退出代码: $($process.ExitCode)"
+            throw "安装程序编译失败，退出代码: $($process.ExitCode)"
+          }
+
+      # 打包便携版
+      - name: 打包便携版
+        run: |
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath dext-windows-portable.zip
+
+      # 生成 SHA256 校验和
+      - name: 生成 SHA256 校验和
+        run: |
+          $installerHash = (Get-FileHash -Algorithm SHA256 -Path "Output\DextSetup.exe").Hash
+          $portableHash = (Get-FileHash -Algorithm SHA256 -Path "dext-windows-portable.zip").Hash
+          
+          "$installerHash  DextSetup.exe" | Out-File -FilePath "Output\DextSetup.exe.sha256" -Encoding ASCII
+          "$portableHash  dext-windows-portable.zip" | Out-File -FilePath "dext-windows-portable.zip.sha256" -Encoding ASCII
+          
+          Write-Host "DextSetup.exe SHA256:"
+          Get-Content "Output\DextSetup.exe.sha256"
+          Write-Host ""
+          Write-Host "dext-windows-portable.zip SHA256:"
+          Get-Content "dext-windows-portable.zip.sha256"
+
+      # 上传安装程序
+      - name: 上传 Windows 安装程序
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            Output/DextSetup.exe
+            Output/DextSetup.exe.sha256
+          retention-days: 7
+
+      # 上传便携版
+      - name: 上传便携版
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: |
+            dext-windows-portable.zip
+            dext-windows-portable.zip.sha256
+          retention-days: 7
+
+  # macOS 构建测试
+  build-macos:
+    runs-on: macos-latest
+    if: github.event_name != 'workflow_dispatch' || inputs.build_macos
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Flutter 环境
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.1'
+          channel: 'stable'
+          cache: true
+
+      - name: 缓存 Flutter 依赖
+        if: github.event.inputs.clear_cache != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            .dart_tool
+          key: ${{ runner.os }}-flutter-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-pub-
+
+      - name: 缓存 CocoaPods
+        if: github.event.inputs.clear_cache != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            macos/Pods
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-macos-pods-${{ hashFiles('**/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-macos-pods-
+
+      - name: 启用 macOS 桌面支持
+        run: |
+          flutter config --enable-macos-desktop
+          flutter doctor -v
+
+      - name: 获取依赖
+        run: flutter pub get
+
+      - name: 确保 macOS 平台存在
+        run: |
+          if [ ! -d "macos" ]; then
+            echo "macOS 目录不存在，正在创建..."
+            flutter create --platforms=macos .
+          fi
+
+      - name: 构建 macOS
+        run: flutter build macos --release
+
+      - name: 打包 macOS 应用
+        run: |
+          cd build/macos/Build/Products/Release
+          zip -r dext-macos.zip dext.app
+
+      - name: 生成 SHA256 校验
+        run: |
+          cd build/macos/Build/Products/Release
+          shasum -a 256 dext-macos.zip > dext-macos.zip.sha256
+          cat dext-macos.zip.sha256
+
+      - name: 上传 macOS 构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: |
+            build/macos/Build/Products/Release/dext-macos.zip
+            build/macos/Build/Products/Release/dext-macos.zip.sha256
+          retention-days: 7
+
+  # Linux 构建测试
+  build-linux:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || inputs.build_linux
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Linux 依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libgtk-3-dev \
+            liblzma-dev \
+            libstdc++-12-dev \
+            libwebkit2gtk-4.1-dev \
+            libsoup-3.0-dev \
+            libjson-glib-dev \
+            libsecret-1-0 \
+            libsecret-1-dev \
+            libjsoncpp-dev \
+            libayatana-appindicator3-dev
+
+      - name: 设置 Flutter 环境
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.1'
+          channel: 'stable'
+          cache: true
+
+      - name: 缓存 Flutter 依赖
+        if: github.event.inputs.clear_cache != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            .dart_tool
+          key: ${{ runner.os }}-flutter-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-pub-
+
+      - name: 启用 Linux 桌面支持
+        run: |
+          flutter config --enable-linux-desktop
+          flutter doctor -v
+
+      - name: 获取依赖
+        run: flutter pub get
+
+      - name: 确保 Linux 平台存在
+        run: |
+          if [ ! -d "linux" ]; then
+            echo "Linux 目录不存在，正在创建..."
+            flutter create --platforms=linux .
+          fi
+
+      - name: 构建 Linux
+        run: |
+          echo "创建 native_assets 目录以防止 CMake 报错..."
+          mkdir -p build/native_assets/linux
+          flutter build linux --release -v
+
+
+      - name: 打包 Linux 应用
+        run: |
+          cd build/linux/x64/release/bundle
+          tar -czf dext-linux.tar.gz *
+
+      - name: 生成 SHA256 校验和
+        run: |
+          cd build/linux/x64/release/bundle
+          sha256sum dext-linux.tar.gz > dext-linux.tar.gz.sha256
+          cat dext-linux.tar.gz.sha256
+
+      - name: 上传 Linux 构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: |
+            build/linux/x64/release/bundle/dext-linux.tar.gz
+            build/linux/x64/release/bundle/dext-linux.tar.gz.sha256
+          retention-days: 7
+
+  # Web 构建测试
+  build-web:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || inputs.build_web
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Flutter 环境
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.1'
+          channel: 'stable'
+          cache: true
+
+      - name: 缓存 Flutter 依赖
+        if: github.event.inputs.clear_cache != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            .dart_tool
+          key: ${{ runner.os }}-flutter-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-pub-
+
+      - name: 获取依赖
+        run: flutter pub get
+
+      - name: 构建 Web
+        run: flutter build web --release
+
+      - name: 上传 Web 构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: build/web
+          retention-days: 7
+
+  build-web-lite:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || inputs.build_web_lite
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Flutter 环境
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.1'
+          channel: 'stable'
+          cache: true
+
+      - name: 缓存 Flutter 依赖
+        if: github.event.inputs.clear_cache != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            .dart_tool
+          key: ${{ runner.os }}-flutter-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-pub-
+
+      - name: 获取依赖
+        run: flutter pub get
+
+      - name: 构建 Web 精简版
+        run: flutter build web --release -t lib/main_lite.dart
+
+      - name: 上传 Web 精简版构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build-lite
+          path: build/web
+          retention-days: 7
+
+  # 构建总结
+  build-summary:
+    needs: [build-android, build-ios, build-windows, build-macos, build-linux, build-web, build-web-lite]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: 构建结果总结
+        run: |
+          echo "## 构建测试结果 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 平台 | 状态 |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Android | ${{ needs.build-android.result == 'success' && '✅ 成功' || '❌ 失败' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| iOS | ${{ needs.build-ios.result == 'success' && '✅ 成功' || '❌ 失败' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Windows | ${{ needs.build-windows.result == 'success' && '✅ 成功' || '❌ 失败' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| macOS | ${{ needs.build-macos.result == 'success' && '✅ 成功' || '❌ 失败' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Linux | ${{ needs.build-linux.result == 'success' && '✅ 成功' || '❌ 失败' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Web | ${{ needs.build-web.result == 'success' && '✅ 成功' || '❌ 失败' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Web 精简版 | ${{ needs.build-web-lite.result == 'success' && '✅ 成功' || '❌ 失败' }} |" >> $GITHUB_STEP_SUMMARY
